@@ -130,6 +130,7 @@ sealed class Settings
     [JsonConverter(typeof(JsonStringEnumConverter))] public BadgeStyle Style { get; set; } = BadgeStyle.Pill;
     [JsonConverter(typeof(JsonStringEnumConverter))] public BadgePlacement Placement { get; set; } = BadgePlacement.AboveRight;
     public int SizePercent { get; set; } = 100;
+    public int OpacityPercent { get; set; } = 100;
 
     static readonly string FilePath = Path.Combine(AppContext.BaseDirectory, "imebadge.settings.json");
     static readonly JsonSerializerOptions Opts = new() { WriteIndented = true };
@@ -417,7 +418,7 @@ sealed class BadgeForm : Form
 
     ImeState _lastState = ImeState.Unknown;
     DateTime _flashUntil = DateTime.MinValue;       // DotFlash: 변경 직후 글자를 보여 주는 시한
-    (ImeState state, BadgeStyle style, float scale) _renderKey = (ImeState.Unknown, (BadgeStyle)(-1), 0);
+    (ImeState state, BadgeStyle style, float scale, int opacity) _renderKey = (ImeState.Unknown, (BadgeStyle)(-1), 0, -1);
     Size _bitmapSize;
     Point _lastPos = new(int.MinValue, int.MinValue);
     bool _allowShow;
@@ -473,6 +474,11 @@ sealed class BadgeForm : Form
             AddRadio(size, label, () => _settings.SizePercent == pct, () => _settings.SizePercent = pct);
         menu.Items.Add(size);
 
+        var opacity = new ToolStripMenuItem("투명도(&O)");
+        foreach (var (label, pct) in new[] { ("불투명 (100%)", 100), ("살짝 비침 (85%)", 85), ("반투명 (70%)", 70), ("많이 비침 (50%)", 50) })
+            AddRadio(opacity, label, () => _settings.OpacityPercent == pct, () => _settings.OpacityPercent = pct);
+        menu.Items.Add(opacity);
+
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("종료(&X)", null, (_, _) => Application.Exit());
 
@@ -498,7 +504,7 @@ sealed class BadgeForm : Form
         {
             apply();
             _settings.Save();
-            _renderKey = (ImeState.Unknown, (BadgeStyle)(-1), 0);   // 다음 틱에 강제로 다시 그림
+            _renderKey = (ImeState.Unknown, (BadgeStyle)(-1), 0, -1);   // 다음 틱에 강제로 다시 그림
             _flashUntil = DateTime.Now.AddMilliseconds(1500);       // DotFlash면 바로 글자를 한 번 보여 준다
             Poll();
         };
@@ -545,7 +551,7 @@ sealed class BadgeForm : Form
 
         float scale = Native.DpiScaleAt(caret.Location) * _settings.SizePercent / 100f;
 
-        var key = (s.State, style, scale);
+        var key = (s.State, style, scale, _settings.OpacityPercent);
         bool needRender = key != _renderKey;
 
         // 배지 위치 계산
@@ -605,7 +611,9 @@ sealed class BadgeForm : Form
             var dst = new Native.POINT(pos.X, pos.Y);
             var blend = new Native.BLENDFUNCTION
             {
-                BlendOp = Native.AC_SRC_OVER, BlendFlags = 0, SourceConstantAlpha = 255, AlphaFormat = Native.AC_SRC_ALPHA,
+                BlendOp = Native.AC_SRC_OVER, BlendFlags = 0,
+                SourceConstantAlpha = (byte)Math.Clamp(255 * _settings.OpacityPercent / 100, 30, 255),
+                AlphaFormat = Native.AC_SRC_ALPHA,
             };
             Native.UpdateLayeredWindow(Handle, screenDc, ref dst, ref size, memDc, ref src, 0, ref blend, Native.ULW_ALPHA);
         }

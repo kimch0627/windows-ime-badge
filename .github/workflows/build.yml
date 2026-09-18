@@ -1,0 +1,62 @@
+# main에 푸시하거나 v* 태그를 푸시하면 Windows 러너에서 exe를 빌드한다.
+# - 모든 빌드: Actions 탭 > 해당 실행 > Artifacts 에 exe 업로드
+# - v* 태그:   GitHub Release 생성 + exe 첨부
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # Release 생성에 필요
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore ImeBadge.csproj
+
+      - name: Publish (framework-dependent, .NET 8 런타임 필요)
+        run: >
+          dotnet publish ImeBadge.csproj -c Release -r win-x64 --self-contained false
+          -p:PublishSingleFile=true -p:DebugType=none -o out/fd
+
+      - name: Publish (self-contained, 런타임 포함)
+        run: >
+          dotnet publish ImeBadge.csproj -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:DebugType=none -o out/sc
+
+      - name: Rename outputs
+        shell: pwsh
+        run: |
+          Copy-Item out/fd/ImeBadge.exe out/ImeBadge-win-x64.exe
+          Copy-Item out/sc/ImeBadge.exe out/ImeBadge-win-x64-selfcontained.exe
+          Get-ChildItem out/*.exe | Format-Table Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ImeBadge-win-x64
+          path: |
+            out/ImeBadge-win-x64.exe
+            out/ImeBadge-win-x64-selfcontained.exe
+          if-no-files-found: error
+
+      - name: Release (태그일 때만)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            out/ImeBadge-win-x64.exe
+            out/ImeBadge-win-x64-selfcontained.exe
