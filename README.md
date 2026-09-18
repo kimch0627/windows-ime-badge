@@ -166,3 +166,7 @@ caret 좌표와 배지 위치가 어긋납니다.
 - 폴링 주기 100ms는 `BadgeForm._timer.Interval`에서 조정합니다. CPU 사용량은 1% 미만입니다.
 - csproj의 `UseWPF=true`는 WPF 창을 만들기 위한 것이 아니라 `System.Windows.Automation`
   어셈블리를 쓰기 위한 것입니다.
+
+## 라이선스
+
+Apache License 2.0 — [LICENSE](LICENSE) 참고.
