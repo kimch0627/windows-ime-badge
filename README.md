@@ -37,17 +37,48 @@ dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile
 결과물: `bin\Release\net8.0-windows\win-x64\publish\ImeBadge.exe`
 (실행 PC에 .NET 8 런타임이 필요합니다. 없으면 `--self-contained true`로 빌드하세요.)
 
+### 디버그 모드
+
+```powershell
+dotnet run -- --debug
+```
+
+exe 옆에 `imebadge.log`가 생기고, 활성 창·caret 탐색 경로·IME 원시 값이 바뀔 때마다
+기록됩니다. 특정 앱에서 판정이 틀리면 이 로그로 원인을 찾습니다.
+
 ## 개발자를 위한 상세 설명
 
 ### 구조
 
-파일은 `Program.cs` 하나이며 세 부분으로 나뉩니다.
+파일은 `Program.cs` 하나이며 다음 부분으로 나뉩니다.
 
 | 부분 | 역할 |
 |---|---|
 | `Native` | Win32 API P/Invoke 선언과 상수 |
-| `ImeReader.Read()` | 활성 창의 caret 위치와 한/영 상태를 한 번 읽어 `Snapshot`으로 반환 |
-| `BadgeForm` | 100ms 타이머로 `Read()`를 호출하고 배지 창을 caret 옆으로 이동 |
+| `Log` | `--debug`일 때만 쓰는 파일 로그 |
+| `UiaCaret` | UI Automation으로 caret 위치 찾기 (Win32 caret이 없는 앱용) |
+| `ImeReader` | 활성 창의 caret 위치와 한/영 상태를 한 번 읽어 `Snapshot`으로 반환 |
+| `BadgeForm` | 100ms 타이머 + IME 변경 이벤트 훅으로 `Read()`를 호출하고 배지를 caret 옆으로 이동 |
+
+### 한/영 판정: 핵심 함정
+
+한국어 IME에는 두 가지 상태가 따로 있습니다.
+
+| 상태 | 뜻 | 한/영 키를 누르면 |
+|---|---|---|
+| 열림(open status, `IMC_GETOPENSTATUS`) | IME가 켜져 있는가 | **안 바뀜**. 한 번 한글을 쓰면 계속 1 |
+| 변환 모드(conversion mode, `IMC_GETCONVERSIONMODE`) | 비트 0(`IME_CMODE_HANGUL`)이 한글 입력 여부 | **이 비트가 뒤집힘** |
+
+그래서 "열림 = 한글"로 판정하면 IME가 처음 켜질 때 한 번만 바뀌고 그 뒤로는 영원히
+`한`에 묶입니다. 올바른 판정은 다음과 같습니다.
+
+```
+열림 == 0            → 영문 (이 창에서 아직 한글을 안 씀)
+열림 == 1 → 변환 모드 & 0x01 → 1이면 한글, 0이면 영문
+```
+
+이 순서는 Windows 11용 한/영 표시기 오픈소스(KoEnVue, IMEIndicatorClockW)의 한국어
+판정 코드와 같습니다.
 
 ### 상태를 읽는 순서
 
@@ -55,30 +86,21 @@ dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile
 2. **caret 위치** (두 경로)
    - 1순위: `GetGUIThreadInfo(tid)`의 `hwndCaret`/`rcCaret` → `ClientToScreen()`. 메모장·Word 등
      Win32 caret을 만드는 앱.
-   - 2순위: UI Automation. `AutomationElement.FocusedElement` → `TextPattern.GetSelection()`의
-     사각형. 선택이 없는 커서는 넓이가 0이라 `ExpandToEnclosingUnit(Character)`로 한 글자 넓혀 묻습니다.
-     Chrome/Edge/Electron(Claude 앱, VS Code) 같은 앱용. TextPattern이 없으면 입력 컨트롤의
-     왼쪽 아래 모서리를 씁니다.
+   - 2순위: UI Automation. `AutomationElement.FocusedElement` → `TextPattern.GetSelection()`.
+     크롬 주소창처럼 "문서 처음~커서" 범위를 주는 컨트롤이 있어 시작점을 끝점으로 옮겨 커서 한
+     점으로 접은 뒤, 넓이 0이면 `ExpandToEnclosingUnit(Character)`로 한 글자 넓혀 사각형을 얻습니다.
+     Chrome/Edge/Electron(Claude 앱, VS Code) 같은 앱용. TextPattern이 없으면 Edit/ComboBox
+     컨트롤의 왼쪽 아래 모서리를 씁니다. 읽기 전용이라고 밝힌 요소에는 배지를 띄우지 않습니다.
 3. `GetKeyboardLayout(tid)`의 하위 16비트가 `0x0412`(ko-KR)가 아니면 `OtherLang`(`?` 표시)입니다.
-4. **한/영 상태** (두 경로)
-   - 1순위: **TSF 언어 표시줄**. `CLSID_TF_LangBarMgr` → `GetThreadLangBarItemMgr(tid)`로 대상
-     thread의 언어 표시줄 항목 관리자를 얻고, `GUID_LBI_INPUTMODE` 항목의 텍스트/토글 상태를
-     읽습니다. 윈도우 트레이의 "한/A" 표시기가 쓰는 것과 같은 통로라 TSF 앱에서도 실시간입니다.
-   - 2순위: **IMM32**. `ImmGetDefaultIMEWnd(hwndFocus)`에 `WM_IME_CONTROL`로 `IMC_GETOPENSTATUS`와
-     `IMC_GETCONVERSIONMODE`를 묻습니다. `SendMessageTimeout(50ms)`로 멈춤을 방지합니다.
+4. **한/영 상태**: `ImmGetDefaultIMEWnd(hwndFocus)`(hwndFocus가 0이면 최상위 창)에
+   `WM_IME_CONTROL`로 열림 상태와 변환 모드를 순서대로 묻습니다. `SendMessageTimeout(100ms)`로
+   응답 없는 앱 때문에 멈추지 않게 합니다.
 
-**왜 IMM32만으로는 안 되나?** Windows 11 메모장, 브라우저, Office처럼 TSF를 직접 쓰는 앱은
-한/영 전환이 TSF 안에서만 일어나고 IMM32 쪽 입력 컨텍스트에는 통보되지 않습니다. 그래서
-IMM32로 물으면 처음 값만 계속 돌아옵니다(첫 1회만 맞고 그 뒤로는 안 바뀌는 증상).
+### 갱신 타이밍
 
-### 디버그 모드
-
-```powershell
-dotnet run -- --debug
-```
-
-exe 옆에 `imebadge.log`가 생기고, 활성 창·판정 경로·언어 표시줄 항목 목록이 값이 바뀔 때마다
-기록됩니다. 특정 앱에서 판정이 틀리면 이 로그로 원인을 찾습니다.
+- 100ms 폴링(polling)이 기본입니다.
+- 추가로 `SetWinEventHook(EVENT_OBJECT_IME_CHANGE)`를 걸어 OS가 IME 변경을 알려 주면 즉시
+  다시 읽습니다. 훅 델리게이트는 필드에 붙잡아 두어 GC 회수를 막습니다.
 
 ### 배지 창의 속성
 
@@ -96,14 +118,11 @@ caret 좌표와 배지 위치가 어긋납니다.
 
 ### 알려진 한계와 다음 단계
 
-- **Chrome / Edge / Electron 앱**은 UI Automation 경로로 caret을 찾습니다. 앱이 TextPattern을
-  제공하지 않으면 입력창의 왼쪽 아래에 배지가 붙습니다. 접근성 API를 처음 건드리는 순간
-  브라우저가 접근성 트리를 켜므로 아주 무거운 페이지에서는 약간 느려질 수 있습니다.
+- **Chrome / Edge / Electron 앱**은 UI Automation 경로로 caret을 찾습니다. 접근성 API를 처음
+  건드리는 순간 브라우저가 접근성 트리를 켜므로 아주 무거운 페이지에서는 약간 느려질 수 있습니다.
 - **UWP 앱**(설정, 일부 스토어 앱)은 포커스가 다른 프로세스(ApplicationFrameHost)에 있어
   판정이 `Unknown`이 될 수 있습니다.
-- 폴링 주기 100ms는 `BadgeForm._timer.Interval`에서 조정합니다. TSF·UIA 호출은 프로세스 간
-  통신이라 100ms에 한 번이면 충분하고, CPU 사용량은 1% 미만입니다.
-- 이벤트 기반으로 바꾸려면 `ITfLangBarMgr.AdviseEventSink`(IME 모드 변경)와
-  `SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, OBJID_CARET)`(caret 이동)를 받으면 됩니다.
+- **터미널**(Windows Terminal, conhost)은 IME 상태 보고가 부정확한 것으로 알려져 있습니다.
+- 폴링 주기 100ms는 `BadgeForm._timer.Interval`에서 조정합니다. CPU 사용량은 1% 미만입니다.
 - csproj의 `UseWPF=true`는 WPF 창을 만들기 위한 것이 아니라 `System.Windows.Automation`
   어셈블리를 쓰기 위한 것입니다.

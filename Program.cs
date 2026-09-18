@@ -30,6 +30,9 @@ static class Native
         public RECT rcCaret;
     }
 
+    public delegate void WinEventProc(IntPtr hHook, uint evt, IntPtr hwnd, int idObject, int idChild,
+                                      uint idEventThread, uint dwmsEventTime);
+
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr pid);
     [DllImport("user32.dll")] public static extern bool GetGUIThreadInfo(uint tid, ref GUITHREADINFO info);
@@ -40,13 +43,20 @@ static class Native
         IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, uint flags, uint timeoutMs, out IntPtr result);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern int GetClassName(IntPtr hWnd, StringBuilder sb, int max);
+    [DllImport("user32.dll")] public static extern IntPtr SetWinEventHook(
+        uint eventMin, uint eventMax, IntPtr hmodWinEventProc, WinEventProc proc,
+        uint idProcess, uint idThread, uint dwFlags);
+    [DllImport("user32.dll")] public static extern bool UnhookWinEvent(IntPtr hHook);
 
     public const uint WM_IME_CONTROL        = 0x0283;
     public const int  IMC_GETCONVERSIONMODE = 0x0001;
     public const int  IMC_GETOPENSTATUS     = 0x0005;
-    public const int  IME_CMODE_NATIVE      = 0x0001;
+    public const uint IME_CMODE_HANGUL      = 0x0001;   // == IME_CMODE_NATIVE
     public const uint SMTO_ABORTIFHUNG      = 0x0002;
     public const ushort LANG_KOREAN         = 0x0412;
+
+    public const uint EVENT_OBJECT_IME_CHANGE = 0x8029;  // IME 상태가 바뀔 때 OS가 쏘는 이벤트
+    public const uint WINEVENT_OUTOFCONTEXT   = 0x0000;
 
     public const int WS_EX_TRANSPARENT = 0x00000020;
     public const int WS_EX_TOOLWINDOW  = 0x00000080;
@@ -63,100 +73,18 @@ static class Native
 }
 
 // ─────────────────────────────────────────────────────────────────
-// (2) TSF(Text Services Framework) 언어 표시줄 COM 인터페이스
-//     윈도우 트레이의 "한/A" 표시기가 다른 프로세스의 IME 상태를 읽을 때
-//     쓰는 바로 그 통로다. vtable 순서는 Windows SDK ctfutb.h와 동일해야 한다.
-// ─────────────────────────────────────────────────────────────────
-[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-struct TF_LANGBARITEMINFO
-{
-    public Guid clsidService;
-    public Guid guidItem;
-    public uint dwStyle;
-    public uint ulSort;
-    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string szDescription;
-}
-
-[ComImport, Guid("73540d69-edeb-4ee9-96c9-23aa30b25916"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface ITfLangBarItem
-{
-    [PreserveSig] int GetInfo(out TF_LANGBARITEMINFO pInfo);
-    [PreserveSig] int GetStatus(out uint pdwStatus);
-    [PreserveSig] int Show([MarshalAs(UnmanagedType.Bool)] bool fShow);
-    [PreserveSig] int GetTooltipString([MarshalAs(UnmanagedType.BStr)] out string pbstrToolTip);
-}
-
-[ComImport, Guid("28c7f1d0-de25-11d2-afdd-00105a2799b5"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface ITfLangBarItemButton
-{
-    // ITfLangBarItem (COM 인터페이스 상속은 C#에서 메서드를 다시 나열해야 한다)
-    [PreserveSig] int GetInfo(out TF_LANGBARITEMINFO pInfo);
-    [PreserveSig] int GetStatus(out uint pdwStatus);
-    [PreserveSig] int Show([MarshalAs(UnmanagedType.Bool)] bool fShow);
-    [PreserveSig] int GetTooltipString([MarshalAs(UnmanagedType.BStr)] out string pbstrToolTip);
-    // ITfLangBarItemButton
-    [PreserveSig] int OnClick(int click, Native.POINT pt, ref Native.RECT prcArea);
-    [PreserveSig] int InitMenu(IntPtr pMenu);
-    [PreserveSig] int OnMenuSelect(uint wID);
-    [PreserveSig] int GetIcon(out IntPtr phIcon);
-    [PreserveSig] int GetText([MarshalAs(UnmanagedType.BStr)] out string pbstrText);
-}
-
-[ComImport, Guid("583f34d0-de25-11d2-afdd-00105a2799b5"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface IEnumTfLangBarItems
-{
-    [PreserveSig] int Clone(out IEnumTfLangBarItems ppEnum);
-    [PreserveSig] int Next(uint ulCount, out ITfLangBarItem ppItem, out uint pcFetched);
-    [PreserveSig] int Reset();
-    [PreserveSig] int Skip(uint ulCount);
-}
-
-[ComImport, Guid("ba468c55-9956-4fb1-a59d-52a7dd7cc6aa"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface ITfLangBarItemMgr
-{
-    [PreserveSig] int EnumItems(out IEnumTfLangBarItems ppEnum);
-    [PreserveSig] int GetItem(ref Guid rguid, out ITfLangBarItem ppItem);
-    [PreserveSig] int AddItem(ITfLangBarItem punk);
-    [PreserveSig] int RemoveItem(ITfLangBarItem punk);
-    [PreserveSig] int AdviseItemSink(IntPtr punk, out uint pdwCookie, ref Guid rguidItem);
-    [PreserveSig] int UnadviseItemSink(uint dwCookie);
-    [PreserveSig] int GetItemFloatingRect(uint dwThreadId, ref Guid rguid, out Native.RECT prc);
-    [PreserveSig] int GetItemsStatus(uint ulCount, IntPtr prgguid, IntPtr pdwStatus);
-    [PreserveSig] int GetItemNum(out uint pulCount);
-    [PreserveSig] int GetItems(uint ulCount, IntPtr ppItem, IntPtr pInfo, IntPtr pdwStatus, out uint pcFetched);
-    [PreserveSig] int AdviseItemsSink(uint ulCount, IntPtr ppunk, IntPtr pguidItem, IntPtr pdwCookie);
-    [PreserveSig] int UnadviseItemsSink(uint ulCount, IntPtr pdwCookie);
-}
-
-[ComImport, Guid("87955690-e627-11d2-8ddb-00105a2799b5"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface ITfLangBarMgr
-{
-    [PreserveSig] int AdviseEventSink(IntPtr pSink, IntPtr hwnd, uint dwFlags, out uint pdwCookie);
-    [PreserveSig] int UnadviseEventSink(uint dwCookie);
-    [PreserveSig] int GetThreadMarshalInterface(uint dwThreadId, uint dwType, ref Guid riid,
-                                                 [MarshalAs(UnmanagedType.IUnknown)] out object ppunk);
-    [PreserveSig] int GetThreadLangBarItemMgr(uint dwThreadId, out ITfLangBarItemMgr pplbie, out uint pdwThreadid);
-    [PreserveSig] int GetInputProcessorProfiles(uint dwThreadId,
-                                                 [MarshalAs(UnmanagedType.IUnknown)] out object ppaip, out uint pdwThreadid);
-    [PreserveSig] int RestoreLastFocus(out uint dwThreadId, [MarshalAs(UnmanagedType.Bool)] bool fPrev);
-    [PreserveSig] int SetModalInput(IntPtr pSink, uint dwThreadId, uint dwFlags);
-    [PreserveSig] int ShowFloating(uint dwFlags);
-    [PreserveSig] int GetShowFloatingStatus(out uint pdwFlags);
-}
-
-// ─────────────────────────────────────────────────────────────────
-// (3) 디버그 로그 (--debug 옵션일 때만 exe 옆 imebadge.log에 기록)
+// (2) 디버그 로그 (--debug 옵션일 때만 exe 옆 imebadge.log에 기록)
 // ─────────────────────────────────────────────────────────────────
 static class Log
 {
     public static bool Enabled;
-    static readonly string Path = System.IO.Path.Combine(AppContext.BaseDirectory, "imebadge.log");
+    static readonly string LogPath = Path.Combine(AppContext.BaseDirectory, "imebadge.log");
     static string _lastLine = "";
 
     public static void Write(string line)
     {
         if (!Enabled) return;
-        try { File.AppendAllText(Path, $"{DateTime.Now:HH:mm:ss.fff} {line}{Environment.NewLine}"); } catch { }
+        try { File.AppendAllText(LogPath, $"{DateTime.Now:HH:mm:ss.fff} {line}{Environment.NewLine}"); } catch { }
     }
 
     /// <summary>같은 내용이 연속으로 오면 한 번만 기록한다.</summary>
@@ -169,93 +97,9 @@ static class Log
 }
 
 // ─────────────────────────────────────────────────────────────────
-// (4) TSF 언어 표시줄에서 한/영 상태 읽기 (1순위)
-// ─────────────────────────────────────────────────────────────────
-static class TsfReader
-{
-    static readonly Guid CLSID_TF_LangBarMgr = new("ebb08c45-6c4a-4fdc-ae53-4eb8c4c7db8e");
-    static readonly Guid GUID_LBI_INPUTMODE  = new("2c77a81e-41cc-4178-a3a7-5f8a987568e6");
-    const uint TF_LBI_STYLE_BTN_TOGGLE   = 0x00040000;
-    const uint TF_LBI_STATUS_BTN_TOGGLED = 0x00010000;
-
-    static ITfLangBarMgr? _mgr;
-    static ITfLangBarItemMgr? _itemMgr;
-    static uint _itemMgrTid;
-
-    /// <summary>대상 thread의 IME 모드 항목을 읽는다. 못 읽으면 null.</summary>
-    public static ImeState? Read(uint tid, StringBuilder? dump)
-    {
-        try
-        {
-            _mgr ??= (ITfLangBarMgr)Activator.CreateInstance(Type.GetTypeFromCLSID(CLSID_TF_LangBarMgr)!)!;
-
-            if (_itemMgr is null || _itemMgrTid != tid)
-            {
-                _itemMgr = null;
-                int hr = _mgr.GetThreadLangBarItemMgr(tid, out var im, out _);
-                if (hr != 0 || im is null) { dump?.Append($" tsf:GetThreadLangBarItemMgr=0x{hr:X8}"); return null; }
-                _itemMgr = im;
-                _itemMgrTid = tid;
-            }
-
-            if (_itemMgr.EnumItems(out var e) != 0 || e is null) { _itemMgr = null; return null; }
-
-            ImeState? result = null;
-            while (e.Next(1, out var item, out var fetched) == 0 && fetched == 1 && item is not null)
-            {
-                if (item.GetInfo(out var info) != 0) continue;
-                item.GetStatus(out var status);
-                string text = "", tip = "";
-                if (item is ITfLangBarItemButton btn)
-                {
-                    btn.GetText(out text);
-                    btn.GetTooltipString(out tip);
-                }
-                dump?.Append($"\n    item {info.guidItem} style=0x{info.dwStyle:X} status=0x{status:X} desc='{info.szDescription}' text='{text}' tip='{tip}'");
-
-                if (result is null && info.guidItem == GUID_LBI_INPUTMODE)
-                    result = Classify(info.dwStyle, status, text, tip);
-            }
-            return result;
-        }
-        catch (Exception ex)
-        {
-            dump?.Append(" tsf:EXC " + ex.Message);
-            _itemMgr = null;
-            _mgr = null;
-            return null;
-        }
-    }
-
-    static ImeState? Classify(uint style, uint status, string text, string tip)
-    {
-        // 1) 버튼 텍스트가 직접 말해 주는 경우
-        var byText = FromWords(text);
-        if (byText is not null) return byText;
-        // 2) 토글 버튼이면 눌림 상태가 곧 한글 모드
-        if ((style & TF_LBI_STYLE_BTN_TOGGLE) != 0)
-            return (status & TF_LBI_STATUS_BTN_TOGGLED) != 0 ? ImeState.Hangul : ImeState.English;
-        // 3) 툴팁에 단서가 있는 경우
-        return FromWords(tip);
-    }
-
-    static ImeState? FromWords(string s)
-    {
-        if (string.IsNullOrWhiteSpace(s)) return null;
-        var t = s.Trim();
-        if (t == "A" || t.Contains("영어") || t.Contains("영문") || t.Contains("English", StringComparison.OrdinalIgnoreCase))
-            return ImeState.English;
-        if (t == "한" || t.Contains("한글") || t.Contains("Hangul", StringComparison.OrdinalIgnoreCase)
-                      || t.Contains("Korean", StringComparison.OrdinalIgnoreCase))
-            return ImeState.Hangul;
-        return null;
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────
-// (4b) UI Automation으로 caret 위치 찾기 (2순위)
-//      Chrome/Edge/Electron(Claude 앱 등)은 Win32 caret을 만들지 않으므로
-//      접근성(accessibility) API로 "지금 선택 영역(=커서)"의 사각형을 묻는다.
+// (3) UI Automation으로 caret 위치 찾기 (Win32 caret이 없는 앱용)
+//     Chrome/Edge/Electron(Claude 앱 등)은 Win32 caret을 만들지 않으므로
+//     접근성(accessibility) API로 "지금 선택 영역(=커서)"의 사각형을 묻는다.
 // ─────────────────────────────────────────────────────────────────
 static class UiaCaret
 {
@@ -266,40 +110,41 @@ static class UiaCaret
             var el = AutomationElement.FocusedElement;
             if (el is null) return null;
 
+            // 읽기 전용이라고 스스로 밝힌 요소(읽기 전용 문서 등)에는 배지를 띄우지 않는다.
+            if (el.TryGetCurrentPattern(ValuePattern.Pattern, out var vp) && vp is ValuePattern v && v.Current.IsReadOnly)
+            {
+                dump?.Append(" uia:readonly");
+                return null;
+            }
+
             if (el.TryGetCurrentPattern(TextPattern.Pattern, out var pat) && pat is TextPattern tp)
             {
                 var sel = tp.GetSelection();
                 if (sel.Length > 0)
                 {
-                    var r = sel[0];
-                    var rects = r.GetBoundingRectangles();
-                    if (rects.Length == 0)
+                    var r = sel[0].Clone();
+                    // 일부 컨트롤(크롬 주소창 등)은 "문서 처음~커서" 범위를 돌려준다.
+                    // 시작점을 끝점으로 옮겨 커서 한 점으로 접는다. 이미 한 점이면 무해.
+                    r.MoveEndpointByRange(TextPatternRangeEndpoint.Start, r, TextPatternRangeEndpoint.End);
+
+                    for (int attempt = 0; attempt < 2; attempt++)
                     {
-                        // 커서만 있는(선택 없음) 범위는 넓이가 0이라 사각형이 안 나온다.
-                        // 커서 자리의 글자 한 칸으로 넓혀서 다시 묻는다.
-                        r = r.Clone();
-                        r.ExpandToEnclosingUnit(TextUnit.Character);
-                        rects = r.GetBoundingRectangles();
-                        if (rects.Length == 0)
+                        var rects = r.GetBoundingRectangles();
+                        if (rects.Length > 0 && rects[0].Height > 0)
                         {
-                            // 문서 맨 끝이면 앞 글자 한 칸으로
-                            r.Move(TextUnit.Character, -1);
-                            r.ExpandToEnclosingUnit(TextUnit.Character);
-                            rects = r.GetBoundingRectangles();
+                            var b = rects[0];
+                            dump?.Append($" uia:text({b.Left:F0},{b.Bottom:F0})");
+                            return new Point((int)b.Left, (int)b.Bottom);
                         }
-                    }
-                    if (rects.Length > 0)
-                    {
-                        var last = rects[^1];
-                        dump?.Append($" uia:text({last.Right:F0},{last.Bottom:F0})");
-                        return new Point((int)last.Right, (int)last.Bottom);
+                        // 커서만 있는 범위는 넓이가 0이라 사각형이 안 나온다. 글자 한 칸으로 넓혀 재시도.
+                        r.ExpandToEnclosingUnit(TextUnit.Character);
                     }
                 }
             }
 
             // TextPattern이 없으면 입력 컨트롤의 왼쪽 아래 모서리로 대신한다.
             var ct = el.Current.ControlType;
-            if (ct == ControlType.Edit || ct == ControlType.Document || ct == ControlType.ComboBox)
+            if (ct == ControlType.Edit || ct == ControlType.ComboBox)
             {
                 var b = el.Current.BoundingRectangle;
                 if (!b.IsEmpty && b.Width > 0)
@@ -319,7 +164,7 @@ static class UiaCaret
 }
 
 // ─────────────────────────────────────────────────────────────────
-// (5) 현재 상태 한 번 읽기 (caret 위치 + TSF → IMM32 순서로 한/영 판정)
+// (4) 현재 상태 한 번 읽기
 // ─────────────────────────────────────────────────────────────────
 enum ImeState { Unknown, Hangul, English, OtherLang }
 
@@ -338,9 +183,9 @@ static class ImeReader
 
         var dump = Log.Enabled ? new StringBuilder() : null;
 
-        // caret 위치: 1순위 Win32 caret, 2순위 UI Automation
+        // ── caret 위치: 1순위 Win32 caret, 2순위 UI Automation ──
         Point? caret = null;
-        if (gti.hwndCaret != IntPtr.Zero)
+        if (gti.hwndCaret != IntPtr.Zero && gti.rcCaret.Bottom > gti.rcCaret.Top)
         {
             var pt = new Native.POINT { X = gti.rcCaret.Right, Y = gti.rcCaret.Bottom };
             Native.ClientToScreen(gti.hwndCaret, ref pt);
@@ -352,40 +197,50 @@ static class ImeReader
             caret = UiaCaret.Find(dump);
         }
 
-        ushort lang = (ushort)((long)Native.GetKeyboardLayout(tid) & 0xFFFF);
-        if (lang != Native.LANG_KOREAN) return new(ImeState.OtherLang, caret);
-
-        // 1순위: TSF 언어 표시줄 (Win11 메모장·브라우저 같은 TSF 앱에서도 실시간)
-        var tsf = TsfReader.Read(tid, dump);
-
-        // 2순위: IMM32 (구형 앱에서는 이쪽이 정확하다)
-        var focus = gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : fg;
-        var imeWnd = Native.ImmGetDefaultIMEWnd(focus);
-        IntPtr open = IntPtr.Zero, mode = IntPtr.Zero;
-        if (imeWnd != IntPtr.Zero)
-        {
-            Native.SendMessageTimeout(imeWnd, Native.WM_IME_CONTROL, Native.IMC_GETOPENSTATUS,
-                                      IntPtr.Zero, Native.SMTO_ABORTIFHUNG, 50, out open);
-            Native.SendMessageTimeout(imeWnd, Native.WM_IME_CONTROL, Native.IMC_GETCONVERSIONMODE,
-                                      IntPtr.Zero, Native.SMTO_ABORTIFHUNG, 50, out mode);
-        }
-        ImeState imm = imeWnd == IntPtr.Zero ? ImeState.Unknown
-                     : (open != IntPtr.Zero || ((long)mode & Native.IME_CMODE_NATIVE) != 0) ? ImeState.Hangul
-                     : ImeState.English;
-
-        var state = tsf ?? imm;
+        // ── 한/영 상태 ──
+        var state = ReadImeState(fg, gti.hwndFocus, tid, dump);
 
         if (dump is not null)
-            Log.WriteIfChanged(
-                $"fg='{Native.ClassName(fg)}' focus='{Native.ClassName(focus)}' tid={tid} " +
-                $"tsf={(tsf?.ToString() ?? "null")} imm={imm}(open={open},mode=0x{(long)mode:X}) => {state}{dump}");
+            Log.WriteIfChanged($"fg='{Native.ClassName(fg)}' focus='{Native.ClassName(gti.hwndFocus)}' tid={tid} => {state}{dump}");
 
         return new(state, caret);
+    }
+
+    /// <summary>
+    /// 한국어 IME의 한/영 판정.
+    /// 핵심: 한/영 키는 IME의 "열림(open)"이 아니라 "변환 모드(conversion mode)"의
+    /// 한글 비트(IME_CMODE_HANGUL)를 바꾼다. 열림 상태는 IME가 한 번 켜진 뒤로는 계속 1이므로
+    /// 열림 상태로 한글을 판정하면 첫 전환 이후 영원히 "한"에 묶인다.
+    /// </summary>
+    static ImeState ReadImeState(IntPtr fg, IntPtr hwndFocus, uint tid, StringBuilder? dump)
+    {
+        // 키보드 레이아웃이 한국어가 아니면(ENG 레이아웃 등) 한/영 개념이 없다.
+        ushort lang = (ushort)((long)Native.GetKeyboardLayout(tid) & 0xFFFF);
+        if (lang != Native.LANG_KOREAN) { dump?.Append($" lang=0x{lang:X4}"); return ImeState.OtherLang; }
+
+        // UWP·콘솔처럼 hwndFocus가 0인 창은 최상위 창으로 대신 묻는다.
+        var target = hwndFocus != IntPtr.Zero ? hwndFocus : fg;
+        var imeWnd = Native.ImmGetDefaultIMEWnd(target);
+        if (imeWnd == IntPtr.Zero) { dump?.Append(" imeWnd=0"); return ImeState.Unknown; }
+
+        var ok = Native.SendMessageTimeout(imeWnd, Native.WM_IME_CONTROL, Native.IMC_GETOPENSTATUS,
+                                           IntPtr.Zero, Native.SMTO_ABORTIFHUNG, 100, out var open);
+        if (ok == IntPtr.Zero) { dump?.Append(" open:timeout"); return ImeState.Unknown; }
+
+        // IME가 닫혀 있으면(아직 한 번도 한글을 안 쓴 창) 영문 입력이다.
+        if (open == IntPtr.Zero) { dump?.Append(" open=0"); return ImeState.English; }
+
+        ok = Native.SendMessageTimeout(imeWnd, Native.WM_IME_CONTROL, Native.IMC_GETCONVERSIONMODE,
+                                       IntPtr.Zero, Native.SMTO_ABORTIFHUNG, 100, out var mode);
+        if (ok == IntPtr.Zero) { dump?.Append(" mode:timeout"); return ImeState.Unknown; }
+
+        dump?.Append($" open=1 mode=0x{(long)mode:X}");
+        return (((uint)(long)mode) & Native.IME_CMODE_HANGUL) != 0 ? ImeState.Hangul : ImeState.English;
     }
 }
 
 // ─────────────────────────────────────────────────────────────────
-// (6) caret 옆에 뜨는 배지 창
+// (5) caret 옆에 뜨는 배지 창
 // ─────────────────────────────────────────────────────────────────
 sealed class BadgeForm : Form
 {
@@ -400,6 +255,11 @@ sealed class BadgeForm : Form
     readonly NotifyIcon _tray;
     ImeState _lastState = ImeState.Unknown;
     bool _allowShow;
+
+    // WinEvent 훅: OS가 "IME 상태 바뀜"을 알려 주면 100ms 폴링을 기다리지 않고 즉시 갱신한다.
+    // 델리게이트를 필드에 붙잡아 두지 않으면 GC가 회수해 네이티브 쪽에서 크래시가 난다.
+    readonly Native.WinEventProc _imeChangeProc;
+    IntPtr _hook;
 
     public BadgeForm()
     {
@@ -421,9 +281,16 @@ sealed class BadgeForm : Form
             Visible = true,
         };
 
-        _timer.Tick += (_, _) => Apply(ImeReader.Read(Handle));
+        _timer.Tick += (_, _) => Poll();
         _timer.Start();
+
+        _imeChangeProc = (_, _, _, _, _, _, _) => Poll();
+        _hook = Native.SetWinEventHook(Native.EVENT_OBJECT_IME_CHANGE, Native.EVENT_OBJECT_IME_CHANGE,
+                                       IntPtr.Zero, _imeChangeProc, 0, 0, Native.WINEVENT_OUTOFCONTEXT);
+        Log.Write(_hook == IntPtr.Zero ? "IME change hook FAILED" : "IME change hook registered");
     }
+
+    void Poll() => Apply(ImeReader.Read(Handle));
 
     protected override CreateParams CreateParams
     {
@@ -474,6 +341,7 @@ sealed class BadgeForm : Form
     {
         if (disposing)
         {
+            if (_hook != IntPtr.Zero) { Native.UnhookWinEvent(_hook); _hook = IntPtr.Zero; }
             _timer.Dispose();
             _tray.Visible = false;
             _tray.Dispose();
