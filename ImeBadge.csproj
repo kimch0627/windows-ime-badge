@@ -3,13 +3,21 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
-    <!-- UI Automation(System.Windows.Automation)을 쓰기 위해 필요. WPF 창은 만들지 않는다. -->
-    <UseWPF>true</UseWPF>
+    <!-- UseWPF는 켜지 않는다. UI Automation은 WPF 래퍼(System.Windows.Automation) 대신 COM으로 직접 호출하므로
+         (Program.cs의 Uia 클래스) self-contained exe에 WPF 전체가 포함되지 않는다. -->
     <Nullable>enable</Nullable>
-    <!-- WPF와 WinForms의 동명 형식(Application, Point 등) 충돌을 피하려고 암시적 using을 끄고 소스에서 명시한다. -->
+    <!-- 암시적 using을 끄고 소스에서 명시한다. (System.Windows.* 와 System.Drawing.* 의 동명 형식 충돌 방지) -->
     <ImplicitUsings>disable</ImplicitUsings>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <AssemblyName>ImeBadge</AssemblyName>
     <RootNamespace>ImeBadge</RootNamespace>
+
+    <!-- 배포 파일 크기 줄이기 -->
+    <!-- 프레임워크의 번역 리소스 DLL(cs, de, ja, ko ... 13개 언어)을 빼고 영어만 남긴다. 이 프로그램의 UI 문자열은
+         소스에 직접 쓰여 있어 영향이 없다. -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- self-contained single-file 번들 안의 어셈블리를 압축한다. 첫 실행 시 메모리에서 풀기 때문에
+         시작이 수백 ms 느려지는 대신 크기가 절반 이하로 줄어든다. -->
+    <EnableCompressionInSingleFile Condition="'$(SelfContained)' == 'true'">true</EnableCompressionInSingleFile>
   </PropertyGroup>
 </Project>

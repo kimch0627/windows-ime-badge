@@ -21,8 +21,11 @@ GitHub **Releases** 페이지에서 최신 버전의 exe를 받으면 됩니다.
 
 | 파일 | 크기 | 조건 |
 |---|---|---|
-| `ImeBadge-win-x64.exe` | 작음 | PC에 .NET 8 데스크톱 런타임이 있어야 함 (`winget install Microsoft.DotNet.DesktopRuntime.8`) |
-| `ImeBadge-win-x64-selfcontained.exe` | 큼 | 아무것도 설치할 필요 없음 |
+| `ImeBadge-win-x64-selfcontained.exe` | 수십 MB | 아무것도 설치할 필요 없음. **처음 쓰는 분은 이 파일** |
+| `ImeBadge-win-x64.exe` | 약 200 KB | PC에 .NET 8 데스크톱 런타임이 있어야 함. 없으면 실행 시 설치 안내 창이 뜸 (`winget install Microsoft.DotNet.DesktopRuntime.8`) |
+
+기본 Windows에는 .NET 8 런타임이 들어 있지 않습니다. 작은 exe는 이미 런타임이 있는 PC(다른 .NET 8
+프로그램이나 개발 도구를 설치한 경우)에서 쓰는 보조 파일입니다.
 
 exe는 GitHub Actions가 자동으로 빌드합니다. `main`에 푸시될 때마다 빌드 결과가 Actions
 탭의 Artifacts에 올라가고, `v1.2.3` 형태의 태그를 푸시하면 Releases에 자동으로 등록됩니다.
@@ -63,11 +66,24 @@ git push origin v0.5.0
 ### exe 하나로 만들기 (배포용)
 
 ```powershell
+# 런타임 포함 (아무 PC에서나 실행, 수십 MB)
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+
+# 런타임 없이 (.NET 8 런타임이 있는 PC 전용, 약 200 KB)
 dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true
 ```
 
 결과물: `bin\Release\net8.0-windows\win-x64\publish\ImeBadge.exe`
-(실행 PC에 .NET 8 런타임이 필요합니다. 없으면 `--self-contained true`로 빌드하세요.)
+
+self-contained 크기를 줄이는 설정은 `ImeBadge.csproj`에 있습니다.
+
+| 설정 | 효과 |
+|---|---|
+| `UseWPF`를 켜지 않음 | UI Automation을 COM으로 직접 호출해 WPF 프레임워크(수십 MB)를 통째로 뺌 |
+| `EnableCompressionInSingleFile` | 번들 안의 어셈블리를 압축. 크기 절반 이하, 첫 실행이 수백 ms 느려짐 |
+| `SatelliteResourceLanguages=en` | 프레임워크의 13개 언어 번역 리소스 DLL 제외 |
+
+.NET 8에서는 WinForms 앱에 trimming과 Native AOT를 쓸 수 없어, 그 이상은 줄이기 어렵습니다.
 
 ### 디버그 모드
 
@@ -88,6 +104,7 @@ exe 옆에 `imebadge.log`가 생기고, 활성 창·caret 탐색 경로·IME 원
 |---|---|
 | `Native` | Win32 API P/Invoke 선언과 상수 |
 | `Log` | `--debug`일 때만 쓰는 파일 로그 |
+| `Uia` | Windows 내장 COM UI Automation 인터페이스 선언(`IUIAutomation`, `IUIAutomationTextRange` 등) |
 | `UiaCaret` | UI Automation으로 caret 위치 찾기 (Win32 caret이 없는 앱용) |
 | `ImeReader` | 활성 창의 caret 위치와 한/영 상태를 한 번 읽어 `Snapshot`으로 반환 |
 | `Settings` | 모양·위치·크기 설정. exe 옆 JSON에 저장 |
@@ -120,7 +137,7 @@ exe 옆에 `imebadge.log`가 생기고, 활성 창·caret 탐색 경로·IME 원
 2. **caret 위치** (두 경로)
    - 1순위: `GetGUIThreadInfo(tid)`의 `hwndCaret`/`rcCaret` → `ClientToScreen()`. 메모장·Word 등
      Win32 caret을 만드는 앱.
-   - 2순위: UI Automation. `AutomationElement.FocusedElement` → `TextPattern.GetSelection()`.
+   - 2순위: UI Automation. `IUIAutomation.GetFocusedElement()` → `IUIAutomationTextPattern.GetSelection()`.
      크롬 주소창처럼 "문서 처음~커서" 범위를 주는 컨트롤이 있어 시작점을 끝점으로 옮겨 커서 한
      점으로 접은 뒤, 넓이 0이면 `ExpandToEnclosingUnit(Character)`로 한 글자 넓혀 사각형을 얻습니다.
      Chrome/Edge/Electron(Claude 앱, VS Code) 같은 앱용. TextPattern이 없으면 Edit/ComboBox
@@ -164,8 +181,10 @@ caret 좌표와 배지 위치가 어긋납니다.
   판정이 `Unknown`이 될 수 있습니다.
 - **터미널**(Windows Terminal, conhost)은 IME 상태 보고가 부정확한 것으로 알려져 있습니다.
 - 폴링 주기 100ms는 `BadgeForm._timer.Interval`에서 조정합니다. CPU 사용량은 1% 미만입니다.
-- csproj의 `UseWPF=true`는 WPF 창을 만들기 위한 것이 아니라 `System.Windows.Automation`
-  어셈블리를 쓰기 위한 것입니다.
+- UI Automation은 WPF의 `System.Windows.Automation` 래퍼가 아니라 COM 인터페이스를 직접 선언해서
+  씁니다(`Uia` 클래스). 래퍼를 쓰려면 csproj에 `UseWPF=true`가 필요하고, 그러면 self-contained exe에
+  WPF 전체가 들어가 크기가 세 배 이상 커집니다. COM 인터페이스 선언은 `UIAutomationClient.h`의 vtable
+  순서를 그대로 따라야 하므로, 쓰지 않는 메서드도 `_Slot_*` 자리표시자로 남겨 두었습니다.
 
 ## 라이선스
 
