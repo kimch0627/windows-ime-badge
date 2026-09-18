@@ -1,9 +1,14 @@
 using System;
 using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
+using System.Drawing.Text;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Windows.Automation;
 using System.Windows.Automation.Text;
 using System.Windows.Forms;
@@ -19,7 +24,13 @@ static class Native
     public struct RECT { public int Left, Top, Right, Bottom; }
 
     [StructLayout(LayoutKind.Sequential)]
-    public struct POINT { public int X, Y; }
+    public struct POINT { public int X, Y; public POINT(int x, int y) { X = x; Y = y; } }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SIZE { public int cx, cy; public SIZE(int w, int h) { cx = w; cy = h; } }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct BLENDFUNCTION { public byte BlendOp, BlendFlags, SourceConstantAlpha, AlphaFormat; }
 
     [StructLayout(LayoutKind.Sequential)]
     public struct GUITHREADINFO
@@ -48,6 +59,23 @@ static class Native
         uint idProcess, uint idThread, uint dwFlags);
     [DllImport("user32.dll")] public static extern bool UnhookWinEvent(IntPtr hHook);
 
+    // 레이어드 창(픽셀별 투명도) 그리기
+    [DllImport("user32.dll")] public static extern IntPtr GetDC(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+    [DllImport("gdi32.dll")]  public static extern IntPtr CreateCompatibleDC(IntPtr hDC);
+    [DllImport("gdi32.dll")]  public static extern bool DeleteDC(IntPtr hDC);
+    [DllImport("gdi32.dll")]  public static extern IntPtr SelectObject(IntPtr hDC, IntPtr hObj);
+    [DllImport("gdi32.dll")]  public static extern bool DeleteObject(IntPtr hObj);
+    [DllImport("user32.dll")] public static extern bool UpdateLayeredWindow(IntPtr hwnd, IntPtr hdcDst,
+        ref POINT pptDst, ref SIZE psize, IntPtr hdcSrc, ref POINT pptSrc, uint crKey,
+        ref BLENDFUNCTION pblend, uint dwFlags);
+    [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after,
+        int x, int y, int cx, int cy, uint flags);
+
+    // 모니터별 DPI
+    [DllImport("user32.dll")] public static extern IntPtr MonitorFromPoint(POINT pt, uint flags);
+    [DllImport("shcore.dll")] public static extern int GetDpiForMonitor(IntPtr hmon, int type, out uint dpiX, out uint dpiY);
+
     public const uint WM_IME_CONTROL        = 0x0283;
     public const int  IMC_GETCONVERSIONMODE = 0x0001;
     public const int  IMC_GETOPENSTATUS     = 0x0005;
@@ -55,13 +83,19 @@ static class Native
     public const uint SMTO_ABORTIFHUNG      = 0x0002;
     public const ushort LANG_KOREAN         = 0x0412;
 
-    public const uint EVENT_OBJECT_IME_CHANGE = 0x8029;  // IME 상태가 바뀔 때 OS가 쏘는 이벤트
+    public const uint EVENT_OBJECT_IME_CHANGE = 0x8029;
     public const uint WINEVENT_OUTOFCONTEXT   = 0x0000;
 
     public const int WS_EX_TRANSPARENT = 0x00000020;
     public const int WS_EX_TOOLWINDOW  = 0x00000080;
     public const int WS_EX_LAYERED     = 0x00080000;
     public const int WS_EX_NOACTIVATE  = 0x08000000;
+
+    public const uint ULW_ALPHA     = 0x02;
+    public const byte AC_SRC_OVER   = 0x00;
+    public const byte AC_SRC_ALPHA  = 0x01;
+    public const uint SWP_NOSIZE = 0x0001, SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
+    public const uint MONITOR_DEFAULTTONEAREST = 2;
 
     public static string ClassName(IntPtr hwnd)
     {
@@ -70,10 +104,56 @@ static class Native
         GetClassName(hwnd, sb, sb.Capacity);
         return sb.ToString();
     }
+
+    /// <summary>해당 지점이 속한 모니터의 DPI 배율 (96 DPI = 1.0).</summary>
+    public static float DpiScaleAt(Point p)
+    {
+        try
+        {
+            var hmon = MonitorFromPoint(new POINT(p.X, p.Y), MONITOR_DEFAULTTONEAREST);
+            if (hmon != IntPtr.Zero && GetDpiForMonitor(hmon, 0, out var dx, out _) == 0 && dx > 0)
+                return dx / 96f;
+        }
+        catch { }
+        return 1f;
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────
-// (2) 디버그 로그 (--debug 옵션일 때만 exe 옆 imebadge.log에 기록)
+// (2) 설정 (exe 옆 imebadge.settings.json)
+// ─────────────────────────────────────────────────────────────────
+enum BadgeStyle { Box, Pill, Dot, Underline, DotFlash }
+enum BadgePlacement { AboveRight, BelowRight }
+
+sealed class Settings
+{
+    [JsonConverter(typeof(JsonStringEnumConverter))] public BadgeStyle Style { get; set; } = BadgeStyle.Pill;
+    [JsonConverter(typeof(JsonStringEnumConverter))] public BadgePlacement Placement { get; set; } = BadgePlacement.AboveRight;
+    public int SizePercent { get; set; } = 100;
+
+    static readonly string FilePath = Path.Combine(AppContext.BaseDirectory, "imebadge.settings.json");
+    static readonly JsonSerializerOptions Opts = new() { WriteIndented = true };
+
+    public static Settings Load()
+    {
+        try
+        {
+            if (File.Exists(FilePath))
+                return JsonSerializer.Deserialize<Settings>(File.ReadAllText(FilePath), Opts) ?? new Settings();
+        }
+        catch (Exception ex) { Log.Write("settings load failed: " + ex.Message); }
+        return new Settings();
+    }
+
+    public void Save()
+    {
+        try { File.WriteAllText(FilePath, JsonSerializer.Serialize(this, Opts)); }
+        catch (Exception ex) { Log.Write("settings save failed: " + ex.Message); }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// (3) 디버그 로그 (--debug 옵션일 때만 exe 옆 imebadge.log에 기록)
 // ─────────────────────────────────────────────────────────────────
 static class Log
 {
@@ -87,7 +167,6 @@ static class Log
         try { File.AppendAllText(LogPath, $"{DateTime.Now:HH:mm:ss.fff} {line}{Environment.NewLine}"); } catch { }
     }
 
-    /// <summary>같은 내용이 연속으로 오면 한 번만 기록한다.</summary>
     public static void WriteIfChanged(string line)
     {
         if (!Enabled || line == _lastLine) return;
@@ -97,20 +176,18 @@ static class Log
 }
 
 // ─────────────────────────────────────────────────────────────────
-// (3) UI Automation으로 caret 위치 찾기 (Win32 caret이 없는 앱용)
-//     Chrome/Edge/Electron(Claude 앱 등)은 Win32 caret을 만들지 않으므로
-//     접근성(accessibility) API로 "지금 선택 영역(=커서)"의 사각형을 묻는다.
+// (4) UI Automation으로 caret 위치 찾기 (Win32 caret이 없는 앱용)
 // ─────────────────────────────────────────────────────────────────
 static class UiaCaret
 {
-    public static Point? Find(StringBuilder? dump)
+    /// <summary>caret 사각형(화면 좌표). 정확한 caret을 못 찾으면 입력창 왼쪽 아래 1x1(높이 0)로 근사.</summary>
+    public static Rectangle? Find(StringBuilder? dump)
     {
         try
         {
             var el = AutomationElement.FocusedElement;
             if (el is null) return null;
 
-            // 읽기 전용이라고 스스로 밝힌 요소(읽기 전용 문서 등)에는 배지를 띄우지 않는다.
             if (el.TryGetCurrentPattern(ValuePattern.Pattern, out var vp) && vp is ValuePattern v && v.Current.IsReadOnly)
             {
                 dump?.Append(" uia:readonly");
@@ -123,10 +200,8 @@ static class UiaCaret
                 if (sel.Length > 0)
                 {
                     var r = sel[0].Clone();
-                    // 일부 컨트롤(크롬 주소창 등)은 "문서 처음~커서" 범위를 돌려준다.
-                    // 시작점을 끝점으로 옮겨 커서 한 점으로 접는다. 이미 한 점이면 무해.
+                    // 크롬 주소창 등은 "문서 처음~커서" 범위를 준다. 시작점을 끝점으로 옮겨 커서 한 점으로 접는다.
                     r.MoveEndpointByRange(TextPatternRangeEndpoint.Start, r, TextPatternRangeEndpoint.End);
-
                     for (int attempt = 0; attempt < 2; attempt++)
                     {
                         var rects = r.GetBoundingRectangles();
@@ -134,15 +209,13 @@ static class UiaCaret
                         {
                             var b = rects[0];
                             dump?.Append($" uia:text({b.Left:F0},{b.Bottom:F0})");
-                            return new Point((int)b.Left, (int)b.Bottom);
+                            return new Rectangle((int)b.Left, (int)b.Top, 1, (int)b.Height);
                         }
-                        // 커서만 있는 범위는 넓이가 0이라 사각형이 안 나온다. 글자 한 칸으로 넓혀 재시도.
-                        r.ExpandToEnclosingUnit(TextUnit.Character);
+                        r.ExpandToEnclosingUnit(TextUnit.Character);   // 넓이 0인 커서 범위 → 글자 한 칸으로
                     }
                 }
             }
 
-            // TextPattern이 없으면 입력 컨트롤의 왼쪽 아래 모서리로 대신한다.
             var ct = el.Current.ControlType;
             if (ct == ControlType.Edit || ct == ControlType.ComboBox)
             {
@@ -150,25 +223,22 @@ static class UiaCaret
                 if (!b.IsEmpty && b.Width > 0)
                 {
                     dump?.Append($" uia:elem({b.Left:F0},{b.Bottom:F0})");
-                    return new Point((int)b.Left, (int)b.Bottom);
+                    return new Rectangle((int)b.Left, (int)b.Bottom, 1, 0);   // 높이 0 = 근사 위치
                 }
             }
             dump?.Append($" uia:none(ct={ct.ProgrammaticName})");
         }
-        catch (Exception ex)
-        {
-            dump?.Append(" uia:EXC " + ex.GetType().Name);
-        }
+        catch (Exception ex) { dump?.Append(" uia:EXC " + ex.GetType().Name); }
         return null;
     }
 }
 
 // ─────────────────────────────────────────────────────────────────
-// (4) 현재 상태 한 번 읽기
+// (5) 현재 상태 한 번 읽기
 // ─────────────────────────────────────────────────────────────────
 enum ImeState { Unknown, Hangul, English, OtherLang }
 
-readonly record struct Snapshot(ImeState State, Point? Caret);
+readonly record struct Snapshot(ImeState State, Rectangle? Caret);
 
 static class ImeReader
 {
@@ -183,13 +253,14 @@ static class ImeReader
 
         var dump = Log.Enabled ? new StringBuilder() : null;
 
-        // ── caret 위치: 1순위 Win32 caret, 2순위 UI Automation ──
-        Point? caret = null;
+        Rectangle? caret = null;
         if (gti.hwndCaret != IntPtr.Zero && gti.rcCaret.Bottom > gti.rcCaret.Top)
         {
-            var pt = new Native.POINT { X = gti.rcCaret.Right, Y = gti.rcCaret.Bottom };
-            Native.ClientToScreen(gti.hwndCaret, ref pt);
-            caret = new Point(pt.X, pt.Y);
+            var tl = new Native.POINT(gti.rcCaret.Left, gti.rcCaret.Top);
+            var br = new Native.POINT(gti.rcCaret.Right, gti.rcCaret.Bottom);
+            Native.ClientToScreen(gti.hwndCaret, ref tl);
+            Native.ClientToScreen(gti.hwndCaret, ref br);
+            caret = Rectangle.FromLTRB(tl.X, tl.Y, Math.Max(br.X, tl.X + 1), br.Y);
             dump?.Append(" caret:win32");
         }
         else
@@ -197,7 +268,6 @@ static class ImeReader
             caret = UiaCaret.Find(dump);
         }
 
-        // ── 한/영 상태 ──
         var state = ReadImeState(fg, gti.hwndFocus, tid, dump);
 
         if (dump is not null)
@@ -207,18 +277,13 @@ static class ImeReader
     }
 
     /// <summary>
-    /// 한국어 IME의 한/영 판정.
-    /// 핵심: 한/영 키는 IME의 "열림(open)"이 아니라 "변환 모드(conversion mode)"의
-    /// 한글 비트(IME_CMODE_HANGUL)를 바꾼다. 열림 상태는 IME가 한 번 켜진 뒤로는 계속 1이므로
-    /// 열림 상태로 한글을 판정하면 첫 전환 이후 영원히 "한"에 묶인다.
+    /// 한국어 IME의 한/영 판정. 한/영 키는 "열림(open)"이 아니라 "변환 모드"의 한글 비트를 바꾼다.
     /// </summary>
     static ImeState ReadImeState(IntPtr fg, IntPtr hwndFocus, uint tid, StringBuilder? dump)
     {
-        // 키보드 레이아웃이 한국어가 아니면(ENG 레이아웃 등) 한/영 개념이 없다.
         ushort lang = (ushort)((long)Native.GetKeyboardLayout(tid) & 0xFFFF);
         if (lang != Native.LANG_KOREAN) { dump?.Append($" lang=0x{lang:X4}"); return ImeState.OtherLang; }
 
-        // UWP·콘솔처럼 hwndFocus가 0인 창은 최상위 창으로 대신 묻는다.
         var target = hwndFocus != IntPtr.Zero ? hwndFocus : fg;
         var imeWnd = Native.ImmGetDefaultIMEWnd(target);
         if (imeWnd == IntPtr.Zero) { dump?.Append(" imeWnd=0"); return ImeState.Unknown; }
@@ -226,8 +291,6 @@ static class ImeReader
         var ok = Native.SendMessageTimeout(imeWnd, Native.WM_IME_CONTROL, Native.IMC_GETOPENSTATUS,
                                            IntPtr.Zero, Native.SMTO_ABORTIFHUNG, 100, out var open);
         if (ok == IntPtr.Zero) { dump?.Append(" open:timeout"); return ImeState.Unknown; }
-
-        // IME가 닫혀 있으면(아직 한 번도 한글을 안 쓴 창) 영문 입력이다.
         if (open == IntPtr.Zero) { dump?.Append(" open=0"); return ImeState.English; }
 
         ok = Native.SendMessageTimeout(imeWnd, Native.WM_IME_CONTROL, Native.IMC_GETCONVERSIONMODE,
@@ -240,44 +303,141 @@ static class ImeReader
 }
 
 // ─────────────────────────────────────────────────────────────────
-// (5) caret 옆에 뜨는 배지 창
+// (6) 배지 그리기 (GDI+로 투명 비트맵 생성)
+// ─────────────────────────────────────────────────────────────────
+static class BadgeRenderer
+{
+    public static (string text, Color color) Look(ImeState s) => s switch
+    {
+        ImeState.Hangul  => ("한", Color.FromArgb(0, 120, 215)),
+        ImeState.English => ("A",  Color.FromArgb(60, 60, 60)),
+        _                => ("?",  Color.DarkOrange),
+    };
+
+    public static Bitmap Render(ImeState state, BadgeStyle style, float scale)
+    {
+        var (text, color) = Look(state);
+        return style switch
+        {
+            BadgeStyle.Dot       => RenderDot(color, scale),
+            BadgeStyle.Underline => RenderUnderline(color, scale),
+            BadgeStyle.Box       => RenderText(text, color, scale, rounded: false),
+            _                    => RenderText(text, color, scale, rounded: true),   // Pill, DotFlash(글자 단계)
+        };
+    }
+
+    static Bitmap NewCanvas(int w, int h, out Graphics g)
+    {
+        var bmp = new Bitmap(Math.Max(1, w), Math.Max(1, h), PixelFormat.Format32bppPArgb);
+        g = Graphics.FromImage(bmp);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+        g.Clear(Color.Transparent);
+        return bmp;
+    }
+
+    static Bitmap RenderDot(Color color, float scale)
+    {
+        int d = (int)Math.Round(9 * scale);
+        var bmp = NewCanvas(d + 2, d + 2, out var g);
+        using (g)
+        {
+            using var brush = new SolidBrush(color);
+            using var pen = new Pen(Color.FromArgb(160, Color.White), Math.Max(1f, scale));
+            g.FillEllipse(brush, 1, 1, d, d);
+            g.DrawEllipse(pen, 1, 1, d, d);
+        }
+        return bmp;
+    }
+
+    static Bitmap RenderUnderline(Color color, float scale)
+    {
+        int w = (int)Math.Round(16 * scale), h = (int)Math.Round(3 * scale);
+        var bmp = NewCanvas(w, h, out var g);
+        using (g)
+        {
+            using var brush = new SolidBrush(color);
+            using var path = RoundedRect(new RectangleF(0, 0, w, h), h / 2f);
+            g.FillPath(brush, path);
+        }
+        return bmp;
+    }
+
+    static Bitmap RenderText(string text, Color color, float scale, bool rounded)
+    {
+        float fontPx = 13 * scale;
+        using var font = new Font("Malgun Gothic", fontPx, FontStyle.Bold, GraphicsUnit.Pixel);
+        SizeF ts;
+        using (var probeBmp = new Bitmap(1, 1))
+        using (var probe = Graphics.FromImage(probeBmp))
+            ts = probe.MeasureString(text, font);
+
+        int h = (int)Math.Round(20 * scale);
+        int w = (int)Math.Round(Math.Max(h, ts.Width + 10 * scale));
+        var bmp = NewCanvas(w, h, out var g);
+        using (g)
+        {
+            var rect = new RectangleF(0.5f, 0.5f, w - 1, h - 1);
+            using var path = RoundedRect(rect, rounded ? (h - 1) / 2f : 3 * scale);
+            using var brush = new SolidBrush(color);
+            using var pen = new Pen(Color.FromArgb(110, Color.White), 1f);
+            g.FillPath(brush, path);
+            g.DrawPath(pen, path);
+            using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            g.DrawString(text, font, Brushes.White, new RectangleF(0, 0, w, h), sf);
+        }
+        return bmp;
+    }
+
+    static GraphicsPath RoundedRect(RectangleF r, float radius)
+    {
+        var path = new GraphicsPath();
+        float d = Math.Min(radius * 2, Math.Min(r.Width, r.Height));
+        if (d <= 0) { path.AddRectangle(r); return path; }
+        path.AddArc(r.Left, r.Top, d, d, 180, 90);
+        path.AddArc(r.Right - d, r.Top, d, d, 270, 90);
+        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+        path.AddArc(r.Left, r.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// (7) caret 옆에 뜨는 배지 창 (레이어드 창 + 트레이 메뉴)
 // ─────────────────────────────────────────────────────────────────
 sealed class BadgeForm : Form
 {
-    readonly Label _label = new()
-    {
-        Dock = DockStyle.Fill,
-        TextAlign = ContentAlignment.MiddleCenter,
-        Font = new Font("Malgun Gothic", 10, FontStyle.Bold),
-        ForeColor = Color.White,
-    };
+    readonly Settings _settings;
     readonly System.Windows.Forms.Timer _timer = new() { Interval = 100 };
     readonly NotifyIcon _tray;
-    ImeState _lastState = ImeState.Unknown;
-    bool _allowShow;
-
-    // WinEvent 훅: OS가 "IME 상태 바뀜"을 알려 주면 100ms 폴링을 기다리지 않고 즉시 갱신한다.
-    // 델리게이트를 필드에 붙잡아 두지 않으면 GC가 회수해 네이티브 쪽에서 크래시가 난다.
-    readonly Native.WinEventProc _imeChangeProc;
+    readonly Native.WinEventProc _imeChangeProc;   // GC 회수 방지용 필드
     IntPtr _hook;
 
-    public BadgeForm()
+    ImeState _lastState = ImeState.Unknown;
+    DateTime _flashUntil = DateTime.MinValue;       // DotFlash: 변경 직후 글자를 보여 주는 시한
+    (ImeState state, BadgeStyle style, float scale) _renderKey = (ImeState.Unknown, (BadgeStyle)(-1), 0);
+    Size _bitmapSize;
+    Point _lastPos = new(int.MinValue, int.MinValue);
+    bool _allowShow;
+
+    public BadgeForm(Settings settings)
     {
+        _settings = settings;
+
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        Size = new Size(28, 22);
-        Opacity = 0.9;
-        Controls.Add(_label);
+        AutoScaleMode = AutoScaleMode.None;   // DPI 변경 시 WinForms가 창 크기를 건드리지 않게
+        Size = new Size(1, 1);
 
-        var menu = new ContextMenuStrip();
-        menu.Items.Add("종료(&X)", null, (_, _) => Application.Exit());
         _tray = new NotifyIcon
         {
             Icon = SystemIcons.Application,
             Text = "ImeBadge (한/영 배지)" + (Log.Enabled ? " [debug]" : ""),
-            ContextMenuStrip = menu,
+            ContextMenuStrip = BuildMenu(),
             Visible = true,
         };
 
@@ -290,8 +450,62 @@ sealed class BadgeForm : Form
         Log.Write(_hook == IntPtr.Zero ? "IME change hook FAILED" : "IME change hook registered");
     }
 
-    void Poll() => Apply(ImeReader.Read(Handle));
+    // ── 트레이 메뉴 ──
+    ContextMenuStrip BuildMenu()
+    {
+        var menu = new ContextMenuStrip();
 
+        var shape = new ToolStripMenuItem("모양(&S)");
+        AddRadio(shape, "사각 배지  [한]", () => _settings.Style == BadgeStyle.Box,       () => _settings.Style = BadgeStyle.Box);
+        AddRadio(shape, "둥근 배지  (한)", () => _settings.Style == BadgeStyle.Pill,      () => _settings.Style = BadgeStyle.Pill);
+        AddRadio(shape, "점  ●",            () => _settings.Style == BadgeStyle.Dot,       () => _settings.Style = BadgeStyle.Dot);
+        AddRadio(shape, "밑줄  ▬",          () => _settings.Style == BadgeStyle.Underline, () => _settings.Style = BadgeStyle.Underline);
+        AddRadio(shape, "점 + 바뀔 때만 글자", () => _settings.Style == BadgeStyle.DotFlash, () => _settings.Style = BadgeStyle.DotFlash);
+        menu.Items.Add(shape);
+
+        var place = new ToolStripMenuItem("위치(&P)");
+        AddRadio(place, "커서 오른쪽 위",   () => _settings.Placement == BadgePlacement.AboveRight, () => _settings.Placement = BadgePlacement.AboveRight);
+        AddRadio(place, "커서 오른쪽 아래", () => _settings.Placement == BadgePlacement.BelowRight, () => _settings.Placement = BadgePlacement.BelowRight);
+        menu.Items.Add(place);
+
+        var size = new ToolStripMenuItem("크기(&Z)");
+        foreach (var (label, pct) in new[] { ("작게 (80%)", 80), ("보통 (100%)", 100), ("크게 (130%)", 130), ("아주 크게 (160%)", 160) })
+            AddRadio(size, label, () => _settings.SizePercent == pct, () => _settings.SizePercent = pct);
+        menu.Items.Add(size);
+
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("종료(&X)", null, (_, _) => Application.Exit());
+
+        // 메뉴를 열 때마다 체크 표시를 현재 설정에 맞춘다.
+        menu.Opening += (_, _) => RefreshChecks(menu.Items);
+        return menu;
+    }
+
+    static void RefreshChecks(ToolStripItemCollection items)
+    {
+        foreach (ToolStripItem it in items)
+        {
+            if (it is not ToolStripMenuItem mi) continue;
+            if (mi.Tag is Func<bool> isOn) mi.Checked = isOn();
+            RefreshChecks(mi.DropDownItems);
+        }
+    }
+
+    void AddRadio(ToolStripMenuItem parent, string text, Func<bool> isOn, Action apply)
+    {
+        var item = new ToolStripMenuItem(text) { Tag = isOn };
+        item.Click += (_, _) =>
+        {
+            apply();
+            _settings.Save();
+            _renderKey = (ImeState.Unknown, (BadgeStyle)(-1), 0);   // 다음 틱에 강제로 다시 그림
+            _flashUntil = DateTime.Now.AddMilliseconds(1500);       // DotFlash면 바로 글자를 한 번 보여 준다
+            Poll();
+        };
+        parent.DropDownItems.Add(item);
+    }
+
+    // ── 창 속성 ──
     protected override CreateParams CreateParams
     {
         get
@@ -302,10 +516,12 @@ sealed class BadgeForm : Form
             return cp;
         }
     }
-
     protected override bool ShowWithoutActivation => true;
-
     protected override void SetVisibleCore(bool value) => base.SetVisibleCore(_allowShow && value);
+    protected override void OnPaintBackground(PaintEventArgs e) { }   // 레이어드 창은 직접 그린다
+
+    // ── 갱신 ──
+    void Poll() => Apply(ImeReader.Read(Handle));
 
     void Apply(Snapshot s)
     {
@@ -315,26 +531,91 @@ sealed class BadgeForm : Form
             return;
         }
 
+        var caret = s.Caret.Value;
         if (s.State != _lastState)
         {
-            (_label.Text, BackColor) = s.State switch
-            {
-                ImeState.Hangul  => ("한", Color.FromArgb(0, 120, 215)),
-                ImeState.English => ("A",  Color.FromArgb(60, 60, 60)),
-                _                => ("?",  Color.DarkOrange),
-            };
             _lastState = s.State;
+            _flashUntil = DateTime.Now.AddMilliseconds(1500);
         }
 
-        var p = s.Caret.Value;
-        var pos = new Point(p.X + 4, p.Y + 4);
-        var area = Screen.FromPoint(p).WorkingArea;
-        pos.X = Math.Min(pos.X, area.Right - Width);
-        pos.Y = Math.Min(pos.Y, area.Bottom - Height);
-        if (Location != pos) Location = pos;
+        // DotFlash: 변경 직후 1.5초는 둥근 배지, 그 뒤는 점
+        var style = _settings.Style;
+        if (style == BadgeStyle.DotFlash)
+            style = DateTime.Now < _flashUntil ? BadgeStyle.Pill : BadgeStyle.Dot;
+
+        float scale = Native.DpiScaleAt(caret.Location) * _settings.SizePercent / 100f;
+
+        var key = (s.State, style, scale);
+        bool needRender = key != _renderKey;
+
+        // 배지 위치 계산
+        int gap = (int)Math.Round(3 * scale);
+        Size bs = needRender ? Size.Empty : _bitmapSize;
+        Bitmap? bmp = null;
+        if (needRender)
+        {
+            bmp = BadgeRenderer.Render(s.State, style, scale);
+            bs = bmp.Size;
+        }
+
+        Point pos;
+        bool approx = caret.Height == 0;   // UIA가 입력창 모서리로 근사한 경우: 항상 아래쪽
+        if (style == BadgeStyle.Underline)
+            pos = new Point(caret.Left + caret.Width / 2 - bs.Width / 2, caret.Bottom + 1);
+        else if (_settings.Placement == BadgePlacement.AboveRight && !approx)
+            pos = new Point(caret.Right + gap, caret.Top - bs.Height - gap);
+        else
+            pos = new Point(caret.Right + gap, caret.Bottom + gap);
+
+        var area = Screen.FromPoint(caret.Location).WorkingArea;
+        if (pos.Y < area.Top) pos.Y = caret.Bottom + gap;                // 위에 자리가 없으면 아래로
+        pos.X = Math.Max(area.Left, Math.Min(pos.X, area.Right - bs.Width));
+        pos.Y = Math.Max(area.Top, Math.Min(pos.Y, area.Bottom - bs.Height));
 
         _allowShow = true;
         if (!Visible) Show();
+
+        if (bmp is not null)
+        {
+            using (bmp) Present(bmp, pos);
+            _renderKey = key;
+            _bitmapSize = bs;
+        }
+        else if (_lastPos != pos)
+        {
+            Native.SetWindowPos(Handle, IntPtr.Zero, pos.X, pos.Y, 0, 0,
+                                Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE);
+        }
+        _lastPos = pos;
+    }
+
+    /// <summary>비트맵을 픽셀별 알파로 창에 올리면서 위치·크기도 함께 지정한다.</summary>
+    void Present(Bitmap bmp, Point pos)
+    {
+        if (Size != bmp.Size) Size = bmp.Size;   // WinForms가 아는 크기와 실제 창 크기를 일치시킨다
+        IntPtr screenDc = Native.GetDC(IntPtr.Zero);
+        IntPtr memDc = Native.CreateCompatibleDC(screenDc);
+        IntPtr hBmp = IntPtr.Zero, old = IntPtr.Zero;
+        try
+        {
+            hBmp = bmp.GetHbitmap(Color.FromArgb(0));
+            old = Native.SelectObject(memDc, hBmp);
+            var size = new Native.SIZE(bmp.Width, bmp.Height);
+            var src = new Native.POINT(0, 0);
+            var dst = new Native.POINT(pos.X, pos.Y);
+            var blend = new Native.BLENDFUNCTION
+            {
+                BlendOp = Native.AC_SRC_OVER, BlendFlags = 0, SourceConstantAlpha = 255, AlphaFormat = Native.AC_SRC_ALPHA,
+            };
+            Native.UpdateLayeredWindow(Handle, screenDc, ref dst, ref size, memDc, ref src, 0, ref blend, Native.ULW_ALPHA);
+        }
+        finally
+        {
+            if (old != IntPtr.Zero) Native.SelectObject(memDc, old);
+            if (hBmp != IntPtr.Zero) Native.DeleteObject(hBmp);
+            Native.DeleteDC(memDc);
+            Native.ReleaseDC(IntPtr.Zero, screenDc);
+        }
     }
 
     protected override void Dispose(bool disposing)
@@ -358,6 +639,6 @@ static class Program
         Log.Enabled = args.Contains("--debug");
         Log.Write("=== ImeBadge start ===");
         ApplicationConfiguration.Initialize();
-        Application.Run(new BadgeForm());
+        Application.Run(new BadgeForm(Settings.Load()));
     }
 }
