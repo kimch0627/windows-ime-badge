@@ -52,16 +52,33 @@ dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile
 ### 상태를 읽는 순서
 
 1. `GetForegroundWindow()` → `GetWindowThreadProcessId()`로 활성 창의 **thread ID**를 얻습니다.
-2. `GetGUIThreadInfo(tid)`로 다른 프로세스 창의 `hwndFocus`, `hwndCaret`, `rcCaret`을 얻고
-   `ClientToScreen()`으로 화면 좌표로 바꿉니다. `hwndCaret == 0`이면 caret이 없는 것으로 보고 숨깁니다.
+2. **caret 위치** (두 경로)
+   - 1순위: `GetGUIThreadInfo(tid)`의 `hwndCaret`/`rcCaret` → `ClientToScreen()`. 메모장·Word 등
+     Win32 caret을 만드는 앱.
+   - 2순위: UI Automation. `AutomationElement.FocusedElement` → `TextPattern.GetSelection()`의
+     사각형. 선택이 없는 커서는 넓이가 0이라 `ExpandToEnclosingUnit(Character)`로 한 글자 넓혀 묻습니다.
+     Chrome/Edge/Electron(Claude 앱, VS Code) 같은 앱용. TextPattern이 없으면 입력 컨트롤의
+     왼쪽 아래 모서리를 씁니다.
 3. `GetKeyboardLayout(tid)`의 하위 16비트가 `0x0412`(ko-KR)가 아니면 `OtherLang`(`?` 표시)입니다.
-4. `ImmGetDefaultIMEWnd(hwndFocus)`로 IME 창을 얻고 `WM_IME_CONTROL` 메시지를 보냅니다.
-   - `IMC_GETOPENSTATUS` 결과가 0이 아니면 **한글**.
-   - 0이면 `IMC_GETCONVERSIONMODE`의 `IME_CMODE_NATIVE` 비트로 한 번 더 판정합니다.
-   - `SendMessageTimeout(SMTO_ABORTIFHUNG, 50ms)`를 써서 응답 없는 앱 때문에 멈추지 않게 합니다.
+4. **한/영 상태** (두 경로)
+   - 1순위: **TSF 언어 표시줄**. `CLSID_TF_LangBarMgr` → `GetThreadLangBarItemMgr(tid)`로 대상
+     thread의 언어 표시줄 항목 관리자를 얻고, `GUID_LBI_INPUTMODE` 항목의 텍스트/토글 상태를
+     읽습니다. 윈도우 트레이의 "한/A" 표시기가 쓰는 것과 같은 통로라 TSF 앱에서도 실시간입니다.
+   - 2순위: **IMM32**. `ImmGetDefaultIMEWnd(hwndFocus)`에 `WM_IME_CONTROL`로 `IMC_GETOPENSTATUS`와
+     `IMC_GETCONVERSIONMODE`를 묻습니다. `SendMessageTimeout(50ms)`로 멈춤을 방지합니다.
 
-Windows 11 기본 한글 IME는 TSF(Text Services Framework) 기반이지만, 각 창에 붙는
-기본 IME 창(default IME window)이 IMM32 메시지를 TSF 상태로 변환해 주므로 위 방식이 동작합니다.
+**왜 IMM32만으로는 안 되나?** Windows 11 메모장, 브라우저, Office처럼 TSF를 직접 쓰는 앱은
+한/영 전환이 TSF 안에서만 일어나고 IMM32 쪽 입력 컨텍스트에는 통보되지 않습니다. 그래서
+IMM32로 물으면 처음 값만 계속 돌아옵니다(첫 1회만 맞고 그 뒤로는 안 바뀌는 증상).
+
+### 디버그 모드
+
+```powershell
+dotnet run -- --debug
+```
+
+exe 옆에 `imebadge.log`가 생기고, 활성 창·판정 경로·언어 표시줄 항목 목록이 값이 바뀔 때마다
+기록됩니다. 특정 앱에서 판정이 틀리면 이 로그로 원인을 찾습니다.
 
 ### 배지 창의 속성
 
@@ -79,10 +96,14 @@ caret 좌표와 배지 위치가 어긋납니다.
 
 ### 알려진 한계와 다음 단계
 
-- **Chrome / Edge / VS Code / Electron 앱**은 caret을 직접 그리기 때문에 `hwndCaret`이 0으로
-  나와 배지가 숨겨집니다. 한/영 상태 자체는 정상적으로 읽힙니다. 지원하려면 UI Automation의
-  `IUIAutomationTextPattern2.GetCaretRange()`로 caret 위치를 얻는 두 번째 경로를 추가하세요.
-- **UWP 앱**(설정, 일부 스토어 앱)은 `hwndFocus`가 0일 수 있어 판정이 `Unknown`이 될 수 있습니다.
-- 폴링 주기 100ms는 `BadgeForm._timer.Interval`에서 조정합니다. CPU 사용량은 사실상 0%입니다.
-- 이벤트 기반으로 바꾸려면 `SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, OBJID_CARET)`로
-  caret 이동을 받고, 한/영 상태만 폴링하면 됩니다.
+- **Chrome / Edge / Electron 앱**은 UI Automation 경로로 caret을 찾습니다. 앱이 TextPattern을
+  제공하지 않으면 입력창의 왼쪽 아래에 배지가 붙습니다. 접근성 API를 처음 건드리는 순간
+  브라우저가 접근성 트리를 켜므로 아주 무거운 페이지에서는 약간 느려질 수 있습니다.
+- **UWP 앱**(설정, 일부 스토어 앱)은 포커스가 다른 프로세스(ApplicationFrameHost)에 있어
+  판정이 `Unknown`이 될 수 있습니다.
+- 폴링 주기 100ms는 `BadgeForm._timer.Interval`에서 조정합니다. TSF·UIA 호출은 프로세스 간
+  통신이라 100ms에 한 번이면 충분하고, CPU 사용량은 1% 미만입니다.
+- 이벤트 기반으로 바꾸려면 `ITfLangBarMgr.AdviseEventSink`(IME 모드 변경)와
+  `SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, OBJID_CARET)`(caret 이동)를 받으면 됩니다.
+- csproj의 `UseWPF=true`는 WPF 창을 만들기 위한 것이 아니라 `System.Windows.Automation`
+  어셈블리를 쓰기 위한 것입니다.

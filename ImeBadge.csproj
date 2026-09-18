@@ -3,8 +3,11 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- UI Automation(System.Windows.Automation)을 쓰기 위해 필요. WPF 창은 만들지 않는다. -->
+    <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- WPF와 WinForms의 동명 형식(Application, Point 등) 충돌을 피하려고 암시적 using을 끄고 소스에서 명시한다. -->
+    <ImplicitUsings>disable</ImplicitUsings>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <AssemblyName>ImeBadge</AssemblyName>
     <RootNamespace>ImeBadge</RootNamespace>
