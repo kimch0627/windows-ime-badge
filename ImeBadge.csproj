@@ -3,8 +3,8 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
-    <!-- UseWPF는 켜지 않는다. UI Automation은 WPF 래퍼(System.Windows.Automation) 대신 COM으로 직접 호출하므로
-         (Program.cs의 Uia 클래스) self-contained exe에 WPF 전체가 포함되지 않는다. -->
+    <!-- UseWPF는 켜지 않는다. UI Automation은 WPF 래퍼(System.Windows.Automation) 대신 COM으로 직접 호출한다
+         (Program.cs의 Uia 클래스). WPF를 정적으로 참조하지 않아야 나중에 트리밍으로 WPF를 뺄 수 있다. -->
     <Nullable>enable</Nullable>
     <!-- 암시적 using을 끄고 소스에서 명시한다. (System.Windows.* 와 System.Drawing.* 의 동명 형식 충돌 방지) -->
     <ImplicitUsings>disable</ImplicitUsings>

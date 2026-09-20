@@ -21,7 +21,7 @@ GitHub **Releases** 페이지에서 최신 버전의 exe를 받으면 됩니다.
 
 | 파일 | 크기 | 조건 |
 |---|---|---|
-| `ImeBadge-win-x64-selfcontained.exe` | 수십 MB | 아무것도 설치할 필요 없음. **처음 쓰는 분은 이 파일** |
+| `ImeBadge-win-x64-selfcontained.exe` | 약 66 MB | 아무것도 설치할 필요 없음. **처음 쓰는 분은 이 파일** |
 | `ImeBadge-win-x64.exe` | 약 200 KB | PC에 .NET 8 데스크톱 런타임이 있어야 함. 없으면 실행 시 설치 안내 창이 뜸 (`winget install Microsoft.DotNet.DesktopRuntime.8`) |
 
 기본 Windows에는 .NET 8 런타임이 들어 있지 않습니다. 작은 exe는 이미 런타임이 있는 PC(다른 .NET 8
@@ -66,7 +66,7 @@ git push origin v0.5.0
 ### exe 하나로 만들기 (배포용)
 
 ```powershell
-# 런타임 포함 (아무 PC에서나 실행, 수십 MB)
+# 런타임 포함 (아무 PC에서나 실행, 약 66 MB)
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 
 # 런타임 없이 (.NET 8 런타임이 있는 PC 전용, 약 200 KB)
@@ -79,11 +79,9 @@ self-contained 크기를 줄이는 설정은 `ImeBadge.csproj`에 있습니다.
 
 | 설정 | 효과 |
 |---|---|
-| `UseWPF`를 켜지 않음 | UI Automation을 COM으로 직접 호출해 WPF 프레임워크(수십 MB)를 통째로 뺌 |
-| `EnableCompressionInSingleFile` | 번들 안의 어셈블리를 압축. 크기 절반 이하, 첫 실행이 수백 ms 느려짐 |
+| `EnableCompressionInSingleFile` | 번들 안의 어셈블리를 압축. 154 MB → 약 66 MB. 첫 실행이 수백 ms 느려짐 |
 | `SatelliteResourceLanguages=en` | 프레임워크의 13개 언어 번역 리소스 DLL 제외 |
-
-.NET 8에서는 WinForms 앱에 trimming과 Native AOT를 쓸 수 없어, 그 이상은 줄이기 어렵습니다.
+| `UseWPF`를 켜지 않음 | UI Automation을 COM으로 직접 호출. 단, 런타임 팩은 WinForms/WPF를 구분하지 않아 **이것만으로는 크기가 줄지 않고**, 트리밍(trimming)을 쓰기 위한 전제 조건임 |
 
 ### 디버그 모드
 
@@ -182,8 +180,8 @@ caret 좌표와 배지 위치가 어긋납니다.
 - **터미널**(Windows Terminal, conhost)은 IME 상태 보고가 부정확한 것으로 알려져 있습니다.
 - 폴링 주기 100ms는 `BadgeForm._timer.Interval`에서 조정합니다. CPU 사용량은 1% 미만입니다.
 - UI Automation은 WPF의 `System.Windows.Automation` 래퍼가 아니라 COM 인터페이스를 직접 선언해서
-  씁니다(`Uia` 클래스). 래퍼를 쓰려면 csproj에 `UseWPF=true`가 필요하고, 그러면 self-contained exe에
-  WPF 전체가 들어가 크기가 세 배 이상 커집니다. COM 인터페이스 선언은 `UIAutomationClient.h`의 vtable
+  씁니다(`Uia` 클래스). 래퍼를 쓰려면 csproj에 `UseWPF=true`가 필요한데, 그러면 WPF 어셈블리를 정적으로
+  참조하게 되어 트리밍으로도 뺄 수 없습니다. COM 인터페이스 선언은 `UIAutomationClient.h`의 vtable
   순서를 그대로 따라야 하므로, 쓰지 않는 메서드도 `_Slot_*` 자리표시자로 남겨 두었습니다.
 
 ## 라이선스
