@@ -189,6 +189,9 @@ static class Uia
 {
     public const int UIA_BoundingRectanglePropertyId = 30001;
     public const int UIA_ControlTypePropertyId       = 30003;
+    public const int UIA_ClassNamePropertyId         = 30012;
+    public const int UIA_HasKeyboardFocusPropertyId  = 30008;
+    public const int UIA_FrameworkIdPropertyId       = 30024;
     public const int UIA_ValuePatternId  = 10002;
     public const int UIA_TextPatternId   = 10014;
     public const int UIA_ComboBoxControlTypeId = 50003;
@@ -345,9 +348,16 @@ static class UiaCaret
                     return new Rectangle((int)left, (int)bottom, 1, 0);   // 높이 0 = 근사 위치
                 }
             }
-            dump?.Append($" uia:none(ct={ct})");
+            if (dump is not null)
+            {
+                // 어떤 컨트롤이라서 못 찾았는지 남긴다. (컨트롤 종류 ID, 클래스, UI 프레임워크, TextPattern 유무)
+                string cls = el.GetCurrentPropertyValue(Uia.UIA_ClassNamePropertyId) as string ?? "";
+                string fw  = el.GetCurrentPropertyValue(Uia.UIA_FrameworkIdPropertyId) as string ?? "";
+                bool focus = el.GetCurrentPropertyValue(Uia.UIA_HasKeyboardFocusPropertyId) is bool f && f;
+                dump.Append($" uia:none(ct={ct} class='{cls}' fw={fw} text={(textPat is not null ? 1 : 0)} focus={(focus ? 1 : 0)})");
+            }
         }
-        catch (Exception ex) { dump?.Append(" uia:EXC " + ex.GetType().Name); }
+        catch (Exception ex) { dump?.Append($" uia:EXC {ex.GetType().Name} 0x{ex.HResult:X8}"); }
         finally
         {
             Uia.Release(r); Uia.Release(sel); Uia.Release(textPat); Uia.Release(valuePat); Uia.Release(el);
@@ -375,6 +385,7 @@ static class ImeReader
         if (!Native.GetGUIThreadInfo(tid, ref gti)) return new(ImeState.Unknown, null);
 
         var dump = Log.Enabled ? new StringBuilder() : null;
+        long t0 = Environment.TickCount64;
 
         Rectangle? caret = null;
         if (gti.hwndCaret != IntPtr.Zero && gti.rcCaret.Bottom > gti.rcCaret.Top)
@@ -384,17 +395,23 @@ static class ImeReader
             Native.ClientToScreen(gti.hwndCaret, ref tl);
             Native.ClientToScreen(gti.hwndCaret, ref br);
             caret = Rectangle.FromLTRB(tl.X, tl.Y, Math.Max(br.X, tl.X + 1), br.Y);
-            dump?.Append(" caret:win32");
+            dump?.Append($" caret:win32('{Native.ClassName(gti.hwndCaret)}')");
         }
         else
         {
+            if (gti.hwndCaret != IntPtr.Zero) dump?.Append(" caret:win32-empty");   // caret 창은 있지만 높이 0
             caret = UiaCaret.Find(dump);
         }
 
         var state = ReadImeState(fg, gti.hwndFocus, tid, dump);
 
         if (dump is not null)
+        {
+            // 한 번 읽는 데 오래 걸리면(UIA 응답 지연 등) 별도로 남긴다. 배지가 멈춘 듯 보이는 원인 추적용.
+            long ms = Environment.TickCount64 - t0;
+            if (ms > 200) Log.Write($"SLOW read {ms}ms fg='{Native.ClassName(fg)}'");
             Log.WriteIfChanged($"fg='{Native.ClassName(fg)}' focus='{Native.ClassName(gti.hwndFocus)}' tid={tid} => {state}{dump}");
+        }
 
         return new(state, caret);
     }
