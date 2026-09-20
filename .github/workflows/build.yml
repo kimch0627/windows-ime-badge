@@ -18,6 +18,11 @@ on:
         description: "릴리스 태그 (예: v0.5.0). 비우면 빌드만 한다"
         required: false
         default: ""
+      build_selfcontained:
+        description: "릴리스 없이 self-contained exe도 빌드해 크기만 로그로 확인"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write   # Release 생성에 필요
@@ -40,8 +45,8 @@ jobs:
           dotnet publish ImeBadge.csproj -c Release -r win-x64 --self-contained false
           -p:PublishSingleFile=true -p:DebugType=none -o out/fd
 
-      - name: Publish (self-contained, 런타임 포함) — 릴리스일 때만
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+      - name: Publish (self-contained, 런타임 포함) — 릴리스이거나 build_selfcontained 체크일 때
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '' || inputs.build_selfcontained
         # 압축(EnableCompressionInSingleFile)과 언어 리소스 제외는 csproj에 있다.
         run: >
           dotnet publish ImeBadge.csproj -c Release -r win-x64 --self-contained true
@@ -53,7 +58,7 @@ jobs:
         run: |
           Copy-Item out/fd/ImeBadge.exe out/ImeBadge-win-x64.exe
           if (Test-Path out/sc/ImeBadge.exe) { Copy-Item out/sc/ImeBadge.exe out/ImeBadge-win-x64-selfcontained.exe }
-          Get-ChildItem out/*.exe | Format-Table Name, Length
+          Get-ChildItem out/*.exe | ForEach-Object { "{0,-40} {1,8:N1} MB" -f $_.Name, ($_.Length / 1MB) }
 
       - name: Upload artifact (작은 exe만, 7일 보관)
         uses: actions/upload-artifact@v4
