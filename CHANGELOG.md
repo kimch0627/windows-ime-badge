@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-21
+
+첫 정식 릴리스. 설치 프로그램과 설정 창이 추가되고, 설정·로그 위치가 사용자 프로필 폴더로 옮겨졌습니다.
+0.7.x 에서 올라오면 예전 설정은 첫 실행 때 자동으로 이관됩니다.
+
 ### 추가
 - 설치 프로그램(`ImeBadge-Setup-<버전>.exe`): 사용자별 설치, 자동 시작 옵션, 제거 시 정리.
 - 설정 창(트레이 아이콘 더블클릭 또는 메뉴 → 설정): 미리보기, 색상, 동작, 제외 앱.
@@ -31,6 +36,9 @@
 - 응답 없는 창에는 `AttachThreadInput` 을 시도하지 않고, 같은 창에 3회 실패하면 더 시도하지 않는다(프리징 방지).
 - 타이머와 이벤트 훅이 동시에 들어와도 갱신이 겹치지 않는다.
 
-## [0.5.0] 이전
+## [0.7.2] 이전
 
-`git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드)
+`git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
+
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/kimch0627/windows-ime-badge/compare/v0.7.2...v1.0.0
