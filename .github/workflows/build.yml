@@ -78,6 +78,13 @@ jobs:
           }
           "version=$v" >> $env:GITHUB_OUTPUT
           "VERSION=$v" >> $env:GITHUB_ENV
+          # 파일 속성용 숫자 버전 "a.b.c.0" (설치 프로그램의 VersionInfoVersion 은 숫자만 받는다)
+          $num = ($v -split '[-+]')[0]
+          $parts = @($num -split '\.' | ForEach-Object { [int]$_ })
+          while ($parts.Count -lt 3) { $parts += 0 }
+          $fileVer = "$($parts[0]).$($parts[1]).$($parts[2]).0"
+          "FILE_VERSION=$fileVer" >> $env:GITHUB_ENV
+          "file version = $fileVer"
           # 롤링 사전 릴리스의 태그 이름: main → latest, 그 외 → dev-<브랜치명> ('/' 등은 '-'로)
           $rb = "${{ github.ref_name }}" -replace '[/\\:<>|*?"~^ ]', '-'
           $tag = if ($ref -eq "refs/heads/main") { "latest" } else { "dev-$rb" }
@@ -141,7 +148,7 @@ jobs:
         run: |
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
-          & $iscc "/DMyAppVersion=${{ env.VERSION }}" "/DMySourceExe=..\out\sc\ImeBadge.exe" installer\ImeBadge.iss
+          & $iscc "/DMyAppVersion=${{ env.VERSION }}" "/DMyAppFileVersion=${{ env.FILE_VERSION }}" "/DMySourceExe=..\out\sc\ImeBadge.exe" installer\ImeBadge.iss
           if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)" }
 
       - name: Sign installer (Azure Trusted Signing)

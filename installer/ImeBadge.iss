@@ -13,6 +13,10 @@
 #ifndef MyAppVersion
   #define MyAppVersion "0.0.0"
 #endif
+; VersionInfoVersion(exe 파일 속성의 버전)은 숫자 4자리("1.2.3.0")만 허용한다. "0.0.0-dev.abc" 같은 표시용 버전과 따로 받는다.
+#ifndef MyAppFileVersion
+  #define MyAppFileVersion "0.0.0.0"
+#endif
 #ifndef MySourceExe
   #define MySourceExe "..\out\sc\ImeBadge.exe"
 #endif
@@ -30,7 +34,8 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
 AppUpdatesURL={#MyAppURL}/releases
-VersionInfoVersion={#MyAppVersion}
+VersionInfoVersion={#MyAppFileVersion}
+VersionInfoProductTextVersion={#MyAppVersion}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes

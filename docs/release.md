@@ -80,7 +80,7 @@ dotnet run --project src/ImeBadge -- --debug
 dotnet publish src/ImeBadge -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:Version=1.0.0
 
 # 설치 프로그램 (Inno Setup 6 설치 후)
-& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=1.0.0 "/DMySourceExe=..\src\ImeBadge\bin\Release\net8.0-windows\win-x64\publish\ImeBadge.exe" installer\ImeBadge.iss
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=1.0.0 /DMyAppFileVersion=1.0.0.0 "/DMySourceExe=..\src\ImeBadge\bin\Release\net8.0-windows\win-x64\publish\ImeBadge.exe" installer\ImeBadge.iss
 ```
 
 아이콘을 다시 만들려면 `pip install pillow` 후 `python tools/make_icons.py` (Windows 에서는 Malgun Gothic 을 자동으로 찾습니다).
