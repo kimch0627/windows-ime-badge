@@ -18,19 +18,29 @@ static class ImeReader
     // pid → 프로세스 이름. 활성 창이 바뀔 때마다 OpenProcess 를 다시 하지 않도록 캐시한다.
     static readonly Dictionary<uint, string> ProcessNames = new();
 
+    /// <summary>
+    /// IMM32 가 한/영 상태를 틀리게 보고하는 것으로 알려진 앱. 이 앱들은 TSF 전역 compartment 를 먼저 읽고 IMM 은 대체 경로로 쓴다.
+    /// (Windows Terminal 은 TSF 로만 IME 를 쓰고, IMM 쪽 상태는 마지막으로 IMM 을 쓴 창의 값이 남아 있는 경우가 있다.)
+    /// </summary>
+    static readonly string[] TsfPreferredProcesses = { "WindowsTerminal", "OpenConsole" };
+
     public static Snapshot Read(IntPtr selfHandle, Settings settings)
     {
         var fg = Native.GetForegroundWindow();
         if (fg == IntPtr.Zero || fg == selfHandle) return new(ImeState.Unknown, null);
 
-        uint tid = Native.GetWindowThreadProcessId(fg, out uint pid);
+        // UWP 앱이면 껍데기(ApplicationFrameHost)가 아니라 안쪽 CoreWindow(실제 앱 프로세스)의 스레드를 조사한다.
+        var core = Native.UwpCoreWindow(fg);
+        var target = core != IntPtr.Zero ? core : fg;
+        uint tid = Native.GetWindowThreadProcessId(target, out uint pid);
 
         // 우리 자신의 창(설정·정보 창)이 활성이면 조사하지 않는다. 같은 프로세스의 UI 스레드에서 UI Automation 클라이언트를
         // 부르면 공급자(우리 창)가 같은 스레드에 있어 서로를 기다리다 시간 초과가 나고, 그동안 메시지 펌프가 재진입해
         // 배지가 깜빡이고 버튼이 늦게 반응한다. 설정 창에는 배지가 필요 없으니 숨긴다.
         if (pid == (uint)Environment.ProcessId) return new(ImeState.Unknown, null, fg, "self");
 
-        if (settings.ExcludedProcesses.Count > 0 && ProcessFilter.IsExcluded(settings.ExcludedProcesses, ProcessName(pid)))
+        string process = ProcessName(pid);
+        if (settings.ExcludedProcesses.Count > 0 && ProcessFilter.IsExcluded(settings.ExcludedProcesses, process))
             return new(ImeState.Unknown, null, fg, "excluded");
         if (settings.HideOnFullscreen && Native.IsFullscreen(fg))
             return new(ImeState.Unknown, null, fg, "fullscreen");
@@ -39,6 +49,7 @@ static class ImeReader
         if (!Native.GetGUIThreadInfo(tid, ref gti)) return new(ImeState.Unknown, null);
 
         var dump = Log.Enabled ? new StringBuilder() : null;
+        if (core != IntPtr.Zero) dump?.Append(" uwp");
         long t0 = Environment.TickCount64;
 
         Rectangle? caret = null;
@@ -57,7 +68,8 @@ static class ImeReader
             caret = UiaCaret.Find(dump);
         }
 
-        var state = ReadImeState(fg, gti.hwndFocus, tid, dump);
+        bool preferTsf = core != IntPtr.Zero || Array.IndexOf(TsfPreferredProcesses, process) >= 0;
+        var state = ReadImeState(target, gti.hwndFocus, tid, preferTsf, dump);
         // Caps Lock 은 한글 입력에 영향이 없으므로 영문 모드에서만 본다.
         bool caps = settings.ShowCapsLock && state == ImeState.English && Native.IsCapsLockOn();
         if (caps) dump?.Append(" caps");
@@ -74,13 +86,29 @@ static class ImeReader
     }
 
     /// <summary>
-    /// 한국어 IME의 한/영 판정. 한/영 키는 "열림(open)"이 아니라 "변환 모드"의 한글 비트를 바꾼다.
+    /// 한국어 IME의 한/영 판정. 두 경로가 있다.
+    /// <list type="number">
+    /// <item>IMM32: 포커스 창의 기본 IME 창에 WM_IME_CONTROL 로 묻는다. 대부분의 Win32 앱.</item>
+    /// <item>TSF 전역 compartment(<see cref="Tsf.ReadState"/>): IMM 이 답하지 못하거나(IME 창 없음·응답 없음)
+    /// 틀리게 답하는 앱(<paramref name="preferTsf"/>: UWP, Windows Terminal)용.</item>
+    /// </list>
+    /// 보통은 IMM → TSF 순서, preferTsf 면 TSF → IMM 순서로 시도한다.
     /// </summary>
-    static ImeState ReadImeState(IntPtr fg, IntPtr hwndFocus, uint tid, StringBuilder? dump)
+    static ImeState ReadImeState(IntPtr fg, IntPtr hwndFocus, uint tid, bool preferTsf, StringBuilder? dump)
     {
         ushort lang = (ushort)((long)Native.GetKeyboardLayout(tid) & 0xFFFF);
         if (lang != Native.LANG_KOREAN) { dump?.Append($" lang=0x{lang:X4}"); return ImeState.OtherLang; }
 
+        var state = ImeState.Unknown;
+        if (preferTsf) state = Tsf.ReadState(dump) ?? ImeState.Unknown;
+        if (state == ImeState.Unknown) state = ReadImm(fg, hwndFocus, dump);
+        if (state == ImeState.Unknown && !preferTsf) state = Tsf.ReadState(dump) ?? ImeState.Unknown;
+        return state;
+    }
+
+    /// <summary>IMM32 경로. 한/영 키는 "열림(open)"이 아니라 "변환 모드"의 한글 비트를 바꾼다.</summary>
+    static ImeState ReadImm(IntPtr fg, IntPtr hwndFocus, StringBuilder? dump)
+    {
         var target = hwndFocus != IntPtr.Zero ? hwndFocus : fg;
         var imeWnd = Native.ImmGetDefaultIMEWnd(target);
         if (imeWnd == IntPtr.Zero) { dump?.Append(" imeWnd=0"); return ImeState.Unknown; }

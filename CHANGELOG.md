@@ -7,6 +7,10 @@
 ### 추가
 - Caps Lock 표시. 영문 모드에서 Caps Lock 이 켜져 있으면 배지 글자가 `A` 대신 `ABC` 로, 트레이 아이콘은 `A` 아래에 줄이 생긴다.
   전환 시 펄스 애니메이션과 "점, 바뀔 때 글자" 모양의 글자 표시도 같이 동작한다. 설정 → 모양에서 끌 수 있다(기본 켜짐).
+- TSF 전역 compartment 로 한/영 상태를 읽는 두 번째 경로(`Native/Tsf.cs`). IMM32 가 답하지 못하는 앱(IME 창 없음·응답 없음)에서 대체로 쓰고,
+  UWP 와 Windows Terminal 처럼 IMM32 가 틀리게 답하는 앱에서는 먼저 읽는다. `--debug` 로그에 `tsf(open=… conv=…)` 로 남는다.
+- UWP 앱(설정, 스토어 앱)은 껍데기 창(ApplicationFrameHost)이 아니라 안쪽 CoreWindow 의 스레드·프로세스를 조사한다.
+  제외 앱 목록도 실제 앱 이름(예: `SystemSettings`)으로 맞는다.
 
 ## [1.1.0] - 2026-09-21
 

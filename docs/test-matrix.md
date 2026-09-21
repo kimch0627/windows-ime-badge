@@ -17,8 +17,9 @@ caret 탐색·IME 판정·창 z-order 는 실제 앱에서만 확인할 수 있�
 | Edge | 주소창 / 본문 | UIA text | ⬜ | ⬜ | |
 | VS Code | 편집기 | UIA text | ⬜ | ⬜ | Electron |
 | 카카오톡 PC | 대화 입력창 | ⬜ | ⬜ | ⬜ | |
-| Windows Terminal | 셸 | ⚠️ | ⚠️ | ⚠️ | IME 상태 보고 부정확(알려진 한계) |
-| 설정(UWP) | 검색창 | ⚠️ | ⚠️ | ⚠️ | ApplicationFrameHost 포커스 |
+| Windows Terminal | 셸 | UIA | ⬜ | ⬜ | TSF 전역 compartment 우선. `--debug` 로그에 `tsf(open=… conv=…)` 확인 |
+| 설정(UWP) | 검색창 | UIA | ⬜ | ⬜ | CoreWindow 스레드 조사 + TSF 우선. 로그에 `uwp` 표시 |
+| 메모장(Win11, IMM 창 없는 상태) | 본문 | Win32 | ⬜ | ⬜ | IMM 이 `imeWnd=0` 이면 TSF 로 넘어가는지(로그) |
 | FlowLauncher / PowerToys Run | 입력창 | ⬜ | ⬜ | ⬜ | TopMost 창 위로 올라가는지 |
 | 원격 데스크톱(mstsc) 안 | 원격 앱 | ⬜ | ⬜ | ⬜ | 제외 목록에 mstsc 넣으면 숨김 |
 | 전체 화면 게임 | - | ⬜ | - | - | "전체 화면 숨김" 켜면 안 보여야 함 |

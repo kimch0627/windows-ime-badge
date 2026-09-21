@@ -124,6 +124,7 @@ src/ImeBadge.Core/      순수 로직. WinForms·Win32 의존 없음 → Linux �
 src/ImeBadge/           Windows 앱
   Native/Native.cs      Win32 P/Invoke 와 상수
   Native/Uia.cs         COM UI Automation 인터페이스 선언 (vtable 순서 고정)
+  Native/Tsf.cs         TSF(msctf) 전역 compartment 로 한/영 상태 읽기 (IMM32 의 대체 경로)
   Ime/UiaCaret.cs       UIA 로 caret 찾기 (Chrome/Electron/UWP)
   Ime/ImeReader.cs      활성 창의 caret + 한/영 상태를 Snapshot 으로
   Render/BadgeRenderer.cs  GDI+ 로 투명 비트맵 그리기
@@ -171,6 +172,8 @@ installer/ImeBadge.iss  Inno Setup 스크립트
 ### 상태를 읽는 순서 (`ImeReader.Read`)
 
 1. `GetForegroundWindow()` → `GetWindowThreadProcessId()`로 활성 창의 **thread ID** 와 **process ID** 를 얻습니다.
+   활성 창이 UWP 껍데기(`ApplicationFrameWindow`, ApplicationFrameHost.exe)이면 그 안의 `Windows.UI.Core.CoreWindow`
+   자식 창(실제 앱 프로세스)을 대신 씁니다(`Native.UwpCoreWindow`). 액자가 아니라 그림에게 묻는 셈입니다.
 2. 프로세스 이름이 제외 목록에 있거나(`ProcessFilter`), 창이 모니터 전체를 덮으면(`Native.IsFullscreen`) 여기서 끝. 배지를 숨깁니다.
 3. **caret 위치** (두 경로)
    - 1순위: `GetGUIThreadInfo(tid)`의 `hwndCaret`/`rcCaret` → `ClientToScreen()`. 메모장·Word 등
@@ -181,9 +184,16 @@ installer/ImeBadge.iss  Inno Setup 스크립트
      Chrome/Edge/Electron(VS Code) 같은 앱용. TextPattern이 없으면 Edit/ComboBox
      컨트롤의 왼쪽 아래 모서리를 씁니다(높이 0 = 근사). 읽기 전용이라고 밝힌 요소에는 배지를 띄우지 않습니다.
 4. `GetKeyboardLayout(tid)`의 하위 16비트가 `0x0412`(ko-KR)가 아니면 `OtherLang`(`?` 표시)입니다.
-5. **한/영 상태**: `ImmGetDefaultIMEWnd(hwndFocus)`(hwndFocus가 0이면 최상위 창)에
-   `WM_IME_CONTROL`로 열림 상태와 변환 모드를 순서대로 묻습니다. `SendMessageTimeout(100ms)`로
-   응답 없는 앱 때문에 멈추지 않게 합니다.
+5. **한/영 상태** (두 경로)
+   - IMM32: `ImmGetDefaultIMEWnd(hwndFocus)`(hwndFocus가 0이면 최상위 창)에
+     `WM_IME_CONTROL`로 열림 상태와 변환 모드를 순서대로 묻습니다. `SendMessageTimeout(100ms)`로
+     응답 없는 앱 때문에 멈추지 않게 합니다.
+   - TSF 전역 compartment (`Native/Tsf.cs`): `ITfThreadMgr.GetGlobalCompartment()` 에서
+     `GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION`(변환 모드)과 `..._OPENCLOSE`(열림)를 읽습니다. Windows 8 이후의
+     Microsoft IME 가 언어 표시기용으로 유지하는 값이라, IMM32 가 답하지 못하는 앱(IME 창 없음·응답 없음)의 대체 경로입니다.
+     UWP 와 Windows Terminal 처럼 IMM32 가 틀리게 답하는 것으로 알려진 앱에서는 이 경로를 먼저 읽습니다.
+     TSF 초기화·읽기가 3회 실패하면 그 뒤로는 시도하지 않습니다.
+6. **Caps Lock**: 영문 모드일 때만 `GetKeyState(VK_CAPITAL)` 의 토글 비트를 봅니다.
 
 ### 갱신 타이밍
 
@@ -273,9 +283,10 @@ WinForms는 .NET 8에서 공식적으로 트리밍 미지원(`NETSDK1175`)이므
 
 - **Chrome / Edge / Electron 앱**은 UI Automation 경로로 caret을 찾습니다. 접근성 API를 처음
   건드리는 순간 브라우저가 접근성 트리를 켜므로 아주 무거운 페이지에서는 약간 느려질 수 있습니다.
-- **UWP 앱**(설정, 일부 스토어 앱)은 포커스가 다른 프로세스(ApplicationFrameHost)에 있어
-  판정이 `Unknown`이 될 수 있습니다.
-- **터미널**(Windows Terminal, conhost)은 IME 상태 보고가 부정확한 것으로 알려져 있습니다.
+- **UWP 앱**(설정, 일부 스토어 앱)은 껍데기 창(ApplicationFrameHost) 대신 안쪽 CoreWindow 를 조사하고 TSF 경로를 먼저 읽습니다.
+  그래도 caret 을 못 찾는 컨트롤이 있을 수 있습니다(`--debug` 로그의 `uia:none` 항목을 이슈에 올려 주세요).
+- **터미널**(Windows Terminal)은 IMM32 상태 보고가 부정확해 TSF 전역 compartment 를 먼저 읽습니다. Windows 설정 → 시간 및 언어 →
+  입력 → 고급 키보드 설정에서 "앱 창마다 다른 입력 방법 사용" 을 켰다면 전역 값이 활성 창과 다를 수 있습니다.
 - **코드 서명**은 아직 없습니다. 시크릿을 넣으면 CI 가 자동으로 서명합니다([docs/release.md](docs/release.md)).
 - **일본어·중국어 IME** 는 지원하지 않습니다(`?` 표시). 한국 사용자 우선으로 개발 중입니다.
 

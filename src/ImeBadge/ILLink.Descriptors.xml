@@ -17,5 +17,11 @@
     <type fullname="ImeBadge.Uia/IUIAutomationTextPattern" preserve="all" />
     <type fullname="ImeBadge.Uia/IUIAutomationTextRangeArray" preserve="all" />
     <type fullname="ImeBadge.Uia/IUIAutomationTextRange" preserve="all" />
+    <!-- TSF(msctf) COM 인터페이스도 같은 이유로 통째로 보존한다. -->
+    <type fullname="ImeBadge.Tsf" preserve="all" />
+    <type fullname="ImeBadge.Tsf/TfThreadMgr" preserve="all" />
+    <type fullname="ImeBadge.Tsf/ITfThreadMgr" preserve="all" />
+    <type fullname="ImeBadge.Tsf/ITfCompartmentMgr" preserve="all" />
+    <type fullname="ImeBadge.Tsf/ITfCompartment" preserve="all" />
   </assembly>
 </linker>
