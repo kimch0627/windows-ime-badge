@@ -21,7 +21,7 @@ GitHub **Releases** 페이지에서 최신 버전의 exe를 받으면 됩니다.
 
 | 파일 | 크기 | 조건 |
 |---|---|---|
-| `ImeBadge-win-x64-selfcontained.exe` | 약 14 MB | 아무것도 설치할 필요 없음. **처음 쓰는 분은 이 파일** |
+| `ImeBadge-win-x64-selfcontained.exe` | 약 19 MB | 아무것도 설치할 필요 없음. **처음 쓰는 분은 이 파일** |
 | `ImeBadge-win-x64.exe` | 약 200 KB | PC에 .NET 8 데스크톱 런타임이 있어야 함. 없으면 실행 시 설치 안내 창이 뜸 (`winget install Microsoft.DotNet.DesktopRuntime.8`) |
 
 기본 Windows에는 .NET 8 런타임이 들어 있지 않습니다. 작은 exe는 이미 런타임이 있는 PC(다른 .NET 8
@@ -75,7 +75,7 @@ git push origin v0.5.0
 ### exe 하나로 만들기 (배포용)
 
 ```powershell
-# 런타임 포함 (아무 PC에서나 실행, 약 14 MB)
+# 런타임 포함 (아무 PC에서나 실행, 약 19 MB)
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 
 # 런타임 없이 (.NET 8 런타임이 있는 PC 전용, 약 200 KB)
@@ -91,7 +91,7 @@ self-contained 크기를 줄이는 설정은 `ImeBadge.csproj`에 있습니다. 
 |---|---|---|
 | (아무것도 안 함) | .NET 런타임 + WinForms + WPF 전체가 그대로 들어감 | 154 MB |
 | `EnableCompressionInSingleFile` | 번들 안의 어셈블리를 압축. 첫 실행이 수백 ms 느려짐 | 66 MB |
-| `PublishTrimmed` + `TrimMode=full` | 트리머(ILLink)가 실제로 쓰이는 코드만 남김 | **약 14 MB** |
+| `PublishTrimmed` + `TrimMode=full` | 트리머(ILLink)가 실제로 쓰이는 코드만 남김 (WinForms 어셈블리는 통째로 보존) | **약 19 MB** |
 | `SatelliteResourceLanguages=en` | 프레임워크의 13개 언어 번역 리소스 DLL 제외 | (위에 포함) |
 
 트리밍이 되게 하려고 손본 것들:
@@ -101,6 +101,9 @@ self-contained 크기를 줄이는 설정은 `ImeBadge.csproj`에 있습니다. 
   속성이 붙어 있어, 트리머가 이 문자열을 따라가 WPF 전체(약 45 MB)를 살려 둡니다. 이 속성 인스턴스만 지워 고리를 끊습니다.
 - **`ILLink.Descriptors.xml`.** COM 인터페이스는 메서드 선언 순서가 곧 vtable 슬롯이라, 안 쓰는 자리표시자 메서드를
   트리머가 지우면 엉뚱한 함수가 호출됩니다. `Uia` 형식을 통째로 보존합니다.
+- **WinForms 어셈블리 통째로 보존 (`TrimmerRootAssembly`).** WinForms는 실행 중에야 필요해지는 COM 인터페이스가 많아
+  멤버 단위로 자르면 창을 만드는 순간 `TypeLoadException`으로 죽습니다(`Control.SetAcceptDrops`의 `IDropTarget`).
+  `System.Windows.Forms`와 `System.Windows.Forms.Primitives`는 자르지 않고, 나머지 런타임만 자릅니다. 약 5 MB를 더 쓰는 대신 안전합니다.
 - **JSON source generator.** 트리밍하면 리플렉션 기반 `JsonSerializer`가 꺼지므로 설정 저장은 컴파일 시점에
   생성된 코드(`SettingsJsonContext`)를 씁니다.
 - **`BuiltInComInteropSupport=true`.** 트리밍 기본값은 COM 호출을 끄는 것이라 명시적으로 켭니다.
@@ -113,7 +116,7 @@ WinForms는 .NET 8에서 공식적으로 트리밍 미지원(`NETSDK1175`)이므
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false
 ```
 
-Native AOT는 .NET 9부터 WinForms에서 실험적으로 지원되지만, 트리밍만으로 이미 약 14 MB라 추가 이득이 작고
+Native AOT는 .NET 9부터 WinForms에서 실험적으로 지원되지만, 트리밍만으로 이미 약 19 MB라 추가 이득이 작고
 런타임 검증 부담이 커서 적용하지 않았습니다.
 
 ### 디버그 모드

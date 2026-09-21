@@ -18,7 +18,7 @@
 
   <!--
     self-contained exe 크기 줄이기. dotnet publish 를 self-contained 옵션(런타임 포함)으로 실행할 때만 적용된다.
-    (측정: 아무것도 안 하면 154 MB → 압축만 66 MB → 트리밍까지 약 14 MB)
+    (측정: 아무것도 안 하면 154 MB → 압축만 66 MB → 트리밍까지 약 19 MB)
 
     - EnableCompressionInSingleFile: 번들 안의 어셈블리를 압축. 첫 실행 때 메모리에서 풀어 수백 ms 느려진다.
     - PublishTrimmed + TrimMode=full: 트리머(ILLink)가 실제로 호출되는 코드만 남긴다. WinForms는 공식적으로는
@@ -38,6 +38,11 @@
   </PropertyGroup>
   <ItemGroup>
     <TrimmerRootDescriptor Include="ILLink.Descriptors.xml" />
+    <!-- WinForms 어셈블리는 멤버 단위로 자르지 않고 통째로 남긴다. 자르면 창 핸들을 만들 때 내부 COM 인터페이스
+         (IDropTarget 등, Control.SetAcceptDrops)가 없어 TypeLoadException 으로 죽는다. 다른 어셈블리는 계속 잘라낸다.
+         (13.7 MB → 18.8 MB) -->
+    <TrimmerRootAssembly Include="System.Windows.Forms" />
+    <TrimmerRootAssembly Include="System.Windows.Forms.Primitives" />
   </ItemGroup>
 
   <!-- 트리밍 후에도 런타임 팩에서 그대로 복사되는 파일 중 이 프로그램에 필요 없는 것을 뺀다.
