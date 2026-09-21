@@ -249,4 +249,5 @@ jobs:
     uses: ./.github/workflows/winget.yml
     with:
       version: ${{ needs.build.outputs.release_tag }}
+      submit: true
     secrets: inherit

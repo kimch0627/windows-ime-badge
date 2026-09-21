@@ -49,7 +49,7 @@ SmartScreen 평판은 서명 후에도 다운로드 횟수가 쌓여야 경고�
 
 ## 저장소 공개 여부 (중요)
 
-현재 저장소는 **비공개(private)** 입니다. 비공개 상태에서는 다음이 동작하지 않습니다.
+저장소는 **공개(public)** 상태를 유지해야 합니다. 비공개로 바꾸면 다음이 동작하지 않습니다(무료 계정은 브랜치 보호 룰셋도 공개 저장소에서만 적용됩니다).
 
 | 기능 | 이유 |
 |---|---|
@@ -74,7 +74,7 @@ SmartScreen 평판은 서명 후에도 다운로드 횟수가 쌓여야 경고�
    (wingetcreate 가 이 토큰으로 내 계정에 `winget-pkgs` 포크를 만들고 PR 을 엽니다.)
 2. 저장소 **Settings → Secrets and variables → Actions** 에 `WINGET_TOKEN` 으로 넣습니다.
 3. 이후 정식 릴리스가 만들어질 때마다 `build.yml` 의 `winget` 잡이 `winget.yml` 을 호출해 PR 을 냅니다.
-   이미 만들어진 릴리스(예: 1.0.0)는 Actions 탭 → **winget** → Run workflow 에 버전을 넣어 수동으로 제출합니다.
+   이미 만들어진 릴리스는 Actions 탭 → **winget** → Run workflow 에서 제출합니다. version 은 **존재하는 릴리스 태그**(예: `1.1.0`)여야 하고, 비우면 최신 정식 릴리스를 씁니다. 없는 버전을 넣으면 SHA256SUMS.txt 를 못 찾아 실패합니다.
 
 토큰이 없으면 워크플로는 매니페스트만 만들고 `winget submit: false` 를 남기고 끝납니다.
 
