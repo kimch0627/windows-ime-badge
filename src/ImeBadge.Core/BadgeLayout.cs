@@ -22,17 +22,21 @@ public static class BadgeLayout
         var caret = i.Caret;
         var bs = i.Badge;
         bool approx = caret.Height == 0;   // 근사 위치면 항상 아래쪽(위쪽은 입력창 내부라 글자를 가림)
+        bool left = i.Placement is BadgePlacement.AboveLeft or BadgePlacement.BelowLeft;
+        bool above = i.Placement is BadgePlacement.AboveRight or BadgePlacement.AboveLeft;
+        int x = left ? caret.Left - gap - bs.Width : caret.Right + gap;
 
         Point pos;
         if (i.Style == BadgeStyle.Underline)
             pos = new Point(caret.Left + caret.Width / 2 - bs.Width / 2, caret.Bottom + 1);
-        else if (i.Placement == BadgePlacement.AboveRight && !approx)
-            pos = new Point(caret.Right + gap, caret.Top - bs.Height - gap);
+        else if (above && !approx)
+            pos = new Point(x, caret.Top - bs.Height - gap);
         else
-            pos = new Point(caret.Right + gap, caret.Bottom + gap);
+            pos = new Point(x, caret.Bottom + gap);
 
         var area = i.WorkArea;
         if (pos.Y < area.Top) pos.Y = caret.Bottom + gap;                // 위에 자리가 없으면 아래로
+        if (left && pos.X < area.Left) pos.X = caret.Right + gap;        // 왼쪽에 자리가 없으면 오른쪽으로
         pos.X = Math.Max(area.Left, Math.Min(pos.X, area.Right - bs.Width));
         pos.Y = Math.Max(area.Top, Math.Min(pos.Y, area.Bottom - bs.Height));
         return pos;

@@ -20,6 +20,8 @@ static class Labels
     {
         ("커서 오른쪽 위", BadgePlacement.AboveRight),
         ("커서 오른쪽 아래", BadgePlacement.BelowRight),
+        ("커서 왼쪽 위", BadgePlacement.AboveLeft),
+        ("커서 왼쪽 아래", BadgePlacement.BelowLeft),
     };
 
     /// <summary>트레이 메뉴의 크기 프리셋. 설정 창에서는 50~300% 어느 값이든 고를 수 있다.</summary>

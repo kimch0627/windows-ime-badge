@@ -22,7 +22,7 @@ sealed class SettingsForm : Form
     TrackBar _size = null!, _opacity = null!;
     NumericUpDown _poll = null!;
     Button _hangulColor = null!, _englishColor = null!;
-    CheckBox _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!;
+    CheckBox _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!;
     TextBox _excluded = null!;
     Panel _preview = null!;
 
@@ -126,6 +126,10 @@ sealed class SettingsForm : Form
         AddRow(t, "한글 배지 색", _hangulColor);
         _englishColor = ColorButton(() => _draft.EnglishColor, v => _draft.EnglishColor = v);
         AddRow(t, "영문 배지 색", _englishColor);
+
+        _animate = new CheckBox { Text = "나타날 때 서서히, 바뀔 때 살짝 커지는 효과", AutoSize = true };
+        _animate.CheckedChanged += (_, _) => { _draft.Animate = _animate.Checked; Touch(); };
+        AddRow(t, null, _animate);
 
         g.Controls.Add(t);
         return g;
@@ -298,6 +302,7 @@ sealed class SettingsForm : Form
         _poll.Value = Math.Clamp(_draft.PollIntervalMs, (int)_poll.Minimum, (int)_poll.Maximum);
         PaintColorButton(_hangulColor, _draft.HangulColor);
         PaintColorButton(_englishColor, _draft.EnglishColor);
+        _animate.Checked = _draft.Animate;
         _autostartBox.Checked = _autostart;
         _fullscreen.Checked = _draft.HideOnFullscreen;
         _trayStateBox.Checked = _draft.TrayShowsState;

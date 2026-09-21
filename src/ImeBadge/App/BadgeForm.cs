@@ -16,6 +16,19 @@ sealed class BadgeForm : Form
     const int HotkeyId = 1;
     const int IdleAfterMs = 2000;      // 배지가 이만큼 숨겨져 있으면 폴링을 느리게
     const int FlashMs = 1500;          // DotFlash: 변경 직후 글자를 보여 주는 시간
+    const int FadeMs = 150;            // 나타날 때 페이드인
+    const int PulseMs = 260;           // 한/영이 바뀔 때 살짝 커졌다 돌아오는 시간
+    const float PulseGrow = 0.18f;     // 펄스 최대 확대 비율
+
+    /// <summary>진행 중인 배지 애니메이션. 별도의 16ms 타이머가 마지막 상태로 다시 그린다(IME 는 다시 읽지 않는다).</summary>
+    enum Anim { None, FadeIn, Pulse }
+    Anim _anim;
+    long _animStart;
+    readonly System.Windows.Forms.Timer _animTimer = new() { Interval = 16 };
+    Snapshot _lastSnapshot;
+    Bitmap? _lastBmp;          // 마지막으로 올린 비트맵. 알파만 바꿔 다시 올릴 때 쓴다
+    byte _lastAlpha = 255;
+    bool _systemAnimations = Native.AnimationsEnabled();   // Windows 접근성 "애니메이션 효과"
 
     readonly Settings _settings;
     readonly SettingsStore _store;
@@ -83,6 +96,7 @@ sealed class BadgeForm : Form
         _timer.Interval = _settings.PollIntervalMs;
         _timer.Tick += (_, _) => Poll();
         _timer.Start();
+        _animTimer.Tick += (_, _) => AnimTick();
 
         // OS 이벤트가 오면 타이머를 기다리지 않고 바로 다시 읽는다.
         _eventProc = (_, _, _, _, _, _, _) => Poll();
@@ -216,7 +230,46 @@ sealed class BadgeForm : Form
         if (IsDisposed) return;
         if (InvokeRequired) { BeginInvoke(() => OnUserPreferenceChanged(sender, e)); return; }
         if (e.Category is UserPreferenceCategory.General or UserPreferenceCategory.Color or UserPreferenceCategory.VisualStyle or UserPreferenceCategory.Accessibility)
+        {
             if (_tray.ContextMenuStrip is { } menu) ApplyMenuTheme(menu);   // 밝게/어둡게 전환을 따라간다
+            _systemAnimations = Native.AnimationsEnabled();
+        }
+    }
+
+    // ── 애니메이션 ──
+    bool AnimationsOn => _settings.Animate && _systemAnimations;
+
+    void StartAnim(Anim kind)
+    {
+        _anim = kind;
+        _animStart = Environment.TickCount64;
+        _animTimer.Start();
+    }
+
+    void StopAnim()
+    {
+        _anim = Anim.None;
+        _animTimer.Stop();
+    }
+
+    /// <summary>진행률 0~1. 애니메이션이 없으면 1.</summary>
+    float AnimProgress()
+    {
+        if (_anim == Anim.None) return 1f;
+        int total = _anim == Anim.FadeIn ? FadeMs : PulseMs;
+        return Math.Clamp((Environment.TickCount64 - _animStart) / (float)total, 0f, 1f);
+    }
+
+    static float EaseOut(float p) => 1f - (1f - p) * (1f - p);
+
+    void AnimTick()
+    {
+        if (_polling || IsDisposed) return;
+        if (_anim == Anim.None || _paused || _sessionLocked || !Visible) { StopAnim(); return; }
+        _polling = true;
+        try { Apply(_lastSnapshot); }
+        catch (Exception ex) { StopAnim(); Log.Error("animation frame failed", ex); }
+        finally { _polling = false; }
     }
 
     // ── 트레이 아이콘·툴팁 ──
@@ -459,6 +512,7 @@ sealed class BadgeForm : Form
     void HideBadge()
     {
         if (Visible) { Hide(); _hiddenSince = Environment.TickCount64; }
+        StopAnim();
         UpdateTray(ImeState.Unknown);
         AdjustIdleInterval();
     }
@@ -482,22 +536,35 @@ sealed class BadgeForm : Form
         }
 
         var caret = s.Caret.Value;
-        if (s.State != _lastState)
+        _lastSnapshot = s;
+        bool appearing = !Visible;
+        bool changed = s.State != _lastState;
+        if (changed)
         {
             _lastState = s.State;
             _flashUntil = DateTime.Now.AddMilliseconds(FlashMs);
         }
         UpdateTray(s.State);
 
+        // 나타날 때는 페이드인, 보이는 중에 한/영이 바뀌면 펄스. 둘 다 "지금 바뀌었다"를 눈에 띄게 한다.
+        if (AnimationsOn)
+        {
+            if (appearing) StartAnim(Anim.FadeIn);
+            else if (changed) StartAnim(Anim.Pulse);
+        }
+        float progress = AnimProgress();
+        float pulse = _anim == Anim.Pulse ? 1f + PulseGrow * (float)Math.Sin(progress * Math.PI) : 1f;
+        byte alpha = _anim == Anim.FadeIn ? (byte)Math.Round(255 * EaseOut(progress)) : (byte)255;
+
         // DotFlash: 변경 직후 1.5초는 둥근 배지, 그 뒤는 점
         var style = _settings.Style;
         if (style == BadgeStyle.DotFlash)
             style = DateTime.Now < _flashUntil ? BadgeStyle.Pill : BadgeStyle.Dot;
 
-        float scale = Native.DpiScaleAt(caret.Location) * _settings.SizePercent / 100f;
+        float scale = Native.DpiScaleAt(caret.Location) * _settings.SizePercent / 100f * pulse;
 
         var key = (s.State, style, scale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor);
-        bool needRender = key != _renderKey;
+        bool needRender = key != _renderKey || _lastBmp is null;
 
         Size bs = needRender ? Size.Empty : _bitmapSize;
         Bitmap? bmp = null;
@@ -519,9 +586,16 @@ sealed class BadgeForm : Form
 
         if (bmp is not null)
         {
-            using (bmp) Present(bmp, pos);
+            Present(bmp, pos, alpha);
+            _lastBmp?.Dispose();
+            _lastBmp = bmp;
             _renderKey = key;
             _bitmapSize = bs;
+            if (raise) RaiseToTop();
+        }
+        else if (alpha != _lastAlpha)
+        {
+            Present(_lastBmp!, pos, alpha);   // 페이드 중: 같은 그림을 알파만 바꿔 다시 올린다(위치도 함께)
             if (raise) RaiseToTop();
         }
         else if (_lastPos != pos)
@@ -530,6 +604,8 @@ sealed class BadgeForm : Form
                                 Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);   // 이동과 동시에 맨 위로
         }
         else if (raise) RaiseToTop();
+
+        if (_anim != Anim.None && progress >= 1f) StopAnim();   // 마지막 프레임(알파 255, 배율 1)까지 올린 뒤 멈춘다
 
         // 활성 창이 자기도 최상위(TopMost)라면(FlowLauncher 등) 매 틱 실제 z-order를 확인한다. 활성 창이 뒤늦게
         // 활성화되며 다시 위로 올라오거나, 백그라운드 프로세스의 z-order 변경이 활성 창 아래로 제한되는 경우가 있다.
@@ -574,8 +650,8 @@ sealed class BadgeForm : Form
         else { _raiseFailFg = fg; _raiseFailCount = 1; }
     }
 
-    /// <summary>비트맵을 픽셀별 알파로 창에 올리면서 위치·크기도 함께 지정한다.</summary>
-    void Present(Bitmap bmp, Point pos)
+    /// <summary>비트맵을 픽셀별 알파로 창에 올리면서 위치·크기도 함께 지정한다. <paramref name="alpha"/> 는 페이드인용 창 전체 알파.</summary>
+    void Present(Bitmap bmp, Point pos, byte alpha)
     {
         if (Size != bmp.Size) Size = bmp.Size;   // WinForms가 아는 크기와 실제 창 크기를 일치시킨다
         IntPtr screenDc = Native.GetDC(IntPtr.Zero);
@@ -588,15 +664,16 @@ sealed class BadgeForm : Form
             var size = new Native.SIZE(bmp.Width, bmp.Height);
             var src = new Native.POINT(0, 0);
             var dst = new Native.POINT(pos.X, pos.Y);
-            // 불투명도는 렌더러가 배경 픽셀의 알파로 이미 반영했다(글자는 또렷하게 유지). 창 전체 알파는 255 로 둔다.
+            // 불투명도는 렌더러가 배경 픽셀의 알파로 이미 반영했다(글자는 또렷하게 유지). 창 전체 알파는 페이드인에만 쓴다.
             var blend = new Native.BLENDFUNCTION
             {
                 BlendOp = Native.AC_SRC_OVER,
                 BlendFlags = 0,
-                SourceConstantAlpha = 255,
+                SourceConstantAlpha = alpha,
                 AlphaFormat = Native.AC_SRC_ALPHA,
             };
             Native.UpdateLayeredWindow(Handle, screenDc, ref dst, ref size, memDc, ref src, 0, ref blend, Native.ULW_ALPHA);
+            _lastAlpha = alpha;
         }
         finally
         {
@@ -618,6 +695,8 @@ sealed class BadgeForm : Form
             for (int i = 0; i < _hooks.Length; i++)
                 if (_hooks[i] != IntPtr.Zero) { Native.UnhookWinEvent(_hooks[i]); _hooks[i] = IntPtr.Zero; }
             _timer.Dispose();
+            _animTimer.Dispose();
+            _lastBmp?.Dispose();
             _settingsForm?.Dispose();
             _aboutForm?.Dispose();
             _tray.Visible = false;

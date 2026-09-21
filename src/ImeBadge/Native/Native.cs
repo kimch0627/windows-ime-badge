@@ -86,6 +86,19 @@ static class Native
     public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after,
         int x, int y, int cx, int cy, uint flags);
 
+    // ── 접근성: 애니메이션 효과 설정 ──
+    [DllImport("user32.dll")] static extern bool SystemParametersInfo(uint action, uint param, ref bool value, uint winIni);
+    const uint SPI_GETCLIENTAREAANIMATION = 0x1042;
+
+    /// <summary>Windows 설정 → 접근성 → 시각 효과 → "애니메이션 효과" 가 켜져 있는가. 못 읽으면 켜진 것으로 본다.</summary>
+    public static bool AnimationsEnabled()
+    {
+        bool on = true;
+        try { if (!SystemParametersInfo(SPI_GETCLIENTAREAANIMATION, 0, ref on, 0)) return true; }
+        catch { return true; }
+        return on;
+    }
+
     // ── 창 꾸밈(DWM): 어두운 제목 표시줄, 둥근 모서리 ──
     [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
     public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;          // Windows 10 20H1+ (그 전 빌드는 19)

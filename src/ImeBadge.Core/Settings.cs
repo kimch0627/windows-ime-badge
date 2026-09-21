@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 namespace ImeBadge;
 
 public enum BadgeStyle { Box, Pill, Dot, Underline, DotFlash }
-public enum BadgePlacement { AboveRight, BelowRight }
+public enum BadgePlacement { AboveRight, BelowRight, AboveLeft, BelowLeft }
 
 /// <summary>
 /// 사용자 설정. JSON 으로 저장된다(<see cref="SettingsStore"/>).
@@ -24,6 +24,8 @@ public sealed class Settings
     public string HangulColor { get; set; } = DefaultHangulColor;
     /// <summary>영문 상태 배지 색. "#RRGGBB".</summary>
     public string EnglishColor { get; set; } = DefaultEnglishColor;
+    /// <summary>나타날 때 페이드인, 한/영이 바뀔 때 잠깐 커졌다 작아지는 효과. Windows 의 "애니메이션 효과" 가 꺼져 있으면 무시된다.</summary>
+    public bool Animate { get; set; } = true;
 
     // ── 동작 ──
     /// <summary>활성 창이 모니터 전체를 덮는(게임·전체 화면 동영상) 경우 배지를 숨긴다.</summary>
@@ -72,7 +74,7 @@ public sealed class Settings
     {
         Style = other.Style; Placement = other.Placement;
         SizePercent = other.SizePercent; OpacityPercent = other.OpacityPercent;
-        HangulColor = other.HangulColor; EnglishColor = other.EnglishColor;
+        HangulColor = other.HangulColor; EnglishColor = other.EnglishColor; Animate = other.Animate;
         HideOnFullscreen = other.HideOnFullscreen;
         ExcludedProcesses = new List<string>(other.ExcludedProcesses);
         HotkeyEnabled = other.HotkeyEnabled; PollIntervalMs = other.PollIntervalMs; TrayShowsState = other.TrayShowsState;
