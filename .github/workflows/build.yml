@@ -6,6 +6,7 @@
 # | main 에 push                    | `latest` 사전 릴리스를 그 커밋으로 갱신 (고정 주소로 최신 빌드)      |
 # | 다른 브랜치에 push              | `dev-<브랜치명>` 사전 릴리스를 그 커밋으로 갱신                    |
 # | v* 태그 push / 수동 release_tag | 그 태그의 정식 Release (버전 번호가 exe·설치 프로그램에 새겨진다)   |
+# | main 에 `release: vX.Y.Z ...` 제목의 커밋 push | 워크플로가 그 태그를 만들고 정식 Release 생성 (태그를 직접 푸시할 수 없는 환경용) |
 #
 # 결과물 세 가지: 설치 프로그램(권장), self-contained exe(무설치), framework-dependent exe(.NET 8 런타임 필요).
 #
@@ -63,15 +64,25 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      # 버전 결정: v1.2.3 태그 → 1.2.3, 수동 release_tag → 그 값, 그 외 → 0.0.0-<브랜치>.<sha7> (개발 빌드)
+      # 정식 릴리스 태그 결정: 수동 입력 > v* 태그 push > main 커밋 제목 "release: vX.Y.Z ..."
+      # 버전 결정: 정식 릴리스면 태그에서(v1.2.3 → 1.2.3), 그 외 → 0.0.0-<브랜치>.<sha7> (개발 빌드)
       - name: Decide version
         id: ver
         shell: pwsh
         run: |
           $ref = "${{ github.ref }}"
-          $manual = "${{ inputs.release_tag }}"
-          if ($ref -like "refs/tags/v*") { $v = $ref.Substring("refs/tags/v".Length) }
-          elseif ($manual -ne "") { $v = $manual.TrimStart("v") }
+          $rel = "${{ inputs.release_tag }}"
+          $fromCommit = $false
+          if (-not $rel -and $ref -like "refs/tags/v*") { $rel = "${{ github.ref_name }}" }
+          if (-not $rel -and $ref -eq "refs/heads/main") {
+            $subject = git log -1 --pretty=%s
+            if ($subject -match '^release:\s*(v\d+\.\d+\.\d+[0-9A-Za-z.-]*)') { $rel = $Matches[1]; $fromCommit = $true }
+          }
+          "RELEASE_TAG=$rel" >> $env:GITHUB_ENV
+          "RELEASE_TAG_FROM_COMMIT=$fromCommit" >> $env:GITHUB_ENV
+          if ($rel) { "정식 릴리스 태그: $rel (커밋 메시지에서: $fromCommit)" }
+
+          if ($rel) { $v = $rel.TrimStart("v") }
           else {
             $branch = "${{ github.head_ref || github.ref_name }}" -replace '[^0-9A-Za-z-]', '-'
             $v = "0.0.0-$branch.$("${{ github.sha }}".Substring(0,7))"
@@ -200,11 +211,19 @@ jobs:
             out/ImeBadge-win-x64-selfcontained.exe
             out/SHA256SUMS.txt
 
-      - name: Release (태그 푸시 또는 release_tag 입력일 때만)
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+      # 커밋 제목이 "release: vX.Y.Z" 이면 그 태그를 이 커밋에 만든다. 같은 태그가 이미 있으면 실패해서 알려 준다.
+      # (GITHUB_TOKEN 으로 만든 태그는 워크플로를 다시 트리거하지 않으므로 아래 Release 단계가 같은 실행에서 이어진다)
+      - name: "Create release tag (커밋 제목이 release: 일 때만)"
+        if: env.RELEASE_TAG_FROM_COMMIT == 'True'
+        run: |
+          git tag ${{ env.RELEASE_TAG }} ${{ github.sha }}
+          git push origin ${{ env.RELEASE_TAG }}
+
+      - name: "Release (태그 푸시 / release_tag 입력 / release: 커밋일 때만)"
+        if: env.RELEASE_TAG != ''
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
           files: |

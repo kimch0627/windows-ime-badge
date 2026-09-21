@@ -24,7 +24,7 @@ GitHub **[Releases](https://github.com/kimch0627/windows-ime-badge/releases)** �
 | 파일 | 어떤 분께 | 비고 |
 |---|---|---|
 | `ImeBadge-Setup-<버전>.exe` | **대부분의 분. 권장** | 설치 프로그램. 관리자 권한 불필요. 자동 시작·바로 가기 옵션. 제거는 Windows 설정 → 앱에서 |
-| `ImeBadge-win-x64-selfcontained.exe` | 설치 없이 그냥 실행하고 싶은 분 | 약 15 MB 단일 파일. 아무 폴더에 두고 실행 |
+| `ImeBadge-win-x64-selfcontained.exe` | 설치 없이 그냥 실행하고 싶은 분 | 약 19 MB 단일 파일. 아무 폴더에 두고 실행 |
 | `ImeBadge-win-x64.exe` | PC에 .NET 8 데스크톱 런타임이 이미 있는 분 | 약 200 KB. 없으면 실행 시 설치 안내 창이 뜸 (`winget install Microsoft.DotNet.DesktopRuntime.8`) |
 
 처음 실행하면 Windows SmartScreen 이 "알 수 없는 게시자" 경고를 띄울 수 있습니다(아직 코드 서명 전).
@@ -33,6 +33,7 @@ GitHub **[Releases](https://github.com/kimch0627/windows-ime-badge/releases)** �
 | 언제 | 어디서 받나 (모두 Releases 탭) |
 |---|---|
 | `v1.2.3` 형태의 태그 | 그 버전의 **정식 Release**. 프로그램의 "업데이트 확인"은 이것만 봅니다 |
+| `main`에 제목이 `release: v1.2.3`로 시작하는 커밋 푸시 | 워크플로가 `v1.2.3` 태그를 만들고 정식 Release 생성 (태그를 직접 푸시할 수 없는 환경용) |
 | `main`에 푸시 | `latest` 사전 릴리스가 항상 최신 빌드로 갱신됨 |
 | 다른 브랜치에 푸시 | `dev-<브랜치명>` 사전 릴리스가 그 브랜치의 최신 빌드로 갱신됨 |
 
@@ -200,7 +201,7 @@ caret 좌표와 배지 위치가 어긋납니다.
 | 예외 | UI 스레드 예외는 `errors.log` 에 남기고 계속. 20회 넘으면 안내 후 종료. Poll 안의 예외는 처음 5회만 자세히 기록 |
 | 종료 | 훅 해제, 단축키 해제, 트레이 아이콘 제거 |
 
-### 트리밍(self-contained 14~18 MB)
+### 트리밍(self-contained 약 19 MB)
 
 self-contained exe 크기를 줄이는 설정은 `src/ImeBadge/ImeBadge.csproj`에 있습니다. 비유하면 이삿짐을 쌀 때
 안 쓰는 물건은 버리고(트리밍), 남은 것은 압축팩에 넣는(압축) 것입니다.
@@ -219,6 +220,9 @@ self-contained exe 크기를 줄이는 설정은 `src/ImeBadge/ImeBadge.csproj`�
   속성이 붙어 있어, 트리머가 이 문자열을 따라가 WPF 전체(약 45 MB)를 살려 둡니다. 이 속성 인스턴스만 지워 고리를 끊습니다.
 - **`ILLink.Descriptors.xml`.** COM 인터페이스는 메서드 선언 순서가 곧 vtable 슬롯이라, 안 쓰는 자리표시자 메서드를
   트리머가 지우면 엉뚱한 함수가 호출됩니다. `Uia` 형식을 통째로 보존합니다.
+- **WinForms 어셈블리 통째로 보존 (`TrimmerRootAssembly`).** WinForms는 실행 중에야 필요해지는 COM 인터페이스가 많아
+  멤버 단위로 자르면 창을 만드는 순간 `TypeLoadException`으로 죽습니다(`Control.SetAcceptDrops`의 `IDropTarget`).
+  `System.Windows.Forms`와 `System.Windows.Forms.Primitives`는 자르지 않고, 나머지 런타임만 자릅니다. 약 5 MB를 더 쓰는 대신 안전합니다.
 - **JSON source generator.** 트리밍하면 리플렉션 기반 `JsonSerializer`가 꺼지므로 설정 저장과 GitHub API 응답 파싱은 컴파일 시점에
   생성된 코드(`SettingsJsonContext`, `GitHubJsonContext`)를 씁니다.
 - **`BuiltInComInteropSupport=true`.** 트리밍 기본값은 COM 호출을 끄는 것이라 명시적으로 켭니다.

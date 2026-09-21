@@ -25,14 +25,22 @@ static class Program
         }
 
         CrashHandler.Install();
-        ApplicationConfiguration.Initialize();
+        try
+        {
+            ApplicationConfiguration.Initialize();
 
-        var store = new SettingsStore(paths);
-        bool firstRun = !File.Exists(store.FilePath) && !(store.LegacyFilePath is { } legacy && File.Exists(legacy));
-        var settings = store.Load();
-        Autostart.RefreshIfEnabled();
+            var store = new SettingsStore(paths);
+            bool firstRun = !File.Exists(store.FilePath) && !(store.LegacyFilePath is { } legacy && File.Exists(legacy));
+            var settings = store.Load();
+            Autostart.RefreshIfEnabled();
 
-        Application.Run(new BadgeForm(settings, store, paths, firstRun));
+            Application.Run(new BadgeForm(settings, store, paths, firstRun));
+        }
+        catch (Exception ex)
+        {
+            // 시작 중(창 생성 전후)의 예외. 트리밍으로 잘려 나간 형식(TypeLoadException) 같은 문제를 여기서 알린다.
+            CrashHandler.Fatal(ex);
+        }
         Log.Write("=== exit ===");
     }
 }

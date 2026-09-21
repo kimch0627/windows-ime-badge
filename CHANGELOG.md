@@ -22,7 +22,7 @@
 
 ### 변경
 - 설정 파일 위치: exe 옆 `imebadge.settings.json` → `%APPDATA%\ImeBadge\settings.json`. 예전 파일은 첫 실행 때 자동으로 옮겨 온다.
-- 로그 위치: exe 옆 → `%LOCALAPPDATA%\ImeBadge\logs\`. 1 MB 를 넘으면 `.1` 로 밀어 둔다.
+- 로그 위치: exe 옆 → `%LOCALAPPDATA%\ImeBadge\logs\`. 1 MB 를 넘으면 `.1` 로 밀어 둔다. 0.7.x 의 exe 옆 `imebadge-crash.log` 는 `errors.log` 로 대체.
 - 소스를 `src/ImeBadge`(앱)와 `src/ImeBadge.Core`(순수 로직)로 나눔.
 - 배지가 한동안 숨겨져 있으면 폴링 간격을 늘리고, 화면 잠금 중에는 폴링을 멈춘다(CPU·배터리).
 - 포커스 변경 이벤트(EVENT_OBJECT_FOCUS)에도 즉시 갱신.

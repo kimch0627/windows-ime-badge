@@ -35,8 +35,10 @@ static class CrashHandler
         };
     }
 
-    static void Fatal(Exception? ex)
+    /// <summary>오류 로그에 남기고 사용자에게 알린 뒤 종료한다.</summary>
+    public static void Fatal(Exception? ex)
     {
+        Log.Error("fatal", ex);
         try
         {
             MessageBox.Show(

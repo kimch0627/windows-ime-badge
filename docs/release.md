@@ -9,6 +9,9 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
+태그를 직접 푸시할 수 없는 환경이면 `main` 에 제목이 `release: v1.0.0 ...` 인 커밋을 푸시해도 됩니다.
+워크플로가 그 커밋에 태그를 만들고 같은 실행에서 Release 까지 이어 갑니다.
+
 CI(`.github/workflows/build.yml`)가 하는 일:
 
 1. Linux 에서 단위 테스트와 서식 검사.
