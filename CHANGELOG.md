@@ -11,6 +11,8 @@
   UWP 와 Windows Terminal 처럼 IMM32 가 틀리게 답하는 앱에서는 먼저 읽는다. `--debug` 로그에 `tsf(open=… conv=…)` 로 남는다.
 - UWP 앱(설정, 스토어 앱)은 껍데기 창(ApplicationFrameHost)이 아니라 안쪽 CoreWindow 의 스레드·프로세스를 조사한다.
   제외 앱 목록도 실제 앱 이름(예: `SystemSettings`)으로 맞는다.
+- caret 이동 이벤트 구독(`EVENT_OBJECT_LOCATIONCHANGE`/`OBJID_CARET`, `EVENT_OBJECT_TEXTSELECTIONCHANGED`). 타이핑하거나 화살표 키로
+  움직이면 폴링 주기(기본 100 ms)를 기다리지 않고 배지가 바로 따라온다. 배지가 보이는 동안만 받고 15 ms 안에 몰린 이벤트는 건너뛴다.
 
 ## [1.1.0] - 2026-09-21
 

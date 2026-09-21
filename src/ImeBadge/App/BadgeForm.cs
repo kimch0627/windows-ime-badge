@@ -40,7 +40,9 @@ sealed class BadgeForm : Form
     ImeState _trayState = ImeState.Unknown;   // 트레이 아이콘·툴팁이 마지막으로 반영한 상태
     bool _trayPaused, _trayCaps;
     readonly Native.WinEventProc _eventProc;   // GC 회수 방지용 필드
-    readonly IntPtr[] _hooks = new IntPtr[3];
+    readonly IntPtr[] _hooks = new IntPtr[5];
+    long _lastEventPoll;                        // 이벤트로 촉발한 마지막 Poll 시각. caret 이동 이벤트가 몰려올 때 억제용
+    const int EventPollMinGapMs = 15;           // 이보다 촘촘한 이벤트는 건너뛴다(타이머가 곧 따라잡는다)
 
     ImeState _lastState = ImeState.Unknown;
     bool _lastCaps;
@@ -100,10 +102,14 @@ sealed class BadgeForm : Form
         _animTimer.Tick += (_, _) => AnimTick();
 
         // OS 이벤트가 오면 타이머를 기다리지 않고 바로 다시 읽는다.
-        _eventProc = (_, _, _, _, _, _, _) => Poll();
+        _eventProc = OnWinEvent;
         _hooks[0] = Hook(Native.EVENT_OBJECT_IME_CHANGE, "IME change");
         _hooks[1] = Hook(Native.EVENT_SYSTEM_FOREGROUND, "foreground");
         _hooks[2] = Hook(Native.EVENT_OBJECT_FOCUS, "focus");
+        // caret 이 움직이면(타이핑·화살표 키·창 이동) 다음 틱을 기다리지 않고 배지를 따라 옮긴다.
+        // LOCATIONCHANGE 는 마우스 포인터·모든 창의 이동에도 오므로 OnWinEvent 에서 caret 것만 골라낸다.
+        _hooks[3] = Hook(Native.EVENT_OBJECT_LOCATIONCHANGE, "location change");
+        _hooks[4] = Hook(Native.EVENT_OBJECT_TEXTSELECTIONCHANGED, "text selection");
 
         SystemEvents.SessionSwitch += OnSessionSwitch;
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
@@ -115,6 +121,23 @@ sealed class BadgeForm : Form
         var h = Native.SetWinEventHook(evt, evt, IntPtr.Zero, _eventProc, 0, 0, Native.WINEVENT_OUTOFCONTEXT);
         Log.Write(h == IntPtr.Zero ? $"{name} hook FAILED" : $"{name} hook registered");
         return h;
+    }
+
+    /// <summary>
+    /// WinEvent 콜백(OUTOFCONTEXT 라 우리 UI 스레드에서 불린다). 위치 변경 이벤트는 caret 것만 받고, 그마저도 배지가 보이는 동안
+    /// 활성 창에서 온 것만 받는다. 타이핑 중에는 글자마다 이벤트가 오므로 15ms 안에 몰린 것은 건너뛴다(타이머가 곧 따라잡는다).
+    /// </summary>
+    void OnWinEvent(IntPtr hHook, uint evt, IntPtr hwnd, int idObject, int idChild, uint idEventThread, uint dwmsEventTime)
+    {
+        if (evt is Native.EVENT_OBJECT_LOCATIONCHANGE or Native.EVENT_OBJECT_TEXTSELECTIONCHANGED)
+        {
+            if (evt == Native.EVENT_OBJECT_LOCATIONCHANGE && idObject != Native.OBJID_CARET) return;
+            if (!Visible || _paused) return;   // 숨겨진 동안은 포커스·활성 창 이벤트와 타이머만으로 충분하다
+            long now = Environment.TickCount64;
+            if (now - _lastEventPoll < EventPollMinGapMs) return;
+            _lastEventPoll = now;
+        }
+        Poll();
     }
 
     protected override void OnHandleCreated(EventArgs e)

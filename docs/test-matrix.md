@@ -71,6 +71,7 @@ caret 탐색·IME 판정·창 z-order 는 실제 앱에서만 확인할 수 있�
 | Program Files 설치 | 설정 저장이 됨(%APPDATA%) | ⬜ |
 | 트리밍 빌드 | ColorDialog, HttpClient, Registry 동작 | ⬜ |
 | 유휴 CPU | 작업 관리자에서 1% 미만 | ⬜ |
+| caret 이벤트 | 메모장에서 빠르게 타이핑·화살표 이동 시 배지가 지연 없이 따라옴. 마우스를 흔들어도 CPU 가 튀지 않음(포인터 이벤트는 걸러짐). `--debug` 로그에 5개 훅 registered | ⬜ |
 | 장시간(8시간) 실행 | 메모리 증가 없음 | ⬜ |
 
 ## 4. 설치·제거

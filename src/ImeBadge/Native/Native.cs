@@ -141,8 +141,13 @@ static class Native
 
     public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
     public const uint EVENT_OBJECT_FOCUS = 0x8005;
+    public const uint EVENT_OBJECT_LOCATIONCHANGE = 0x800B;      // 창·caret·마우스 포인터 등의 위치 변경. idObject 로 걸러 써야 한다
+    public const uint EVENT_OBJECT_TEXTSELECTIONCHANGED = 0x8014; // UIA 텍스트 컨트롤(Chrome/Electron)의 caret·선택 이동
     public const uint EVENT_OBJECT_IME_CHANGE = 0x8029;
     public const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+    public const int OBJID_WINDOW = 0;
+    public const int OBJID_CARET = -8;
+    public const int OBJID_CURSOR = -9;
 
     public const uint GW_HWNDPREV = 3;           // z-order에서 바로 위(더 앞) 창
     public const int GWL_EXSTYLE = -20;

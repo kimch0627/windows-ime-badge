@@ -201,6 +201,10 @@ installer/ImeBadge.iss  Inno Setup 스크립트
   화면이 잠기면(`SystemEvents.SessionSwitch`) 멈춥니다.
 - `SetWinEventHook` 으로 IME 변경(`EVENT_OBJECT_IME_CHANGE`)·활성 창 변경(`EVENT_SYSTEM_FOREGROUND`)·
   포커스 변경(`EVENT_OBJECT_FOCUS`)을 받으면 타이머를 기다리지 않고 즉시 다시 읽습니다. 훅 델리게이트는 필드에 붙잡아 두어 GC 회수를 막습니다.
+- **caret 이동**도 이벤트로 받습니다. `EVENT_OBJECT_LOCATIONCHANGE` 중 `idObject == OBJID_CARET` 인 것(Win32 caret 을 쓰는 앱,
+  접근성이 켜진 Chrome/Electron)과 `EVENT_OBJECT_TEXTSELECTIONCHANGED`(UIA 텍스트 컨트롤)입니다. 타이핑하면 글자마다 배지가
+  즉시 따라오고, 폴링 주기는 이벤트가 없는 앱을 위한 안전망이 됩니다. `LOCATIONCHANGE` 는 마우스 포인터(`OBJID_CURSOR`)와
+  모든 창의 이동에도 오므로 caret 것만 골라내고, 배지가 보이는 동안만 받으며, 15 ms 안에 몰린 이벤트는 건너뜁니다.
 - 타이머 틱과 훅 콜백이 겹쳐도 `_polling` 가드로 한 번에 하나만 실행됩니다.
 
 ### 배지 창의 속성
