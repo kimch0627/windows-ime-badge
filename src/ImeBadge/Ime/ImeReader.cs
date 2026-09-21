@@ -24,6 +24,11 @@ static class ImeReader
 
         uint tid = Native.GetWindowThreadProcessId(fg, out uint pid);
 
+        // 우리 자신의 창(설정·정보 창)이 활성이면 조사하지 않는다. 같은 프로세스의 UI 스레드에서 UI Automation 클라이언트를
+        // 부르면 공급자(우리 창)가 같은 스레드에 있어 서로를 기다리다 시간 초과가 나고, 그동안 메시지 펌프가 재진입해
+        // 배지가 깜빡이고 버튼이 늦게 반응한다. 설정 창에는 배지가 필요 없으니 숨긴다.
+        if (pid == (uint)Environment.ProcessId) return new(ImeState.Unknown, null, fg, "self");
+
         if (settings.ExcludedProcesses.Count > 0 && ProcessFilter.IsExcluded(settings.ExcludedProcesses, ProcessName(pid)))
             return new(ImeState.Unknown, null, fg, "excluded");
         if (settings.HideOnFullscreen && Native.IsFullscreen(fg))
