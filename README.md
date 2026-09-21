@@ -21,7 +21,7 @@ GitHub **Releases** 페이지에서 최신 버전의 exe를 받으면 됩니다.
 
 | 파일 | 크기 | 조건 |
 |---|---|---|
-| `ImeBadge-win-x64-selfcontained.exe` | 약 66 MB | 아무것도 설치할 필요 없음. **처음 쓰는 분은 이 파일** |
+| `ImeBadge-win-x64-selfcontained.exe` | 약 14 MB | 아무것도 설치할 필요 없음. **처음 쓰는 분은 이 파일** |
 | `ImeBadge-win-x64.exe` | 약 200 KB | PC에 .NET 8 데스크톱 런타임이 있어야 함. 없으면 실행 시 설치 안내 창이 뜸 (`winget install Microsoft.DotNet.DesktopRuntime.8`) |
 
 기본 Windows에는 .NET 8 런타임이 들어 있지 않습니다. 작은 exe는 이미 런타임이 있는 PC(다른 .NET 8
@@ -37,7 +37,8 @@ git push origin v0.5.0
 
 ### 직접 빌드해서 실행
 
-1. .NET 8 SDK를 설치합니다. PowerShell에서:
+1. .NET 8 SDK를 설치합니다. PowerShell에서: (`global.json`이 SDK 8.0.x를 고정합니다. SDK 10에서는
+   `--self-contained false`가 달리 처리되어 작은 exe가 130 MB로 나옵니다.)
    ```powershell
    winget install Microsoft.DotNet.SDK.8
    ```
@@ -66,7 +67,7 @@ git push origin v0.5.0
 ### exe 하나로 만들기 (배포용)
 
 ```powershell
-# 런타임 포함 (아무 PC에서나 실행, 약 66 MB)
+# 런타임 포함 (아무 PC에서나 실행, 약 14 MB)
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 
 # 런타임 없이 (.NET 8 런타임이 있는 PC 전용, 약 200 KB)
@@ -75,13 +76,37 @@ dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile
 
 결과물: `bin\Release\net8.0-windows\win-x64\publish\ImeBadge.exe`
 
-self-contained 크기를 줄이는 설정은 `ImeBadge.csproj`에 있습니다.
+self-contained 크기를 줄이는 설정은 `ImeBadge.csproj`에 있습니다. 비유하면 이삿짐을 쌀 때
+안 쓰는 물건은 버리고(트리밍), 남은 것은 압축팩에 넣는(압축) 것입니다.
 
-| 설정 | 효과 |
-|---|---|
-| `EnableCompressionInSingleFile` | 번들 안의 어셈블리를 압축. 154 MB → 약 66 MB. 첫 실행이 수백 ms 느려짐 |
-| `SatelliteResourceLanguages=en` | 프레임워크의 13개 언어 번역 리소스 DLL 제외 |
-| `UseWPF`를 켜지 않음 | UI Automation을 COM으로 직접 호출. 단, 런타임 팩은 WinForms/WPF를 구분하지 않아 **이것만으로는 크기가 줄지 않고**, 트리밍(trimming)을 쓰기 위한 전제 조건임 |
+| 설정 | 효과 | 크기 |
+|---|---|---|
+| (아무것도 안 함) | .NET 런타임 + WinForms + WPF 전체가 그대로 들어감 | 154 MB |
+| `EnableCompressionInSingleFile` | 번들 안의 어셈블리를 압축. 첫 실행이 수백 ms 느려짐 | 66 MB |
+| `PublishTrimmed` + `TrimMode=full` | 트리머(ILLink)가 실제로 쓰이는 코드만 남김 | **약 14 MB** |
+| `SatelliteResourceLanguages=en` | 프레임워크의 13개 언어 번역 리소스 DLL 제외 | (위에 포함) |
+
+트리밍이 되게 하려고 손본 것들:
+
+- **WPF를 참조하지 않음.** UI Automation을 WPF 래퍼 대신 COM으로 직접 호출합니다(`Uia` 클래스).
+- **`ILLink.LinkAttributes.xml`.** WinForms가 쓰는 `ICommand` 인터페이스에 `[TypeConverter("...CommandConverter, PresentationFramework")]`
+  속성이 붙어 있어, 트리머가 이 문자열을 따라가 WPF 전체(약 45 MB)를 살려 둡니다. 이 속성 인스턴스만 지워 고리를 끊습니다.
+- **`ILLink.Descriptors.xml`.** COM 인터페이스는 메서드 선언 순서가 곧 vtable 슬롯이라, 안 쓰는 자리표시자 메서드를
+  트리머가 지우면 엉뚱한 함수가 호출됩니다. `Uia` 형식을 통째로 보존합니다.
+- **JSON source generator.** 트리밍하면 리플렉션 기반 `JsonSerializer`가 꺼지므로 설정 저장은 컴파일 시점에
+  생성된 코드(`SettingsJsonContext`)를 씁니다.
+- **`BuiltInComInteropSupport=true`.** 트리밍 기본값은 COM 호출을 끄는 것이라 명시적으로 켭니다.
+- **디버깅 전용 파일 제외.** `mscordaccore`, `createdump` 등 디버거·크래시 덤프용 파일은 실행에 필요 없어 뺍니다.
+
+WinForms는 .NET 8에서 공식적으로 트리밍 미지원(`NETSDK1175`)이므로 `_SuppressWinFormsTrimError`로 경고를 끄고 씁니다.
+트리밍된 빌드에서 특정 기능이 깨지면 다음처럼 트리밍만 끄면 66 MB짜리 안전한 빌드가 됩니다.
+
+```powershell
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false
+```
+
+Native AOT는 .NET 9부터 WinForms에서 실험적으로 지원되지만, 트리밍만으로 이미 약 14 MB라 추가 이득이 작고
+런타임 검증 부담이 커서 적용하지 않았습니다.
 
 ### 디버그 모드
 
@@ -105,7 +130,7 @@ exe 옆에 `imebadge.log`가 생기고, 활성 창·caret 탐색 경로·IME 원
 | `Uia` | Windows 내장 COM UI Automation 인터페이스 선언(`IUIAutomation`, `IUIAutomationTextRange` 등) |
 | `UiaCaret` | UI Automation으로 caret 위치 찾기 (Win32 caret이 없는 앱용) |
 | `ImeReader` | 활성 창의 caret 위치와 한/영 상태를 한 번 읽어 `Snapshot`으로 반환 |
-| `Settings` | 모양·위치·크기 설정. exe 옆 JSON에 저장 |
+| `Settings` | 모양·위치·크기 설정. exe 옆 JSON에 저장 (`SettingsJsonContext`로 source-generated 직렬화) |
 | `BadgeRenderer` | GDI+로 투명 비트맵(배지·점·밑줄)을 그림 |
 | `BadgeForm` | 100ms 타이머 + IME 변경 이벤트 훅으로 `Read()`를 호출하고, 레이어드 창에 비트맵을 올려 caret 옆에 배치. 트레이 메뉴 |
 

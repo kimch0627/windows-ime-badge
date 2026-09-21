@@ -125,20 +125,19 @@ enum BadgePlacement { AboveRight, BelowRight }
 
 sealed class Settings
 {
-    [JsonConverter(typeof(JsonStringEnumConverter))] public BadgeStyle Style { get; set; } = BadgeStyle.Pill;
-    [JsonConverter(typeof(JsonStringEnumConverter))] public BadgePlacement Placement { get; set; } = BadgePlacement.AboveRight;
+    public BadgeStyle Style { get; set; } = BadgeStyle.Pill;
+    public BadgePlacement Placement { get; set; } = BadgePlacement.AboveRight;
     public int SizePercent { get; set; } = 100;
     public int OpacityPercent { get; set; } = 100;
 
     static readonly string FilePath = Path.Combine(AppContext.BaseDirectory, "imebadge.settings.json");
-    static readonly JsonSerializerOptions Opts = new() { WriteIndented = true };
 
     public static Settings Load()
     {
         try
         {
             if (File.Exists(FilePath))
-                return JsonSerializer.Deserialize<Settings>(File.ReadAllText(FilePath), Opts) ?? new Settings();
+                return JsonSerializer.Deserialize(File.ReadAllText(FilePath), SettingsJsonContext.Default.Settings) ?? new Settings();
         }
         catch (Exception ex) { Log.Write("settings load failed: " + ex.Message); }
         return new Settings();
@@ -146,10 +145,19 @@ sealed class Settings
 
     public void Save()
     {
-        try { File.WriteAllText(FilePath, JsonSerializer.Serialize(this, Opts)); }
+        try { File.WriteAllText(FilePath, JsonSerializer.Serialize(this, SettingsJsonContext.Default.Settings)); }
         catch (Exception ex) { Log.Write("settings save failed: " + ex.Message); }
     }
 }
+
+/// <summary>
+/// JSON 직렬화 코드를 컴파일 시점에 생성(source generator)한다. 리플렉션 기반 직렬화는 트리밍(trimming)하면
+/// 프로퍼티가 잘려 나가거나 아예 꺼지므로(IsReflectionEnabledByDefault=false) 쓰면 안 된다.
+/// 열거형(enum)은 예전 설정 파일과 호환되도록 계속 이름 문자열("Pill")로 저장한다.
+/// </summary>
+[JsonSourceGenerationOptions(WriteIndented = true, UseStringEnumConverter = true)]
+[JsonSerializable(typeof(Settings))]
+sealed partial class SettingsJsonContext : JsonSerializerContext { }
 
 // ─────────────────────────────────────────────────────────────────
 // (3) 디버그 로그 (--debug 옵션일 때만 exe 옆 imebadge.log에 기록)

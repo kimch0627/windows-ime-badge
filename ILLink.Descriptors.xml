@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  트리밍(trimming)할 때 트리머(ILLink)가 절대 지우면 안 되는 형식 목록.
+
+  Uia 클래스 안의 COM 인터페이스(IUIAutomation, IUIAutomationElement ...)는 메서드의 "선언 순서"가 곧
+  네이티브 vtable 슬롯 번호다. 쓰지 않는 자리표시자(_Slot_*) 메서드를 트리머가 지우면 순서가 당겨져서
+  GetFocusedElement()를 부른다는 것이 전혀 다른 함수를 호출하게 된다. 그래서 멤버 전체(preserve="all")를 보존한다.
+  중첩 형식은 "바깥형식/안쪽형식" 으로 쓴다.
+-->
+<linker>
+  <assembly fullname="ImeBadge">
+    <type fullname="ImeBadge.Uia" preserve="all" />
+    <type fullname="ImeBadge.Uia/CUIAutomation" preserve="all" />
+    <type fullname="ImeBadge.Uia/IUIAutomation" preserve="all" />
+    <type fullname="ImeBadge.Uia/IUIAutomationElement" preserve="all" />
+    <type fullname="ImeBadge.Uia/IUIAutomationValuePattern" preserve="all" />
+    <type fullname="ImeBadge.Uia/IUIAutomationTextPattern" preserve="all" />
+    <type fullname="ImeBadge.Uia/IUIAutomationTextRangeArray" preserve="all" />
+    <type fullname="ImeBadge.Uia/IUIAutomationTextRange" preserve="all" />
+  </assembly>
+</linker>

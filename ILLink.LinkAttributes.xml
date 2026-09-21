@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  트리밍(trimming)할 때 트리머(ILLink)에게 "이 속성(attribute) 인스턴스는 없는 셈 쳐라"고 알려 주는 파일.
+
+  System.ObjectModel.dll의 System.Windows.Input.ICommand 인터페이스에는
+  [TypeConverter("System.Windows.Input.CommandConverter, PresentationFramework, ...")] 와
+  [ValueSerializer("System.Windows.Input.CommandValueSerializer, PresentationFramework, ...")] 가 붙어 있다.
+  WinForms(ToolStripItem.Command 등)가 ICommand를 쓰므로 트리머가 이 문자열을 따라가
+  PresentationFramework → PresentationCore → WindowsBase → System.Xaml ... WPF 전체(약 45 MB)를 살려 둔다.
+  이 프로그램은 WPF 창을 만들지 않으므로 두 속성 인스턴스만 제거해 연결 고리를 끊는다.
+  (런타임에 TypeDescriptor가 ICommand의 변환기를 찾으면 기본 TypeConverter로 대체될 뿐 예외는 나지 않는다.)
+-->
+<linker>
+  <assembly fullname="System.ComponentModel.TypeConverter">
+    <type fullname="System.ComponentModel.TypeConverterAttribute">
+      <attribute internal="RemoveAttributeInstances">
+        <argument type="System.Object">
+          <argument type="System.String">System.Windows.Input.CommandConverter, PresentationFramework, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, Custom=null</argument>
+        </argument>
+      </attribute>
+    </type>
+  </assembly>
+  <assembly fullname="System.ObjectModel">
+    <type fullname="System.Windows.Markup.ValueSerializerAttribute">
+      <attribute internal="RemoveAttributeInstances">
+        <argument type="System.Object">
+          <argument type="System.String">System.Windows.Input.CommandValueSerializer, PresentationFramework, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, Custom=null</argument>
+        </argument>
+      </attribute>
+    </type>
+  </assembly>
+</linker>
