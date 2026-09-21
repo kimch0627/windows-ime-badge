@@ -29,11 +29,14 @@ GitHub **Releases** 페이지에서 최신 버전의 exe를 받으면 됩니다.
 
 exe는 GitHub Actions가 자동으로 빌드합니다.
 
-| 언제 | 어디서 받나 |
+| 언제 | 어디서 받나 (모두 Releases 탭) |
 |---|---|
-| 어느 브랜치든 푸시 | Actions 탭 → 해당 실행 → Artifacts (3일 보관, 로그인 필요) |
-| `main`에 푸시 | Releases의 **`latest`** 사전 릴리스가 항상 최신 빌드로 갱신됨 |
+| `main`에 푸시 | **`latest`** 사전 릴리스가 항상 최신 빌드로 갱신됨 |
+| 다른 브랜치에 푸시 | `dev-<브랜치명>` 사전 릴리스가 그 브랜치의 최신 빌드로 갱신됨 |
 | `v1.2.3` 형태의 태그 푸시 | 그 버전의 정식 Release |
+
+Actions Artifacts는 쓰지 않습니다. 이 계정은 아티팩트 저장 용량 한도에 걸려 업로드가 실패하고,
+Release 첨부 파일은 그 용량을 쓰지 않기 때문입니다.
 
 ```powershell
 git tag v0.5.0

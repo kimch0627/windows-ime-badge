@@ -1,13 +1,14 @@
-# 어느 브랜치든 푸시하면 Windows 러너에서 exe 두 개를 만든다.
+# 어느 브랜치든 푸시하면 Windows 러너에서 exe 두 개를 만들어 Releases 에 올린다.
 #
-# | 계기                         | 만드는 것                     | 결과물 위치                                   |
-# |------------------------------|-------------------------------|-----------------------------------------------|
-# | 아무 브랜치에 push           | 작은 exe + self-contained exe | Actions 탭 > 해당 실행 > Artifacts (3일 보관)  |
-# | main 에 push                 | 위와 같음                     | + Releases 의 `latest` 사전 릴리스를 갱신      |
-# | v* 태그 push / 수동 release_tag | 위와 같음                  | + 그 태그의 정식 Release                       |
+# | 계기                            | 결과물 위치 (Releases 탭)                                  |
+# |---------------------------------|------------------------------------------------------------|
+# | main 에 push                    | `latest` 사전 릴리스를 그 커밋으로 갱신 (고정 주소로 최신 빌드)  |
+# | 다른 브랜치에 push              | `dev-<브랜치명>` 사전 릴리스를 그 커밋으로 갱신              |
+# | v* 태그 push / 수동 release_tag | 그 태그의 정식 Release                                     |
 #
-# Artifacts 는 계정의 Actions 저장 용량을 쓰므로(초과 시 업로드만 실패하고 빌드는 성공 처리)
-# 보관 기간을 짧게 둔다. Release 첨부 파일은 그 용량을 쓰지 않는다.
+# Actions Artifacts 는 쓰지 않는다. 이 계정은 아티팩트 저장 용량 한도에 걸려 업로드가 실패한다.
+# Release 첨부 파일은 그 용량을 쓰지 않는다. 롤링 사전 릴리스는 태그(latest, dev-*)를 강제로 옮기는
+# 방식이라 v* 태그 트리거에 걸리지 않는다.
 name: build
 
 on:
@@ -54,35 +55,27 @@ jobs:
           Copy-Item out/fd/ImeBadge.exe out/ImeBadge-win-x64.exe
           Copy-Item out/sc/ImeBadge.exe out/ImeBadge-win-x64-selfcontained.exe
           Get-ChildItem out/*.exe | ForEach-Object { "{0,-40} {1,8:N1} MB" -f $_.Name, ($_.Length / 1MB) }
-          # 아티팩트 이름에 쓸 수 없는 문자('/')를 바꾼다. 예: claude/foo-bar → claude-foo-bar
-          $branch = "${{ github.ref_name }}" -replace '[/\\:<>|*?"]', '-'
-          "ARTIFACT_NAME=ImeBadge-$branch-$('${{ github.sha }}'.Substring(0, 7))" >> $env:GITHUB_ENV
+          # 롤링 사전 릴리스의 태그 이름: main → latest, 그 외 → dev-<브랜치명> ('/' 등은 '-'로)
+          $branch = "${{ github.ref_name }}" -replace '[/\\:<>|*?"~^ ]', '-'
+          $tag = if ("${{ github.ref }}" -eq "refs/heads/main") { "latest" } else { "dev-$branch" }
+          "ROLLING_TAG=$tag" >> $env:GITHUB_ENV
 
-      - name: Upload artifacts (3일 보관)
-        uses: actions/upload-artifact@v4
-        continue-on-error: true   # 아티팩트 저장 용량 초과 시에도 빌드는 성공 처리
-        with:
-          name: ${{ env.ARTIFACT_NAME }}
-          path: out/*.exe
-          retention-days: 3
-          if-no-files-found: error
-
-      # main 에 푸시될 때마다 `latest` 태그를 이 커밋으로 옮기고 사전 릴리스 첨부 파일을 갱신한다.
+      # 브랜치 푸시마다 롤링 태그(latest / dev-<브랜치>)를 이 커밋으로 옮기고 사전 릴리스 첨부 파일을 갱신한다.
       # 항상 같은 주소에서 최신 빌드를 받을 수 있다:
       #   https://github.com/<owner>/<repo>/releases/download/latest/ImeBadge-win-x64-selfcontained.exe
-      - name: Move `latest` tag (main 푸시일 때만)
-        if: github.ref == 'refs/heads/main'
+      - name: Move rolling tag (브랜치 푸시일 때만)
+        if: startsWith(github.ref, 'refs/heads/')
         run: |
-          git tag -f latest ${{ github.sha }}
-          git push -f origin latest
+          git tag -f ${{ env.ROLLING_TAG }} ${{ github.sha }}
+          git push -f origin ${{ env.ROLLING_TAG }}
 
-      - name: Update `latest` pre-release (main 푸시일 때만)
-        if: github.ref == 'refs/heads/main'
+      - name: Update rolling pre-release (브랜치 푸시일 때만)
+        if: startsWith(github.ref, 'refs/heads/')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: "latest (main ${{ github.sha }})"
-          body: "main 브랜치의 최신 자동 빌드입니다. 검증된 버전은 v* 릴리스를 받으세요."
+          tag_name: ${{ env.ROLLING_TAG }}
+          name: "${{ env.ROLLING_TAG }} (${{ github.ref_name }} @ ${{ github.sha }})"
+          body: "`${{ github.ref_name }}` 브랜치의 최신 자동 빌드입니다. 커밋마다 덮어써집니다. 검증된 버전은 v* 릴리스를 받으세요."
           prerelease: true
           files: |
             out/ImeBadge-win-x64.exe
