@@ -78,6 +78,9 @@ winget install kimch0627.ImeBadge
 | 미리보기 | | 현재 설정으로 실제 렌더러가 그린 배지. 왼쪽은 밝은 배경(메모장), 오른쪽은 어두운 배경(VS Code 등) |
 | 배지를 띄우지 않을 앱 | 프로세스 이름 목록 | 한 줄에 하나. `.exe` 생략 가능, 끝에 `*` 는 앞부분 일치. 예: `mstsc`, `Unreal*` |
 
+설정을 바꾸면 창 밖의 실제 배지에 **바로** 반영되어 결과를 보면서 고를 수 있습니다. **확인**을 누르면 저장되고,
+**취소**하거나 창을 닫으면 창을 열 때의 설정으로 되돌아갑니다. 설정·정보 창은 Windows 의 밝게/어둡게 앱 모드를 따릅니다.
+
 설정은 `%APPDATA%\ImeBadge\settings.json` 에 저장됩니다. 0.x 버전이 exe 옆에 남긴 `imebadge.settings.json` 은 첫 실행 때 자동으로 옮겨 옵니다.
 
 ### 문제가 생기면
@@ -129,6 +132,7 @@ src/ImeBadge/           Windows 앱
   App/TrayIcons.cs      상태별 트레이 아이콘("한"/"A"/일시 중지)을 GDI+ 로 그려 캐시
   App/Dialogs.cs        TaskDialog 래퍼 (실패하면 MessageBox 로 대체)
   App/Labels.cs         트레이 메뉴·설정 창이 함께 쓰는 문구·프리셋
+  App/Theme.cs          밝게/어둡게 테마 감지·적용, 카드형 그룹 상자, 평면 메뉴 렌더러
   Assets/*.ico          tools/make_icons.py 로 생성. 언어 중립 도형(커서 + 배지)이라 다른 언어 IME 를 지원해도 그대로 쓴다
 tests/ImeBadge.Core.Tests/  xUnit
 installer/ImeBadge.iss  Inno Setup 스크립트
@@ -203,6 +207,15 @@ installer/ImeBadge.iss  Inno Setup 스크립트
 
 `ApplicationHighDpiMode=PerMonitorV2`(csproj)가 없으면 DPI 스케일링이 켜진 모니터에서
 caret 좌표와 배지 위치가 어긋납니다.
+
+### 테마(밝게/어둡게)
+
+.NET 8 의 WinForms 는 Windows 다크 모드를 스스로 따르지 않습니다(.NET 9 부터 실험적 지원). 그래서 `App/Theme.cs` 가
+레지스트리 `HKCU\...\Themes\Personalize\AppsUseLightTheme` 를 읽어 창·컨트롤 색을 직접 입히고, 제목 표시줄은
+`DwmSetWindowAttribute(DWMWA_USE_IMMERSIVE_DARK_MODE)` 로 요청합니다. 그룹 상자는 테마 엔진이 그리는 밝은 회색 선 대신
+`CardGroupBox` 가 Windows 11 카드 모양(제목 + 둥근 테두리)으로 직접 그립니다. 트레이 메뉴는 `FlatMenuRenderer` 가
+그라데이션 없는 평면으로 그리고, Windows 11 에서는 `DWMWA_WINDOW_CORNER_PREFERENCE` 로 모서리를 둥글게 합니다.
+고대비 모드에서는 아무 색도 입히지 않고 시스템 색을 그대로 씁니다.
 
 ### 앱 수명 주기
 

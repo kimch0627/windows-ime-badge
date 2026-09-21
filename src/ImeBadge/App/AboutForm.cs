@@ -18,7 +18,7 @@ sealed class AboutForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
         AutoScaleDimensions = new SizeF(96F, 96F);
-        Font = new Font(BadgeRenderer.FontFamily, 9f);
+        Font = Theme.DialogFont;
         AutoSize = true; AutoSizeMode = AutoSizeMode.GrowAndShrink;
         Padding = new Padding(16);
 
@@ -42,6 +42,13 @@ sealed class AboutForm : Form
         root.Controls.Add(ok);
         AcceptButton = ok; CancelButton = ok;
         Controls.Add(root);
+        Theme.Apply(this);
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        Theme.ApplyTitleBar(this);
     }
 
     static LinkLabel Link(string text, Action onClick)

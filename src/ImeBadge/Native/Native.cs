@@ -86,6 +86,13 @@ static class Native
     public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after,
         int x, int y, int cx, int cy, uint flags);
 
+    // ── 창 꾸밈(DWM): 어두운 제목 표시줄, 둥근 모서리 ──
+    [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+    public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;          // Windows 10 20H1+ (그 전 빌드는 19)
+    public const int DWMWA_USE_IMMERSIVE_DARK_MODE_OLD = 19;
+    public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;         // Windows 11
+    public const int DWMWCP_ROUND = 2, DWMWCP_ROUNDSMALL = 3;
+
     // ── 모니터 ──
     [DllImport("user32.dll")] public static extern IntPtr MonitorFromPoint(POINT pt, uint flags);
     [DllImport("user32.dll")] public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);

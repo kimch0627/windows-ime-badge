@@ -92,6 +92,7 @@ sealed class BadgeForm : Form
 
         SystemEvents.SessionSwitch += OnSessionSwitch;
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+        SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
     }
 
     IntPtr Hook(uint evt, string name)
@@ -187,7 +188,35 @@ sealed class BadgeForm : Form
             _pauseItem.Checked = _paused;
             _autostartItem.Checked = Autostart.IsEnabled();
         };
+        ApplyMenuTheme(menu);
         return menu;
+    }
+
+    /// <summary>메뉴와 모든 하위 메뉴에 테마 렌더러를 적용하고, 열릴 때 Windows 11 식 둥근 모서리를 요청한다.</summary>
+    static void ApplyMenuTheme(ToolStripDropDown menu)
+    {
+        var renderer = Theme.CreateMenuRenderer();
+        void Walk(ToolStripDropDown dd)
+        {
+            dd.Renderer = renderer;
+            dd.Opened -= RoundOnOpened; dd.Opened += RoundOnOpened;
+            foreach (ToolStripItem it in dd.Items)
+                if (it is ToolStripMenuItem mi && mi.HasDropDownItems) Walk(mi.DropDown);
+        }
+        Walk(menu);
+    }
+
+    static void RoundOnOpened(object? sender, EventArgs e)
+    {
+        if (sender is ToolStripDropDown dd && dd.IsHandleCreated) Theme.RoundCorners(dd.Handle);
+    }
+
+    void OnUserPreferenceChanged(object? sender, UserPreferenceChangedEventArgs e)
+    {
+        if (IsDisposed) return;
+        if (InvokeRequired) { BeginInvoke(() => OnUserPreferenceChanged(sender, e)); return; }
+        if (e.Category is UserPreferenceCategory.General or UserPreferenceCategory.Color or UserPreferenceCategory.VisualStyle or UserPreferenceCategory.Accessibility)
+            if (_tray.ContextMenuStrip is { } menu) ApplyMenuTheme(menu);   // 밝게/어둡게 전환을 따라간다
     }
 
     // ── 트레이 아이콘·툴팁 ──
@@ -264,11 +293,11 @@ sealed class BadgeForm : Form
         return menu;
     }
 
-    /// <summary>설정이 바뀐 뒤 공통 처리: 저장, 다시 그리기, 단축키·주기 반영.</summary>
-    void OnSettingsChanged()
+    /// <summary>설정이 바뀐 뒤 공통 처리: 저장(편집 중 미리 반영일 때는 생략), 다시 그리기, 단축키·주기 반영.</summary>
+    void OnSettingsChanged(bool save = true)
     {
         _settings.Normalize();
-        _store.Save(_settings);
+        if (save) _store.Save(_settings);
         ResetRenderKey();                                   // 다음 틱에 강제로 다시 그림
         _flashUntil = DateTime.Now.AddMilliseconds(FlashMs); // DotFlash면 바로 글자를 한 번 보여 준다
         _timer.Interval = _settings.PollIntervalMs;
@@ -292,7 +321,8 @@ sealed class BadgeForm : Form
     {
         if (_settingsForm is { IsDisposed: false }) { _settingsForm.Activate(); return; }
         _settingsForm = new SettingsForm(_settings);
-        _settingsForm.Applied += OnSettingsChanged;
+        _settingsForm.Changed += () => OnSettingsChanged(save: false);   // 편집 중: 배지에 바로 반영, 저장은 아직
+        _settingsForm.Applied += () => OnSettingsChanged();               // 확인·취소: 저장
         _settingsForm.FormClosed += (_, _) => { _settingsForm?.Dispose(); _settingsForm = null; };
         _settingsForm.Show();
         _settingsForm.Activate();
@@ -583,6 +613,7 @@ sealed class BadgeForm : Form
         {
             SystemEvents.SessionSwitch -= OnSessionSwitch;
             SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+            SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
             _updateCts?.Cancel();
             for (int i = 0; i < _hooks.Length; i++)
                 if (_hooks[i] != IntPtr.Zero) { Native.UnhookWinEvent(_hooks[i]); _hooks[i] = IntPtr.Zero; }

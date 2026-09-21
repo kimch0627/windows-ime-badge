@@ -6,14 +6,17 @@ using System.Windows.Forms;
 namespace ImeBadge;
 
 /// <summary>
-/// 설정 창. 편집은 복사본(<see cref="_draft"/>)에 하고, [확인]을 눌러야 실제 설정에 반영된다.
+/// 설정 창. 바꾸는 즉시 실제 배지에 반영되어(WYSIWYG) 화면 밖 배지로 결과를 바로 볼 수 있고,
+/// [확인]을 누르면 저장, [취소]나 닫기를 누르면 창을 열 때의 설정으로 되돌린다.
+/// 편집은 복사본(<see cref="_draft"/>)에 하고 매번 실제 설정(<see cref="_live"/>)으로 복사한다.
 /// 미리보기는 실제 렌더러(<see cref="BadgeRenderer"/>)로 그려 창 밖 배지와 똑같이 보인다.
 /// </summary>
 sealed class SettingsForm : Form
 {
     readonly Settings _live;
     readonly Settings _draft;
-    bool _autostart;
+    readonly Settings _original;   // 취소할 때 되돌릴 값
+    bool _autostart, _dirty;
 
     ComboBox _style = null!, _placement = null!;
     TrackBar _size = null!, _opacity = null!;
@@ -23,13 +26,16 @@ sealed class SettingsForm : Form
     TextBox _excluded = null!;
     Panel _preview = null!;
 
-    /// <summary>[확인]으로 설정이 실제 반영된 뒤 발생.</summary>
+    /// <summary>편집 중 값이 바뀔 때마다 발생. 실제 설정에는 이미 복사되어 있으니 다시 그리기만 하면 된다(저장은 하지 않는다).</summary>
+    public event Action? Changed;
+    /// <summary>[확인]으로 확정되었거나 [취소]로 되돌려졌을 때 발생. 저장한다.</summary>
     public event Action? Applied;
 
     public SettingsForm(Settings live)
     {
         _live = live;
         _draft = live.Clone();
+        _original = live.Clone();
         _autostart = Autostart.IsEnabled();
 
         Text = $"{AppInfo.ProductName} 설정";
@@ -39,12 +45,20 @@ sealed class SettingsForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
         AutoScaleDimensions = new SizeF(96F, 96F);   // 아래 픽셀 크기들은 96 DPI 기준. 고DPI 에서 WinForms 가 배율을 곱한다
-        Font = new Font(BadgeRenderer.FontFamily, 9f);
+        Font = Theme.DialogFont;
         AutoSize = true; AutoSizeMode = AutoSizeMode.GrowAndShrink;
         Padding = new Padding(12);
 
         Build();
         LoadDraftIntoControls();
+        _dirty = false;   // 컨트롤 초기화로 생긴 변경 알림은 실제 변경이 아니다
+        Theme.Apply(this);
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        Theme.ApplyTitleBar(this);
     }
 
     // ── 화면 구성 ──
@@ -77,7 +91,9 @@ sealed class SettingsForm : Form
         var cancel = new Button { Text = "취소", DialogResult = DialogResult.Cancel, AutoSize = true };
         var ok = new Button { Text = "확인", AutoSize = true };
         var reset = new Button { Text = "기본값 복원", AutoSize = true, Margin = new Padding(24, 3, 3, 3) };
-        ok.Click += (_, _) => { Apply(); DialogResult = DialogResult.OK; };
+        // 모드리스(Show) 창은 DialogResult 만으로는 닫히지 않는다. 명시적으로 닫는다.
+        ok.Click += (_, _) => { Apply(); DialogResult = DialogResult.OK; Close(); };
+        cancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
         reset.Click += (_, _) => { _draft.CopyFrom(new Settings()); LoadDraftIntoControls(); };
         buttons.Controls.Add(cancel); buttons.Controls.Add(ok); buttons.Controls.Add(reset);
         root.Controls.Add(buttons, 0, 1);
@@ -94,17 +110,17 @@ sealed class SettingsForm : Form
 
         _style = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
         _style.Items.AddRange(Labels.Styles.Select(s => (object)s.label).ToArray());
-        _style.SelectedIndexChanged += (_, _) => { _draft.Style = Labels.Styles[Math.Max(0, _style.SelectedIndex)].value; RefreshPreview(); };
+        _style.SelectedIndexChanged += (_, _) => { _draft.Style = Labels.Styles[Math.Max(0, _style.SelectedIndex)].value; Touch(); };
         AddRow(t, "배지 모양", _style);
 
         _placement = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
         _placement.Items.AddRange(Labels.Placements.Select(p => (object)p.label).ToArray());
-        _placement.SelectedIndexChanged += (_, _) => { _draft.Placement = Labels.Placements[Math.Max(0, _placement.SelectedIndex)].value; RefreshPreview(); };
+        _placement.SelectedIndexChanged += (_, _) => { _draft.Placement = Labels.Placements[Math.Max(0, _placement.SelectedIndex)].value; Touch(); };
         AddRow(t, "위치", _placement);
 
         // 크기·불투명도는 눈으로 맞추는 값이라 숫자 입력보다 슬라이더가 자연스럽다(Windows 설정 앱과 같은 방식).
-        AddRow(t, "크기", Slider(out _size, 50, 300, 5, 25, v => { _draft.SizePercent = v; RefreshPreview(); }));
-        AddRow(t, "불투명도", Slider(out _opacity, 30, 100, 5, 10, v => { _draft.OpacityPercent = v; RefreshPreview(); }));
+        AddRow(t, "크기", Slider(out _size, 50, 300, 5, 25, v => { _draft.SizePercent = v; Touch(); }));
+        AddRow(t, "불투명도", Slider(out _opacity, 30, 100, 5, 10, v => { _draft.OpacityPercent = v; Touch(); }));
 
         _hangulColor = ColorButton(() => _draft.HangulColor, v => _draft.HangulColor = v);
         AddRow(t, "한글 배지 색", _hangulColor);
@@ -121,27 +137,27 @@ sealed class SettingsForm : Form
         var t = NewTable();
 
         _autostartBox = new CheckBox { Text = "Windows 로그인 시 자동 시작", AutoSize = true };
-        _autostartBox.CheckedChanged += (_, _) => _autostart = _autostartBox.Checked;
+        _autostartBox.CheckedChanged += (_, _) => _autostart = _autostartBox.Checked;   // 레지스트리는 [확인] 때만 만진다
         AddRow(t, null, _autostartBox);
 
         _fullscreen = new CheckBox { Text = "전체 화면 앱(게임·동영상)에서는 숨김", AutoSize = true };
-        _fullscreen.CheckedChanged += (_, _) => _draft.HideOnFullscreen = _fullscreen.Checked;
+        _fullscreen.CheckedChanged += (_, _) => { _draft.HideOnFullscreen = _fullscreen.Checked; Touch(); };
         AddRow(t, null, _fullscreen);
 
         _trayStateBox = new CheckBox { Text = "트레이 아이콘에도 한/영 상태 표시", AutoSize = true };
-        _trayStateBox.CheckedChanged += (_, _) => _draft.TrayShowsState = _trayStateBox.Checked;
+        _trayStateBox.CheckedChanged += (_, _) => { _draft.TrayShowsState = _trayStateBox.Checked; Touch(); };
         AddRow(t, null, _trayStateBox);
 
         _hotkey = new CheckBox { Text = "Ctrl+Alt+H 로 일시 중지 켜기/끄기", AutoSize = true };
-        _hotkey.CheckedChanged += (_, _) => _draft.HotkeyEnabled = _hotkey.Checked;
+        _hotkey.CheckedChanged += (_, _) => { _draft.HotkeyEnabled = _hotkey.Checked; Touch(); };
         AddRow(t, null, _hotkey);
 
         _updates = new CheckBox { Text = "새 버전이 나오면 알림 (하루 한 번 확인)", AutoSize = true };
-        _updates.CheckedChanged += (_, _) => _draft.CheckForUpdates = _updates.Checked;
+        _updates.CheckedChanged += (_, _) => { _draft.CheckForUpdates = _updates.Checked; Touch(); };
         AddRow(t, null, _updates);
 
         _poll = new NumericUpDown { Minimum = 50, Maximum = 1000, Increment = 50, Width = 80 };
-        _poll.ValueChanged += (_, _) => _draft.PollIntervalMs = (int)_poll.Value;
+        _poll.ValueChanged += (_, _) => { _draft.PollIntervalMs = (int)_poll.Value; Touch(); };
         AddRow(t, "확인 주기 (ms)", _poll);
         AddRow(t, null, new Label { Text = "작을수록 빨리 반응하고 CPU 를 조금 더 씁니다. 기본 100.", ForeColor = SystemColors.GrayText, AutoSize = true });
 
@@ -152,7 +168,7 @@ sealed class SettingsForm : Form
     GroupBox BuildPreviewGroup()
     {
         var g = NewGroup("미리보기");
-        _preview = new Panel { Location = ContentOrigin, Width = InnerWidth, Height = 120, BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle };
+        _preview = new Panel { Location = ContentOrigin, Width = InnerWidth, Height = 120, BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Tag = "custom-paint" };
         _preview.Paint += (_, e) => PaintPreview(e.Graphics);
         g.Controls.Add(_preview);
         return g;
@@ -164,7 +180,10 @@ sealed class SettingsForm : Form
         var t = NewTable();
         _excluded = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, Width = InnerWidth - 6, Height = 90, AcceptsReturn = true };
         _excluded.TextChanged += (_, _) =>
+        {
             _draft.ExcludedProcesses = _excluded.Lines.Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
+            Touch();
+        };
         AddRow(t, null, _excluded);
         AddRow(t, null, new Label
         {
@@ -182,7 +201,7 @@ sealed class SettingsForm : Form
 
     /// <summary>폭은 고정(GroupWidth), 높이는 내용에 맞춰 자란다. 자식은 Dock 없이 <see cref="ContentOrigin"/> 에 둔다.</summary>
     static GroupBox NewGroup(string title) =>
-        new()
+        new CardGroupBox
         {
             Text = title,
             AutoSize = true,
@@ -246,14 +265,14 @@ sealed class SettingsForm : Form
 
     Button ColorButton(Func<string> get, Action<string> set)
     {
-        var b = new Button { Width = 120, Height = 26, TextAlign = ContentAlignment.MiddleCenter, FlatStyle = FlatStyle.Flat };
+        var b = new Button { Width = 120, Height = 26, TextAlign = ContentAlignment.MiddleCenter, FlatStyle = FlatStyle.Flat, Tag = "color" };
         b.Click += (_, _) =>
         {
             using var dlg = new ColorDialog { Color = ToColor(get()), FullOpen = true };
             if (dlg.ShowDialog(this) != DialogResult.OK) return;
             set(ColorHex.ToHex(dlg.Color.ToArgb()));
             PaintColorButton(b, get());
-            RefreshPreview();
+            Touch();
         };
         return b;
     }
@@ -264,6 +283,7 @@ sealed class SettingsForm : Form
         var c = ToColor(hex);
         b.BackColor = c;
         b.ForeColor = BadgeRenderer.TextColorOn(c);
+        b.FlatAppearance.BorderColor = ControlPaint.Dark(c, 0.1f);
         b.Text = hex.ToUpperInvariant();
     }
 
@@ -284,6 +304,16 @@ sealed class SettingsForm : Form
         _hotkey.Checked = _draft.HotkeyEnabled;
         _updates.Checked = _draft.CheckForUpdates;
         _excluded.Text = string.Join(Environment.NewLine, _draft.ExcludedProcesses);
+        Touch();   // 컨트롤 값이 이미 같아서 이벤트가 안 온 항목까지 한 번에 반영
+    }
+
+    /// <summary>편집 내용을 실제 설정에 복사하고 알린다. 창 밖 배지가 바로 바뀐다.</summary>
+    void Touch()
+    {
+        _draft.Normalize();
+        _live.CopyFrom(_draft);
+        _dirty = true;
+        Changed?.Invoke();
         RefreshPreview();
     }
 
@@ -335,11 +365,22 @@ sealed class SettingsForm : Form
         }
     }
 
+    /// <summary>[확인]: 자동 시작을 반영하고 저장을 알린다. 배지 설정은 이미 실제 설정에 들어가 있다.</summary>
     void Apply()
     {
-        _draft.Normalize();
         _live.CopyFrom(_draft);
         if (_autostart != Autostart.IsEnabled()) Autostart.Set(_autostart);
+        _dirty = false;
+        Applied?.Invoke();
+    }
+
+    /// <summary>[취소]·닫기: 창을 열 때의 설정으로 되돌리고 저장을 알린다(그 사이 트레이 메뉴가 저장했을 수 있다).</summary>
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        base.OnFormClosing(e);
+        if (e.Cancel || DialogResult == DialogResult.OK || !_dirty) return;
+        _live.CopyFrom(_original);
+        _dirty = false;
         Applied?.Invoke();
     }
 }
