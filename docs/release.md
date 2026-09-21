@@ -47,18 +47,40 @@ CI(`.github/workflows/build.yml`)가 하는 일:
 
 SmartScreen 평판은 서명 후에도 다운로드 횟수가 쌓여야 경고가 사라집니다. EV 인증서는 즉시 평판을 받지만 비용이 큽니다.
 
-## winget 등록 (선택)
+## winget 등록
 
-정식 Release 가 생기면 `wingetcreate` 로 매니페스트를 만들어 microsoft/winget-pkgs 에 PR 을 냅니다.
+패키지 ID 는 `kimch0627.ImeBadge` 입니다. 등록되면 사용자는 `winget install kimch0627.ImeBadge` 한 줄로 설치합니다.
+
+매니페스트는 `winget/templates/` 의 템플릿에서 만들어집니다(`tools/winget/New-WingetManifest.ps1`).
+릴리스마다 `{{VERSION}}`, `{{SHA256}}`(릴리스의 SHA256SUMS.txt 에서), `{{DATE}}` 만 채워 넣습니다.
+1.0.0 매니페스트는 `winget/manifests/k/kimch0627/ImeBadge/1.0.0/` 에 있고, winget 스키마 1.10.0 으로 검증했습니다.
+
+### 자동 제출 (권장)
+
+1. GitHub 에서 **개인 액세스 토큰(classic)** 을 만듭니다. 권한은 `public_repo` 하나면 됩니다.
+   (wingetcreate 가 이 토큰으로 내 계정에 `winget-pkgs` 포크를 만들고 PR 을 엽니다.)
+2. 저장소 **Settings → Secrets and variables → Actions** 에 `WINGET_TOKEN` 으로 넣습니다.
+3. 이후 정식 릴리스가 만들어질 때마다 `build.yml` 의 `winget` 잡이 `winget.yml` 을 호출해 PR 을 냅니다.
+   이미 만들어진 릴리스(예: 1.0.0)는 Actions 탭 → **winget** → Run workflow 에 버전을 넣어 수동으로 제출합니다.
+
+토큰이 없으면 워크플로는 매니페스트만 만들고 `winget submit: false` 를 남기고 끝납니다.
+
+### 수동 제출
 
 ```powershell
 winget install wingetcreate
-wingetcreate new https://github.com/kimch0627/windows-ime-badge/releases/download/v1.0.0/ImeBadge-Setup-1.0.0.exe
-# PackageIdentifier: kimch0627.ImeBadge, InstallerType: inno
-wingetcreate submit <생성된 매니페스트 폴더>
+./tools/winget/New-WingetManifest.ps1 -Version 1.0.0          # winget/manifests/k/kimch0627/ImeBadge/1.0.0/
+wingetcreate submit winget/manifests/k/kimch0627/ImeBadge/1.0.0  # 브라우저 로그인 또는 --token <PAT>
 ```
 
-이후 버전은 `wingetcreate update kimch0627.ImeBadge --urls <새 URL> --version 1.0.1 --submit` 한 줄입니다.
+### 심사에서 확인하는 것
+
+- 첫 등록은 사람이 검토합니다(보통 며칠). `Publisher`(kimch0627)와 `PackageName`(ImeBadge)이 exe 파일 속성의
+  회사·제품 이름과 같아야 하며, csproj 의 `Company`/`Product` 가 그 값입니다.
+- 설치 프로그램은 조용히(`/VERYSILENT`) 설치·제거되어야 합니다. Inno Setup 이 기본으로 지원하고, `Scope: user` +
+  `/CURRENTUSER` 로 관리자 권한 없이 설치됩니다.
+- `ProductCode` 는 Inno 의 `AppId` + `_is1` 입니다. 설치 프로그램의 `AppId` 를 바꾸면 매니페스트도 바꿔야 합니다.
+- 미서명 설치 프로그램도 등록은 되지만, SmartScreen 경고는 그대로입니다.
 
 ## Microsoft Store (선택, 서명 비용 없음)
 
@@ -86,4 +108,5 @@ dotnet publish src/ImeBadge -c Release -r win-x64 --self-contained true -p:Publi
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=1.0.0 /DMyAppFileVersion=1.0.0.0 "/DMySourceExe=..\src\ImeBadge\bin\Release\net8.0-windows\win-x64\publish\ImeBadge.exe" installer\ImeBadge.iss
 ```
 
-아이콘을 다시 만들려면 `pip install pillow` 후 `python tools/make_icons.py` (Windows 에서는 Malgun Gothic 을 자동으로 찾습니다).
+아이콘을 다시 만들려면 `pip install pillow` 후 `python tools/make_icons.py`. 글꼴 없이 도형(텍스트 커서 + 배지)만 그리므로
+어느 OS 에서 만들어도 같고, 특정 언어 글자가 없어 다른 언어 IME 를 지원하게 되어도 바꿀 필요가 없습니다.
