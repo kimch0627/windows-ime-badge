@@ -352,7 +352,11 @@ sealed class BadgeForm : Form
         return menu;
     }
 
-    /// <summary>설정이 바뀐 뒤 공통 처리: 저장(편집 중 미리 반영일 때는 생략), 다시 그리기, 단축키·주기 반영.</summary>
+    // 마지막으로 반영한 단축키·트레이 관련 설정. 설정 창에서 슬라이더를 끌 때마다 불리므로, 실제로 바뀐 것만 다시 적용한다.
+    (bool enabled, string hotkey) _appliedHotkey;
+    (string hangul, string english, bool showState) _appliedTray;
+
+    /// <summary>설정이 바뀐 뒤 공통 처리: 저장(편집 중 미리 반영일 때는 생략), 다시 그리기, 단축키·주기·트레이 반영.</summary>
     void OnSettingsChanged(bool save = true)
     {
         _settings.Normalize();
@@ -360,8 +364,13 @@ sealed class BadgeForm : Form
         ResetRenderKey();                                   // 다음 틱에 강제로 다시 그림
         _flashUntil = DateTime.Now.AddMilliseconds(FlashMs); // DotFlash면 바로 글자를 한 번 보여 준다
         _timer.Interval = _settings.PollIntervalMs;
-        ApplyHotkey(warnOnFailure: save);
-        RefreshTray();   // 배지 색이나 "트레이에 상태 표시" 설정이 바뀌었을 수 있다
+
+        var hk = (_settings.HotkeyEnabled, _settings.Hotkey);
+        if (hk != _appliedHotkey || save) { _appliedHotkey = hk; ApplyHotkey(warnOnFailure: save); }
+
+        var tray = (_settings.HangulColor, _settings.EnglishColor, _settings.TrayShowsState);
+        if (tray != _appliedTray) { _appliedTray = tray; RefreshTray(); }
+
         Poll();
     }
 

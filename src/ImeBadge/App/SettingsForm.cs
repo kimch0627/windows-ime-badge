@@ -16,7 +16,7 @@ sealed class SettingsForm : Form
     readonly Settings _live;
     readonly Settings _draft;
     readonly Settings _original;   // 취소할 때 되돌릴 값
-    bool _autostart, _dirty;
+    bool _autostart, _dirty, _loading;
 
     ComboBox _style = null!, _placement = null!;
     TrackBar _size = null!, _opacity = null!;
@@ -377,7 +377,16 @@ sealed class SettingsForm : Form
 
     static Color ToColor(string hex) => Color.FromArgb(ColorHex.TryParse(hex, out int a) ? a : unchecked((int)0xFF000000));
 
+    /// <summary>초안을 컨트롤에 싣는다. 컨트롤마다 변경 이벤트가 오지만 끝에 한 번만 반영한다.</summary>
     void LoadDraftIntoControls()
+    {
+        _loading = true;
+        try { FillControls(); }
+        finally { _loading = false; }
+        Touch();
+    }
+
+    void FillControls()
     {
         _style.SelectedIndex = Array.FindIndex(Labels.Styles, s => s.value == _draft.Style);
         _placement.SelectedIndex = Array.FindIndex(Labels.Placements, p => p.value == _draft.Placement);
@@ -395,12 +404,12 @@ sealed class SettingsForm : Form
         _hotkeyBox.Text = _draft.Hotkey;
         _updates.Checked = _draft.CheckForUpdates;
         RefreshExcludedList();
-        Touch();   // 컨트롤 값이 이미 같아서 이벤트가 안 온 항목까지 한 번에 반영
     }
 
     /// <summary>편집 내용을 실제 설정에 복사하고 알린다. 창 밖 배지가 바로 바뀐다.</summary>
     void Touch()
     {
+        if (_loading) return;   // 컨트롤을 채우는 중에는 마지막에 한 번만
         _draft.Normalize();
         _live.CopyFrom(_draft);
         _dirty = true;
