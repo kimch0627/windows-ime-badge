@@ -27,6 +27,12 @@ GitHub **[Releases](https://github.com/kimch0627/windows-ime-badge/releases)** �
 | `ImeBadge-win-x64-selfcontained.exe` | 설치 없이 그냥 실행하고 싶은 분 | 약 19 MB 단일 파일. 아무 폴더에 두고 실행 |
 | `ImeBadge-win-x64.exe` | PC에 .NET 8 데스크톱 런타임이 이미 있는 분 | 약 200 KB. 없으면 실행 시 설치 안내 창이 뜸 (`winget install Microsoft.DotNet.DesktopRuntime.8`) |
 
+winget 을 쓰신다면 (등록 심사가 끝난 뒤부터):
+
+```powershell
+winget install kimch0627.ImeBadge
+```
+
 처음 실행하면 Windows SmartScreen 이 "알 수 없는 게시자" 경고를 띄울 수 있습니다(아직 코드 서명 전).
 **추가 정보 → 실행** 을 누르면 됩니다. 파일이 바뀌지 않았는지 확인하려면 Release 의 `SHA256SUMS.txt` 와 비교하세요.
 
@@ -39,7 +45,7 @@ GitHub **[Releases](https://github.com/kimch0627/windows-ime-badge/releases)** �
 
 ### 사용법
 
-1. 실행하면 작업 표시줄 오른쪽 트레이에 파란 `한` 아이콘이 생깁니다. 첫 실행이면 안내 풍선이 한 번 뜹니다.
+1. 실행하면 작업 표시줄 오른쪽 트레이에 파란 커서 모양 아이콘이 생깁니다. 첫 실행이면 안내 풍선이 한 번 뜹니다.
 2. 메모장을 열고 한/영 키를 눌러 보세요. 커서 옆 배지가 `한` ↔ `A`로 바뀝니다.
 3. 트레이 아이콘을 **더블클릭**하면 설정 창, **우클릭**하면 메뉴가 열립니다.
 
@@ -117,7 +123,7 @@ src/ImeBadge/           Windows 앱
   App/CrashHandler.cs   잡히지 않은 예외 → errors.log, 반복되면 안내 후 종료
   App/UpdateChecker.cs  GitHub Releases latest 조회
   App/Icons.cs          포함 아이콘 로드
-  Assets/*.ico          tools/make_icons.py 로 생성
+  Assets/*.ico          tools/make_icons.py 로 생성. 언어 중립 도형(커서 + 배지)이라 다른 언어 IME 를 지원해도 그대로 쓴다
 tests/ImeBadge.Core.Tests/  xUnit
 installer/ImeBadge.iss  Inno Setup 스크립트
 ```
