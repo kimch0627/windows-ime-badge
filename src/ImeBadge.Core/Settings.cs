@@ -34,6 +34,8 @@ public sealed class Settings
     public bool HotkeyEnabled { get; set; } = true;
     /// <summary>폴링 주기(ms). 50~1000.</summary>
     public int PollIntervalMs { get; set; } = 100;
+    /// <summary>트레이 아이콘에 현재 한/영 상태를 보여 준다("한"/"A"). 끄면 항상 기본 아이콘.</summary>
+    public bool TrayShowsState { get; set; } = true;
 
     // ── 업데이트 ──
     public bool CheckForUpdates { get; set; } = true;
@@ -73,7 +75,7 @@ public sealed class Settings
         HangulColor = other.HangulColor; EnglishColor = other.EnglishColor;
         HideOnFullscreen = other.HideOnFullscreen;
         ExcludedProcesses = new List<string>(other.ExcludedProcesses);
-        HotkeyEnabled = other.HotkeyEnabled; PollIntervalMs = other.PollIntervalMs;
+        HotkeyEnabled = other.HotkeyEnabled; PollIntervalMs = other.PollIntervalMs; TrayShowsState = other.TrayShowsState;
         CheckForUpdates = other.CheckForUpdates; LastUpdateCheckUtc = other.LastUpdateCheckUtc;
         SkippedUpdateTag = other.SkippedUpdateTag;
     }

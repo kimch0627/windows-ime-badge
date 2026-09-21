@@ -23,6 +23,9 @@ sealed class BadgeForm : Form
     readonly bool _firstRun;
     readonly System.Windows.Forms.Timer _timer = new();
     readonly NotifyIcon _tray;
+    readonly TrayIcons _trayIcons = new();
+    ImeState _trayState = ImeState.Unknown;   // 트레이 아이콘·툴팁이 마지막으로 반영한 상태
+    bool _trayPaused;
     readonly Native.WinEventProc _eventProc;   // GC 회수 방지용 필드
     readonly IntPtr[] _hooks = new IntPtr[3];
 
@@ -43,7 +46,7 @@ sealed class BadgeForm : Form
     SettingsForm? _settingsForm;
     AboutForm? _aboutForm;
 
-    ToolStripMenuItem _pauseItem = null!, _autostartItem = null!;
+    ToolStripMenuItem _pauseItem = null!, _autostartItem = null!, _statusItem = null!;
 
     public BadgeForm(Settings settings, SettingsStore store, AppPaths paths, bool firstRun)
     {
@@ -64,10 +67,12 @@ sealed class BadgeForm : Form
         _tray = new NotifyIcon
         {
             Icon = Icons.App,
-            Text = AppInfo.DisplayName + (Log.Enabled ? " [debug]" : ""),
+            Text = TrayText(ImeState.Unknown),
             ContextMenuStrip = BuildMenu(),
             Visible = true,
         };
+        // 왼쪽 클릭은 트레이 앱의 대표 동작(Windows 관행). 더블클릭도 같은 곳으로 간다.
+        _tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) OpenSettings(); };
         _tray.DoubleClick += (_, _) => OpenSettings();
         _tray.BalloonTipClicked += (_, _) =>
         {
@@ -135,6 +140,11 @@ sealed class BadgeForm : Form
     {
         var menu = new ContextMenuStrip();
 
+        // 맨 위 한 줄은 현재 상태. 누를 수 없는 안내 항목이라 비활성으로 둔다.
+        _statusItem = new ToolStripMenuItem { Enabled = false };
+        menu.Items.Add(_statusItem);
+        menu.Items.Add(new ToolStripSeparator());
+
         _pauseItem = new ToolStripMenuItem("일시 중지(&P)", null, (_, _) => TogglePause()) { ShortcutKeyDisplayString = "Ctrl+Alt+H" };
         menu.Items.Add(_pauseItem);
         // 더블클릭과 같은 동작인 "설정"을 굵게: Windows 관행에서 굵은 항목이 기본 동작이다.
@@ -173,10 +183,48 @@ sealed class BadgeForm : Form
         menu.Opening += (_, _) =>
         {
             RefreshChecks(menu.Items);
+            _statusItem.Text = "현재: " + StateText(_trayState);
             _pauseItem.Checked = _paused;
             _autostartItem.Checked = Autostart.IsEnabled();
         };
         return menu;
+    }
+
+    // ── 트레이 아이콘·툴팁 ──
+    string StateText(ImeState state) => _paused ? "일시 중지" : state switch
+    {
+        ImeState.Hangul => "한글 입력",
+        ImeState.English => "영문 입력",
+        ImeState.OtherLang => "다른 언어 입력",
+        _ => "입력 위치 없음",
+    };
+
+    /// <summary>툴팁: 이름 · 상태 · 단축키. NotifyIcon.Text 는 127자 제한이 있다.</summary>
+    string TrayText(ImeState state)
+    {
+        string s = AppInfo.DisplayName + " · " + StateText(state);
+        if (_paused) s += _settings.HotkeyEnabled ? " · Ctrl+Alt+H 로 재개" : "";
+        else if (_settings.HotkeyEnabled) s += " · Ctrl+Alt+H 일시 중지";
+        if (Log.Enabled) s += " [debug]";
+        return s.Length > 127 ? s[..127] : s;
+    }
+
+    /// <summary>트레이 아이콘과 툴팁을 상태에 맞춘다. 같은 상태면 아무것도 하지 않는다(Shell_NotifyIcon 호출을 아낀다).</summary>
+    void UpdateTray(ImeState state, bool force = false)
+    {
+        if (!_settings.TrayShowsState) state = ImeState.Unknown;
+        if (!force && state == _trayState && _paused == _trayPaused) return;
+        _trayState = state; _trayPaused = _paused;
+        _tray.Icon = _trayIcons.Get(state, _paused, SystemInformation.SmallIconSize.Width, BadgeTheme.From(_settings));
+        _tray.Text = TrayText(state);
+    }
+
+    /// <summary>색·DPI 가 바뀌어 캐시한 아이콘을 버리고 다시 그린다. 트레이가 버릴 아이콘을 가리키지 않도록 먼저 기본 아이콘으로 돌린다.</summary>
+    void RefreshTray()
+    {
+        _tray.Icon = Icons.App;
+        _trayIcons.Clear();
+        UpdateTray(_trayState, force: true);
     }
 
     static void RefreshChecks(ToolStripItemCollection items)
@@ -225,6 +273,7 @@ sealed class BadgeForm : Form
         _flashUntil = DateTime.Now.AddMilliseconds(FlashMs); // DotFlash면 바로 글자를 한 번 보여 준다
         _timer.Interval = _settings.PollIntervalMs;
         ApplyHotkey();
+        RefreshTray();   // 배지 색이나 "트레이에 상태 표시" 설정이 바뀌었을 수 있다
         Poll();
     }
 
@@ -234,9 +283,8 @@ sealed class BadgeForm : Form
     void TogglePause()
     {
         _paused = !_paused;
-        _tray.Icon = _paused ? Icons.Paused : Icons.App;
-        _tray.Text = AppInfo.DisplayName + (_paused ? " - 일시 중지" : "") + (Log.Enabled ? " [debug]" : "");
         Log.Write(_paused ? "paused" : "resumed");
+        UpdateTray(ImeState.Unknown, force: true);
         Poll();
     }
 
@@ -335,6 +383,7 @@ sealed class BadgeForm : Form
         if (InvokeRequired) { BeginInvoke(() => OnDisplaySettingsChanged(sender, e)); return; }
         ResetRenderKey();   // 모니터·DPI 가 바뀌면 배율이 달라질 수 있으니 다시 그린다
         _lastPos = new(int.MinValue, int.MinValue);
+        RefreshTray();      // 트레이 아이콘 크기(SmallIconSize)도 DPI 를 따라간다
     }
 
     // ── 창 속성 ──
@@ -380,6 +429,7 @@ sealed class BadgeForm : Form
     void HideBadge()
     {
         if (Visible) { Hide(); _hiddenSince = Environment.TickCount64; }
+        UpdateTray(ImeState.Unknown);
         AdjustIdleInterval();
     }
 
@@ -407,6 +457,7 @@ sealed class BadgeForm : Form
             _lastState = s.State;
             _flashUntil = DateTime.Now.AddMilliseconds(FlashMs);
         }
+        UpdateTray(s.State);
 
         // DotFlash: 변경 직후 1.5초는 둥근 배지, 그 뒤는 점
         var style = _settings.Style;
@@ -539,7 +590,9 @@ sealed class BadgeForm : Form
             _settingsForm?.Dispose();
             _aboutForm?.Dispose();
             _tray.Visible = false;
+            _tray.Icon = Icons.App;   // 캐시한 아이콘을 해제하기 전에 참조를 끊는다
             _tray.Dispose();
+            _trayIcons.Dispose();
         }
         base.Dispose(disposing);
     }

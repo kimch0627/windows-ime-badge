@@ -38,6 +38,7 @@ public sealed class SettingsStoreTests : IDisposable
             HangulColor = "#FF0000",
             ExcludedProcesses = new List<string> { "mstsc", "Unreal*" },
             HideOnFullscreen = false,
+            TrayShowsState = false,
             LastUpdateCheckUtc = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc),
             SkippedUpdateTag = "v9.9.9",
         };
@@ -51,6 +52,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal("#FF0000", back.HangulColor);
         Assert.Equal(new[] { "mstsc", "Unreal*" }, back.ExcludedProcesses);
         Assert.False(back.HideOnFullscreen);
+        Assert.False(back.TrayShowsState);
         Assert.Equal(s.LastUpdateCheckUtc, back.LastUpdateCheckUtc);
         Assert.Equal("v9.9.9", back.SkippedUpdateTag);
         Assert.False(File.Exists(P("settings.json.tmp")));   // 임시 파일은 남지 않는다

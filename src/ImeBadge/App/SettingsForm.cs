@@ -19,7 +19,7 @@ sealed class SettingsForm : Form
     TrackBar _size = null!, _opacity = null!;
     NumericUpDown _poll = null!;
     Button _hangulColor = null!, _englishColor = null!;
-    CheckBox _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!;
+    CheckBox _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!;
     TextBox _excluded = null!;
     Panel _preview = null!;
 
@@ -127,6 +127,10 @@ sealed class SettingsForm : Form
         _fullscreen = new CheckBox { Text = "전체 화면 앱(게임·동영상)에서는 숨김", AutoSize = true };
         _fullscreen.CheckedChanged += (_, _) => _draft.HideOnFullscreen = _fullscreen.Checked;
         AddRow(t, null, _fullscreen);
+
+        _trayStateBox = new CheckBox { Text = "트레이 아이콘에도 한/영 상태 표시", AutoSize = true };
+        _trayStateBox.CheckedChanged += (_, _) => _draft.TrayShowsState = _trayStateBox.Checked;
+        AddRow(t, null, _trayStateBox);
 
         _hotkey = new CheckBox { Text = "Ctrl+Alt+H 로 일시 중지 켜기/끄기", AutoSize = true };
         _hotkey.CheckedChanged += (_, _) => _draft.HotkeyEnabled = _hotkey.Checked;
@@ -276,6 +280,7 @@ sealed class SettingsForm : Form
         PaintColorButton(_englishColor, _draft.EnglishColor);
         _autostartBox.Checked = _autostart;
         _fullscreen.Checked = _draft.HideOnFullscreen;
+        _trayStateBox.Checked = _draft.TrayShowsState;
         _hotkey.Checked = _draft.HotkeyEnabled;
         _updates.Checked = _draft.CheckForUpdates;
         _excluded.Text = string.Join(Environment.NewLine, _draft.ExcludedProcesses);
