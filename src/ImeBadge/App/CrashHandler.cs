@@ -41,10 +41,13 @@ static class CrashHandler
         Log.Error("fatal", ex);
         try
         {
-            MessageBox.Show(
-                $"{AppInfo.DisplayName}에 문제가 생겨 종료합니다.\n\n{ex?.GetType().Name}: {ex?.Message}\n\n" +
-                $"자세한 내용은 로그 폴더의 errors.log 에 기록되어 있습니다.\n{AppPaths.Default().LogDir}",
-                AppInfo.ProductName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+            string logDir = AppPaths.Default().LogDir;
+            bool open = Dialogs.Fatal(
+                $"{AppInfo.DisplayName}에 문제가 생겨 종료합니다.",
+                "자세한 내용은 로그 폴더의 errors.log 에 기록되어 있습니다. 문제가 반복되면 이 파일과 함께 이슈로 알려 주세요.",
+                ex is null ? null : $"{ex.GetType().Name}: {ex.Message}",
+                logDir);
+            if (open) AboutForm.OpenFolder(logDir);
         }
         catch { }
         Environment.Exit(1);

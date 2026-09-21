@@ -16,6 +16,19 @@ sealed class BadgeForm : Form
     const int HotkeyId = 1;
     const int IdleAfterMs = 2000;      // 배지가 이만큼 숨겨져 있으면 폴링을 느리게
     const int FlashMs = 1500;          // DotFlash: 변경 직후 글자를 보여 주는 시간
+    const int FadeMs = 150;            // 나타날 때 페이드인
+    const int PulseMs = 260;           // 한/영이 바뀔 때 살짝 커졌다 돌아오는 시간
+    const float PulseGrow = 0.18f;     // 펄스 최대 확대 비율
+
+    /// <summary>진행 중인 배지 애니메이션. 별도의 16ms 타이머가 마지막 상태로 다시 그린다(IME 는 다시 읽지 않는다).</summary>
+    enum Anim { None, FadeIn, Pulse }
+    Anim _anim;
+    long _animStart;
+    readonly System.Windows.Forms.Timer _animTimer = new() { Interval = 16 };
+    Snapshot _lastSnapshot;
+    Bitmap? _lastBmp;          // 마지막으로 올린 비트맵. 알파만 바꿔 다시 올릴 때 쓴다
+    byte _lastAlpha = 255;
+    bool _systemAnimations = Native.AnimationsEnabled();   // Windows 접근성 "애니메이션 효과"
 
     readonly Settings _settings;
     readonly SettingsStore _store;
@@ -23,6 +36,9 @@ sealed class BadgeForm : Form
     readonly bool _firstRun;
     readonly System.Windows.Forms.Timer _timer = new();
     readonly NotifyIcon _tray;
+    readonly TrayIcons _trayIcons = new();
+    ImeState _trayState = ImeState.Unknown;   // 트레이 아이콘·툴팁이 마지막으로 반영한 상태
+    bool _trayPaused;
     readonly Native.WinEventProc _eventProc;   // GC 회수 방지용 필드
     readonly IntPtr[] _hooks = new IntPtr[3];
 
@@ -43,7 +59,7 @@ sealed class BadgeForm : Form
     SettingsForm? _settingsForm;
     AboutForm? _aboutForm;
 
-    ToolStripMenuItem _pauseItem = null!, _autostartItem = null!;
+    ToolStripMenuItem _pauseItem = null!, _autostartItem = null!, _statusItem = null!;
 
     public BadgeForm(Settings settings, SettingsStore store, AppPaths paths, bool firstRun)
     {
@@ -64,10 +80,12 @@ sealed class BadgeForm : Form
         _tray = new NotifyIcon
         {
             Icon = Icons.App,
-            Text = AppInfo.DisplayName + (Log.Enabled ? " [debug]" : ""),
+            Text = TrayText(ImeState.Unknown),
             ContextMenuStrip = BuildMenu(),
             Visible = true,
         };
+        // 왼쪽 클릭은 트레이 앱의 대표 동작(Windows 관행). 더블클릭도 같은 곳으로 간다.
+        _tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) OpenSettings(); };
         _tray.DoubleClick += (_, _) => OpenSettings();
         _tray.BalloonTipClicked += (_, _) =>
         {
@@ -78,6 +96,7 @@ sealed class BadgeForm : Form
         _timer.Interval = _settings.PollIntervalMs;
         _timer.Tick += (_, _) => Poll();
         _timer.Start();
+        _animTimer.Tick += (_, _) => AnimTick();
 
         // OS 이벤트가 오면 타이머를 기다리지 않고 바로 다시 읽는다.
         _eventProc = (_, _, _, _, _, _, _) => Poll();
@@ -87,6 +106,7 @@ sealed class BadgeForm : Form
 
         SystemEvents.SessionSwitch += OnSessionSwitch;
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+        SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
     }
 
     IntPtr Hook(uint evt, string name)
@@ -121,13 +141,19 @@ sealed class BadgeForm : Form
         base.OnHandleDestroyed(e);
     }
 
-    void ApplyHotkey()
+    /// <summary>설정의 단축키를 전역으로 등록한다. <paramref name="warnOnFailure"/> 면 실패를 사용자에게도 알린다(설정 저장 시).</summary>
+    void ApplyHotkey(bool warnOnFailure = false)
     {
         if (!IsHandleCreated) return;
         if (_hotkeyRegistered) { Native.UnregisterHotKey(Handle, HotkeyId); _hotkeyRegistered = false; }
+        _pauseItem.ShortcutKeyDisplayString = _settings.HotkeyEnabled ? _settings.Hotkey : null;
         if (!_settings.HotkeyEnabled) return;
-        _hotkeyRegistered = Native.RegisterHotKey(Handle, HotkeyId, Native.MOD_CONTROL | Native.MOD_ALT | Native.MOD_NOREPEAT, 'H');
-        if (!_hotkeyRegistered) Log.Error("hotkey Ctrl+Alt+H registration failed (already used by another app?)");
+        if (!HotkeySpec.TryParse(_settings.Hotkey, out var hk)) hk = HotkeySpec.Default;
+        _hotkeyRegistered = Native.RegisterHotKey(Handle, HotkeyId, (uint)hk.Modifiers | Native.MOD_NOREPEAT, (uint)hk.Key);
+        if (_hotkeyRegistered) return;
+        Log.Error($"hotkey {hk} registration failed (already used by another app?)");
+        if (warnOnFailure)
+            Dialogs.Warning($"단축키 {hk} 을(를) 등록하지 못했습니다.", "다른 프로그램이 같은 조합을 쓰고 있을 수 있습니다. 설정에서 다른 조합을 고르세요.");
     }
 
     // ── 트레이 메뉴 ──
@@ -135,40 +161,38 @@ sealed class BadgeForm : Form
     {
         var menu = new ContextMenuStrip();
 
-        _pauseItem = new ToolStripMenuItem("일시 중지(&P)", null, (_, _) => TogglePause()) { ShortcutKeyDisplayString = "Ctrl+Alt+H" };
+        // 맨 위 한 줄은 현재 상태. 누를 수 없는 안내 항목이라 비활성으로 둔다.
+        _statusItem = new ToolStripMenuItem { Enabled = false };
+        menu.Items.Add(_statusItem);
+        menu.Items.Add(new ToolStripSeparator());
+
+        _pauseItem = new ToolStripMenuItem("일시 중지(&P)", null, (_, _) => TogglePause()) { ShortcutKeyDisplayString = _settings.HotkeyEnabled ? _settings.Hotkey : null };
         menu.Items.Add(_pauseItem);
-        menu.Items.Add(new ToolStripMenuItem("설정(&S)...", null, (_, _) => OpenSettings()));
+        // 더블클릭과 같은 동작인 "설정"을 굵게: Windows 관행에서 굵은 항목이 기본 동작이다.
+        var settingsItem = new ToolStripMenuItem("설정(&S)...", null, (_, _) => OpenSettings());
+        settingsItem.Font = new Font(settingsItem.Font, FontStyle.Bold);
+        menu.Items.Add(settingsItem);
         menu.Items.Add(new ToolStripSeparator());
 
         var shape = new ToolStripMenuItem("모양(&M)");
-        AddRadio(shape, "사각 배지  [한]", () => _settings.Style == BadgeStyle.Box, () => _settings.Style = BadgeStyle.Box);
-        AddRadio(shape, "둥근 배지  (한)", () => _settings.Style == BadgeStyle.Pill, () => _settings.Style = BadgeStyle.Pill);
-        AddRadio(shape, "점  ●", () => _settings.Style == BadgeStyle.Dot, () => _settings.Style = BadgeStyle.Dot);
-        AddRadio(shape, "밑줄  ▬", () => _settings.Style == BadgeStyle.Underline, () => _settings.Style = BadgeStyle.Underline);
-        AddRadio(shape, "점 + 바뀔 때만 글자", () => _settings.Style == BadgeStyle.DotFlash, () => _settings.Style = BadgeStyle.DotFlash);
+        foreach (var (label, value) in Labels.Styles)
+            AddRadio(shape, label, () => _settings.Style == value, () => _settings.Style = value);
         menu.Items.Add(shape);
 
         var place = new ToolStripMenuItem("위치(&L)");
-        AddRadio(place, "커서 오른쪽 위", () => _settings.Placement == BadgePlacement.AboveRight, () => _settings.Placement = BadgePlacement.AboveRight);
-        AddRadio(place, "커서 오른쪽 아래", () => _settings.Placement == BadgePlacement.BelowRight, () => _settings.Placement = BadgePlacement.BelowRight);
+        foreach (var (label, value) in Labels.Placements)
+            AddRadio(place, label, () => _settings.Placement == value, () => _settings.Placement = value);
         menu.Items.Add(place);
 
-        var size = new ToolStripMenuItem("크기(&Z)");
-        foreach (var (label, pct) in new[] { ("작게 (80%)", 80), ("보통 (100%)", 100), ("크게 (130%)", 130), ("아주 크게 (160%)", 160) })
-            AddRadio(size, label, () => _settings.SizePercent == pct, () => _settings.SizePercent = pct);
-        menu.Items.Add(size);
-
-        var opacity = new ToolStripMenuItem("투명도(&O)");
-        foreach (var (label, pct) in new[] { ("불투명 (100%)", 100), ("살짝 비침 (85%)", 85), ("반투명 (70%)", 70), ("많이 비침 (50%)", 50) })
-            AddRadio(opacity, label, () => _settings.OpacityPercent == pct, () => _settings.OpacityPercent = pct);
-        menu.Items.Add(opacity);
+        menu.Items.Add(PresetMenu("크기(&Z)", Labels.SizePresets, () => _settings.SizePercent, v => _settings.SizePercent = v));
+        menu.Items.Add(PresetMenu("불투명도(&O)", Labels.OpacityPresets, () => _settings.OpacityPercent, v => _settings.OpacityPercent = v));
 
         menu.Items.Add(new ToolStripSeparator());
         _autostartItem = new ToolStripMenuItem("로그인 시 자동 시작(&A)", null, (_, _) =>
         {
             bool on = !Autostart.IsEnabled();
             if (!Autostart.Set(on))
-                MessageBox.Show("자동 시작 설정을 바꾸지 못했습니다. 로그 폴더의 errors.log 를 확인하세요.", AppInfo.ProductName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                Dialogs.Warning("자동 시작 설정을 바꾸지 못했습니다.", "로그 폴더의 errors.log 에 원인이 기록되어 있습니다. (트레이 메뉴 → 정보 → 로그 폴더 열기)");
         });
         menu.Items.Add(_autostartItem);
         menu.Items.Add(new ToolStripMenuItem("업데이트 확인(&U)", null, (_, _) => CheckForUpdates(manual: true)));
@@ -180,10 +204,115 @@ sealed class BadgeForm : Form
         menu.Opening += (_, _) =>
         {
             RefreshChecks(menu.Items);
+            _statusItem.Text = "현재: " + StateText(_trayState);
             _pauseItem.Checked = _paused;
             _autostartItem.Checked = Autostart.IsEnabled();
         };
+        ApplyMenuTheme(menu);
         return menu;
+    }
+
+    /// <summary>메뉴와 모든 하위 메뉴에 테마 렌더러를 적용하고, 열릴 때 Windows 11 식 둥근 모서리를 요청한다.</summary>
+    static void ApplyMenuTheme(ToolStripDropDown menu)
+    {
+        var renderer = Theme.CreateMenuRenderer();
+        void Walk(ToolStripDropDown dd)
+        {
+            dd.Renderer = renderer;
+            dd.Opened -= RoundOnOpened; dd.Opened += RoundOnOpened;
+            foreach (ToolStripItem it in dd.Items)
+                if (it is ToolStripMenuItem mi && mi.HasDropDownItems) Walk(mi.DropDown);
+        }
+        Walk(menu);
+    }
+
+    static void RoundOnOpened(object? sender, EventArgs e)
+    {
+        if (sender is ToolStripDropDown dd && dd.IsHandleCreated) Theme.RoundCorners(dd.Handle);
+    }
+
+    void OnUserPreferenceChanged(object? sender, UserPreferenceChangedEventArgs e)
+    {
+        if (IsDisposed) return;
+        if (InvokeRequired) { BeginInvoke(() => OnUserPreferenceChanged(sender, e)); return; }
+        if (e.Category is UserPreferenceCategory.General or UserPreferenceCategory.Color or UserPreferenceCategory.VisualStyle or UserPreferenceCategory.Accessibility)
+        {
+            if (_tray.ContextMenuStrip is { } menu) ApplyMenuTheme(menu);   // 밝게/어둡게 전환을 따라간다
+            _systemAnimations = Native.AnimationsEnabled();
+        }
+    }
+
+    // ── 애니메이션 ──
+    bool AnimationsOn => _settings.Animate && _systemAnimations;
+
+    void StartAnim(Anim kind)
+    {
+        _anim = kind;
+        _animStart = Environment.TickCount64;
+        _animTimer.Start();
+    }
+
+    void StopAnim()
+    {
+        _anim = Anim.None;
+        _animTimer.Stop();
+    }
+
+    /// <summary>진행률 0~1. 애니메이션이 없으면 1.</summary>
+    float AnimProgress()
+    {
+        if (_anim == Anim.None) return 1f;
+        int total = _anim == Anim.FadeIn ? FadeMs : PulseMs;
+        return Math.Clamp((Environment.TickCount64 - _animStart) / (float)total, 0f, 1f);
+    }
+
+    static float EaseOut(float p) => 1f - (1f - p) * (1f - p);
+
+    void AnimTick()
+    {
+        if (_polling || IsDisposed) return;
+        if (_anim == Anim.None || _paused || _sessionLocked || !Visible) { StopAnim(); return; }
+        _polling = true;
+        try { Apply(_lastSnapshot); }
+        catch (Exception ex) { StopAnim(); Log.Error("animation frame failed", ex); }
+        finally { _polling = false; }
+    }
+
+    // ── 트레이 아이콘·툴팁 ──
+    string StateText(ImeState state) => _paused ? "일시 중지" : state switch
+    {
+        ImeState.Hangul => "한글 입력",
+        ImeState.English => "영문 입력",
+        ImeState.OtherLang => "다른 언어 입력",
+        _ => "입력 위치 없음",
+    };
+
+    /// <summary>툴팁: 이름 · 상태 · 단축키. NotifyIcon.Text 는 127자 제한이 있다.</summary>
+    string TrayText(ImeState state)
+    {
+        string s = AppInfo.DisplayName + " · " + StateText(state);
+        if (_paused) s += _settings.HotkeyEnabled ? $" · {_settings.Hotkey} 로 재개" : "";
+        else if (_settings.HotkeyEnabled) s += $" · {_settings.Hotkey} 일시 중지";
+        if (Log.Enabled) s += " [debug]";
+        return s.Length > 127 ? s[..127] : s;
+    }
+
+    /// <summary>트레이 아이콘과 툴팁을 상태에 맞춘다. 같은 상태면 아무것도 하지 않는다(Shell_NotifyIcon 호출을 아낀다).</summary>
+    void UpdateTray(ImeState state, bool force = false)
+    {
+        if (!_settings.TrayShowsState) state = ImeState.Unknown;
+        if (!force && state == _trayState && _paused == _trayPaused) return;
+        _trayState = state; _trayPaused = _paused;
+        _tray.Icon = _trayIcons.Get(state, _paused, SystemInformation.SmallIconSize.Width, BadgeTheme.From(_settings));
+        _tray.Text = TrayText(state);
+    }
+
+    /// <summary>색·DPI 가 바뀌어 캐시한 아이콘을 버리고 다시 그린다. 트레이가 버릴 아이콘을 가리키지 않도록 먼저 기본 아이콘으로 돌린다.</summary>
+    void RefreshTray()
+    {
+        _tray.Icon = Icons.App;
+        _trayIcons.Clear();
+        UpdateTray(_trayState, force: true);
     }
 
     static void RefreshChecks(ToolStripItemCollection items)
@@ -203,15 +332,36 @@ sealed class BadgeForm : Form
         parent.DropDownItems.Add(item);
     }
 
-    /// <summary>설정이 바뀐 뒤 공통 처리: 저장, 다시 그리기, 단축키·주기 반영.</summary>
-    void OnSettingsChanged()
+    /// <summary>
+    /// 퍼센트 프리셋 하위 메뉴. 설정 창에서 프리셋에 없는 값(예: 90%)을 골랐으면 체크된 항목이 하나도 없어 혼란스러우므로,
+    /// 그럴 때만 맨 아래에 "사용자 지정 (90%)" 항목을 체크된 채로 보여 준다.
+    /// </summary>
+    ToolStripMenuItem PresetMenu(string title, (string label, int pct)[] presets, Func<int> get, Action<int> set)
+    {
+        var menu = new ToolStripMenuItem(title);
+        foreach (var (label, pct) in presets)
+            AddRadio(menu, label, () => get() == pct, () => set(pct));
+        var custom = new ToolStripMenuItem { Enabled = false, Visible = false, Checked = true };
+        menu.DropDownItems.Add(custom);
+        menu.DropDownOpening += (_, _) =>
+        {
+            int v = get();
+            custom.Visible = Array.FindIndex(presets, p => p.pct == v) < 0;
+            custom.Text = $"사용자 지정 ({v}%)";
+        };
+        return menu;
+    }
+
+    /// <summary>설정이 바뀐 뒤 공통 처리: 저장(편집 중 미리 반영일 때는 생략), 다시 그리기, 단축키·주기 반영.</summary>
+    void OnSettingsChanged(bool save = true)
     {
         _settings.Normalize();
-        _store.Save(_settings);
+        if (save) _store.Save(_settings);
         ResetRenderKey();                                   // 다음 틱에 강제로 다시 그림
         _flashUntil = DateTime.Now.AddMilliseconds(FlashMs); // DotFlash면 바로 글자를 한 번 보여 준다
         _timer.Interval = _settings.PollIntervalMs;
-        ApplyHotkey();
+        ApplyHotkey(warnOnFailure: save);
+        RefreshTray();   // 배지 색이나 "트레이에 상태 표시" 설정이 바뀌었을 수 있다
         Poll();
     }
 
@@ -221,9 +371,8 @@ sealed class BadgeForm : Form
     void TogglePause()
     {
         _paused = !_paused;
-        _tray.Icon = _paused ? Icons.Paused : Icons.App;
-        _tray.Text = AppInfo.DisplayName + (_paused ? " - 일시 중지" : "") + (Log.Enabled ? " [debug]" : "");
         Log.Write(_paused ? "paused" : "resumed");
+        UpdateTray(ImeState.Unknown, force: true);
         Poll();
     }
 
@@ -231,7 +380,8 @@ sealed class BadgeForm : Form
     {
         if (_settingsForm is { IsDisposed: false }) { _settingsForm.Activate(); return; }
         _settingsForm = new SettingsForm(_settings);
-        _settingsForm.Applied += OnSettingsChanged;
+        _settingsForm.Changed += () => OnSettingsChanged(save: false);   // 편집 중: 배지에 바로 반영, 저장은 아직
+        _settingsForm.Applied += () => OnSettingsChanged();               // 확인·취소: 저장
         _settingsForm.FormClosed += (_, _) => { _settingsForm?.Dispose(); _settingsForm = null; };
         _settingsForm.Show();
         _settingsForm.Activate();
@@ -240,7 +390,7 @@ sealed class BadgeForm : Form
     void OpenAbout()
     {
         if (_aboutForm is { IsDisposed: false }) { _aboutForm.Activate(); return; }
-        _aboutForm = new AboutForm(_paths);
+        _aboutForm = new AboutForm(_paths, _settings, () => CheckForUpdates(manual: true));
         _aboutForm.FormClosed += (_, _) => { _aboutForm?.Dispose(); _aboutForm = null; };
         _aboutForm.Show();
         _aboutForm.Activate();
@@ -262,15 +412,15 @@ sealed class BadgeForm : Form
             {
                 _pendingUpdateUrl = info.Url;
                 Log.Write($"update available: {info.Tag}");
-                _tray.ShowBalloonTip(10000, "새 버전이 있습니다",
-                    $"{AppInfo.ProductName} {info.Tag} 을(를) 받을 수 있습니다. (현재 {AppVersion.Display})\n클릭하면 다운로드 페이지가 열립니다.", ToolTipIcon.Info);
+                if (manual) OfferUpdate(info);
+                else if (info.Tag != _settings.SkippedUpdateTag)
+                    _tray.ShowBalloonTip(10000, "새 버전이 있습니다",
+                        $"{AppInfo.ProductName} {info.Tag} 을(를) 받을 수 있습니다. (현재 {AppVersion.Display})\n클릭하면 다운로드 페이지가 열립니다.", ToolTipIcon.Info);
             }
             else if (manual)
             {
-                MessageBox.Show(info is null
-                        ? $"아직 정식 릴리스가 없습니다. (현재 {AppVersion.Display})"
-                        : $"최신 버전을 쓰고 있습니다. (현재 {AppVersion.Display}, 최신 {info.Tag})",
-                    AppInfo.ProductName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Dialogs.Info(info is null ? "아직 정식 릴리스가 없습니다." : "최신 버전을 쓰고 있습니다.",
+                    info is null ? $"현재 {AppVersion.Display}" : $"현재 {AppVersion.Display}, 최신 {info.Tag}");
             }
         }
         catch (OperationCanceledException) { }
@@ -278,9 +428,19 @@ sealed class BadgeForm : Form
         {
             Log.Error("update check failed", ex);
             if (manual)
-                MessageBox.Show("업데이트 정보를 가져오지 못했습니다. 네트워크 연결을 확인한 뒤 다시 시도하세요.\n\n" + ex.Message,
-                    AppInfo.ProductName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                Dialogs.Warning("업데이트 정보를 가져오지 못했습니다.", "네트워크 연결을 확인한 뒤 다시 시도하세요.", ex.Message);
         }
+    }
+
+    /// <summary>수동 확인에서 새 버전을 찾았을 때: 열기 / 나중에 / 이 버전 건너뛰기.</summary>
+    void OfferUpdate(UpdateInfo info)
+    {
+        int choice = Dialogs.Choose($"새 버전 {info.Tag} 이(가) 있습니다.", $"현재 {AppVersion.Display} 을(를) 쓰고 있습니다.", TaskDialogIcon.Information,
+            ("다운로드 페이지 열기", "브라우저에서 릴리스 페이지를 엽니다."),
+            ("나중에", "다음에 다시 알립니다."),
+            ("이 버전 건너뛰기", $"{info.Tag} 은(는) 자동으로 알리지 않습니다. 더 새 버전이 나오면 다시 알립니다."));
+        if (choice == 0) AboutForm.Open(info.Url);
+        else if (choice == 2) { _settings.SkippedUpdateTag = info.Tag; _store.Save(_settings); }
     }
 
     // ── 시스템 이벤트 ──
@@ -312,6 +472,7 @@ sealed class BadgeForm : Form
         if (InvokeRequired) { BeginInvoke(() => OnDisplaySettingsChanged(sender, e)); return; }
         ResetRenderKey();   // 모니터·DPI 가 바뀌면 배율이 달라질 수 있으니 다시 그린다
         _lastPos = new(int.MinValue, int.MinValue);
+        RefreshTray();      // 트레이 아이콘 크기(SmallIconSize)도 DPI 를 따라간다
     }
 
     // ── 창 속성 ──
@@ -357,6 +518,8 @@ sealed class BadgeForm : Form
     void HideBadge()
     {
         if (Visible) { Hide(); _hiddenSince = Environment.TickCount64; }
+        StopAnim();
+        UpdateTray(ImeState.Unknown);
         AdjustIdleInterval();
     }
 
@@ -379,27 +542,41 @@ sealed class BadgeForm : Form
         }
 
         var caret = s.Caret.Value;
-        if (s.State != _lastState)
+        _lastSnapshot = s;
+        bool appearing = !Visible;
+        bool changed = s.State != _lastState;
+        if (changed)
         {
             _lastState = s.State;
             _flashUntil = DateTime.Now.AddMilliseconds(FlashMs);
         }
+        UpdateTray(s.State);
+
+        // 나타날 때는 페이드인, 보이는 중에 한/영이 바뀌면 펄스. 둘 다 "지금 바뀌었다"를 눈에 띄게 한다.
+        if (AnimationsOn)
+        {
+            if (appearing) StartAnim(Anim.FadeIn);
+            else if (changed) StartAnim(Anim.Pulse);
+        }
+        float progress = AnimProgress();
+        float pulse = _anim == Anim.Pulse ? 1f + PulseGrow * (float)Math.Sin(progress * Math.PI) : 1f;
+        byte alpha = _anim == Anim.FadeIn ? (byte)Math.Round(255 * EaseOut(progress)) : (byte)255;
 
         // DotFlash: 변경 직후 1.5초는 둥근 배지, 그 뒤는 점
         var style = _settings.Style;
         if (style == BadgeStyle.DotFlash)
             style = DateTime.Now < _flashUntil ? BadgeStyle.Pill : BadgeStyle.Dot;
 
-        float scale = Native.DpiScaleAt(caret.Location) * _settings.SizePercent / 100f;
+        float scale = Native.DpiScaleAt(caret.Location) * _settings.SizePercent / 100f * pulse;
 
         var key = (s.State, style, scale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor);
-        bool needRender = key != _renderKey;
+        bool needRender = key != _renderKey || _lastBmp is null;
 
         Size bs = needRender ? Size.Empty : _bitmapSize;
         Bitmap? bmp = null;
         if (needRender)
         {
-            bmp = BadgeRenderer.Render(s.State, style, scale, BadgeTheme.From(_settings));
+            bmp = BadgeRenderer.Render(s.State, style, scale, BadgeTheme.From(_settings), _settings.OpacityPercent);
             bs = bmp.Size;
         }
 
@@ -415,9 +592,16 @@ sealed class BadgeForm : Form
 
         if (bmp is not null)
         {
-            using (bmp) Present(bmp, pos);
+            Present(bmp, pos, alpha);
+            _lastBmp?.Dispose();
+            _lastBmp = bmp;
             _renderKey = key;
             _bitmapSize = bs;
+            if (raise) RaiseToTop();
+        }
+        else if (alpha != _lastAlpha)
+        {
+            Present(_lastBmp!, pos, alpha);   // 페이드 중: 같은 그림을 알파만 바꿔 다시 올린다(위치도 함께)
             if (raise) RaiseToTop();
         }
         else if (_lastPos != pos)
@@ -426,6 +610,8 @@ sealed class BadgeForm : Form
                                 Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);   // 이동과 동시에 맨 위로
         }
         else if (raise) RaiseToTop();
+
+        if (_anim != Anim.None && progress >= 1f) StopAnim();   // 마지막 프레임(알파 255, 배율 1)까지 올린 뒤 멈춘다
 
         // 활성 창이 자기도 최상위(TopMost)라면(FlowLauncher 등) 매 틱 실제 z-order를 확인한다. 활성 창이 뒤늦게
         // 활성화되며 다시 위로 올라오거나, 백그라운드 프로세스의 z-order 변경이 활성 창 아래로 제한되는 경우가 있다.
@@ -470,8 +656,8 @@ sealed class BadgeForm : Form
         else { _raiseFailFg = fg; _raiseFailCount = 1; }
     }
 
-    /// <summary>비트맵을 픽셀별 알파로 창에 올리면서 위치·크기도 함께 지정한다.</summary>
-    void Present(Bitmap bmp, Point pos)
+    /// <summary>비트맵을 픽셀별 알파로 창에 올리면서 위치·크기도 함께 지정한다. <paramref name="alpha"/> 는 페이드인용 창 전체 알파.</summary>
+    void Present(Bitmap bmp, Point pos, byte alpha)
     {
         if (Size != bmp.Size) Size = bmp.Size;   // WinForms가 아는 크기와 실제 창 크기를 일치시킨다
         IntPtr screenDc = Native.GetDC(IntPtr.Zero);
@@ -484,14 +670,16 @@ sealed class BadgeForm : Form
             var size = new Native.SIZE(bmp.Width, bmp.Height);
             var src = new Native.POINT(0, 0);
             var dst = new Native.POINT(pos.X, pos.Y);
+            // 불투명도는 렌더러가 배경 픽셀의 알파로 이미 반영했다(글자는 또렷하게 유지). 창 전체 알파는 페이드인에만 쓴다.
             var blend = new Native.BLENDFUNCTION
             {
                 BlendOp = Native.AC_SRC_OVER,
                 BlendFlags = 0,
-                SourceConstantAlpha = (byte)Math.Clamp(255 * _settings.OpacityPercent / 100, 30, 255),
+                SourceConstantAlpha = alpha,
                 AlphaFormat = Native.AC_SRC_ALPHA,
             };
             Native.UpdateLayeredWindow(Handle, screenDc, ref dst, ref size, memDc, ref src, 0, ref blend, Native.ULW_ALPHA);
+            _lastAlpha = alpha;
         }
         finally
         {
@@ -508,14 +696,19 @@ sealed class BadgeForm : Form
         {
             SystemEvents.SessionSwitch -= OnSessionSwitch;
             SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+            SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
             _updateCts?.Cancel();
             for (int i = 0; i < _hooks.Length; i++)
                 if (_hooks[i] != IntPtr.Zero) { Native.UnhookWinEvent(_hooks[i]); _hooks[i] = IntPtr.Zero; }
             _timer.Dispose();
+            _animTimer.Dispose();
+            _lastBmp?.Dispose();
             _settingsForm?.Dispose();
             _aboutForm?.Dispose();
             _tray.Visible = false;
+            _tray.Icon = Icons.App;   // 캐시한 아이콘을 해제하기 전에 참조를 끊는다
             _tray.Dispose();
+            _trayIcons.Dispose();
         }
         base.Dispose(disposing);
     }

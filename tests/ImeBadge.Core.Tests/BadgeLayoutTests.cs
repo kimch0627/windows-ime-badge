@@ -28,6 +28,28 @@ public sealed class BadgeLayoutTests
     }
 
     [Fact]
+    public void AboveLeft_PutsBadgeLeftOfCaret()
+    {
+        var p = BadgeLayout.Compute(In(Caret, place: BadgePlacement.AboveLeft));
+        Assert.Equal(new Point(500 - 3 - 24, 300 - 20 - 3), p);
+    }
+
+    [Fact]
+    public void BelowLeft_PutsBadgeBelowLeftOfCaret()
+    {
+        var p = BadgeLayout.Compute(In(Caret, place: BadgePlacement.BelowLeft));
+        Assert.Equal(new Point(500 - 3 - 24, 323), p);
+    }
+
+    [Fact]
+    public void NoRoomLeft_FallsBackRight()
+    {
+        var edge = new Rectangle(10, 300, 2, 20);
+        var p = BadgeLayout.Compute(In(edge, place: BadgePlacement.AboveLeft));
+        Assert.Equal(12 + 3, p.X);
+    }
+
+    [Fact]
     public void GapScalesWithDpi()
     {
         var p = BadgeLayout.Compute(In(Caret, scale: 2f));

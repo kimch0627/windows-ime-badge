@@ -18,7 +18,10 @@ readonly record struct BadgeTheme(Color Hangul, Color English, Color Other)
         Color.FromArgb(ColorHex.TryParse(text, out int a) ? a : (ColorHex.TryParse(fallback, out int b) ? b : unchecked((int)0xFF000000)));
 }
 
-/// <summary>배지 그리기 (GDI+로 투명 비트맵 생성). 결과는 미리 곱한 알파(PArgb)라 레이어드 창에 바로 올릴 수 있다.</summary>
+/// <summary>
+/// 배지 그리기 (GDI+로 투명 비트맵 생성). 결과는 미리 곱한 알파(PArgb)라 레이어드 창에 바로 올릴 수 있다.
+/// 불투명도는 배경(채움)에만 적용하고 글자는 항상 또렷하게 둔다. 글자색은 배경 밝기에 따라 흰색/검은색을 고른다.
+/// </summary>
 static class BadgeRenderer
 {
     public const string FontFamily = "Malgun Gothic";
@@ -30,15 +33,20 @@ static class BadgeRenderer
         _ => ("?", theme.Other),
     };
 
-    public static Bitmap Render(ImeState state, BadgeStyle style, float scale, in BadgeTheme theme)
+    /// <summary>배경색 위에서 더 잘 읽히는 글자색(흰/검).</summary>
+    public static Color TextColorOn(Color background) =>
+        ColorHex.PrefersWhiteText(background.ToArgb()) ? Color.White : Color.Black;
+
+    public static Bitmap Render(ImeState state, BadgeStyle style, float scale, in BadgeTheme theme, int opacityPercent = 100)
     {
         var (text, color) = Look(state, theme);
+        var fill = Color.FromArgb(Math.Clamp(255 * opacityPercent / 100, 30, 255), color);
         return style switch
         {
-            BadgeStyle.Dot => RenderDot(color, scale),
-            BadgeStyle.Underline => RenderUnderline(color, scale),
-            BadgeStyle.Box => RenderText(text, color, scale, rounded: false),
-            _ => RenderText(text, color, scale, rounded: true),   // Pill, DotFlash(글자 단계)
+            BadgeStyle.Dot => RenderDot(fill, scale),
+            BadgeStyle.Underline => RenderUnderline(fill, scale),
+            BadgeStyle.Box => RenderText(text, fill, scale, rounded: false),
+            _ => RenderText(text, fill, scale, rounded: true),   // Pill, DotFlash(글자 단계)
         };
     }
 
@@ -53,16 +61,43 @@ static class BadgeRenderer
         return bmp;
     }
 
+    /// <summary>채움색과 대비되는 얇은 테두리. 배경과 같은 색 위에 놓여도 윤곽이 남는다.</summary>
+    static Pen OutlinePen(Color fill, float width) =>
+        new(Color.FromArgb(110, TextColorOn(fill)), width);
+
+    /// <summary>그림자 여백(px, 배율 1 기준). 그림자는 아래로 1px 떨어지고 가장자리가 약간 번진다.</summary>
+    static int ShadowPad(float scale) => (int)Math.Ceiling(2 * scale);
+
+    /// <summary>
+    /// 배지 아래에 옅은 그림자. 배지가 같은 색 배경(파란 선택 영역 위의 파란 배지) 위에 놓여도 떠 보인다.
+    /// 흐림(blur)은 GDI+ 에 없으므로 굵고 옅은 선 + 조금 진한 채움 두 겹으로 흉내 낸다.
+    /// </summary>
+    static void DrawShadow(Graphics g, GraphicsPath path, float scale)
+    {
+        using var shadow = (GraphicsPath)path.Clone();
+        using var m = new Matrix();
+        m.Translate(0, Math.Max(1f, scale));
+        shadow.Transform(m);
+        using var soft = new Pen(Color.FromArgb(26, Color.Black), Math.Max(1.5f, 1.5f * scale)) { LineJoin = LineJoin.Round };
+        using var core = new SolidBrush(Color.FromArgb(48, Color.Black));
+        g.DrawPath(soft, shadow);
+        g.FillPath(core, shadow);
+    }
+
     static Bitmap RenderDot(Color color, float scale)
     {
         int d = (int)Math.Round(9 * scale);
-        var bmp = NewCanvas(d + 2, d + 2, out var g);
+        int pad = ShadowPad(scale);
+        var bmp = NewCanvas(d + 2 * pad, d + 2 * pad + pad, out var g);
         using (g)
         {
+            using var path = new GraphicsPath();
+            path.AddEllipse(pad, pad, d, d);
+            DrawShadow(g, path, scale);
             using var brush = new SolidBrush(color);
-            using var pen = new Pen(Color.FromArgb(160, Color.White), Math.Max(1f, scale));
-            g.FillEllipse(brush, 1, 1, d, d);
-            g.DrawEllipse(pen, 1, 1, d, d);
+            using var pen = OutlinePen(color, Math.Max(1f, scale));
+            g.FillPath(brush, path);
+            g.DrawPath(pen, path);
         }
         return bmp;
     }
@@ -91,17 +126,20 @@ static class BadgeRenderer
 
         int h = (int)Math.Round(20 * scale);
         int w = (int)Math.Round(Math.Max(h, ts.Width + 10 * scale));
-        var bmp = NewCanvas(w, h, out var g);
+        int pad = ShadowPad(scale);   // 사방 여백 + 아래쪽에 그림자가 떨어질 자리
+        var bmp = NewCanvas(w + 2 * pad, h + 2 * pad + pad, out var g);
         using (g)
         {
-            var rect = new RectangleF(0.5f, 0.5f, w - 1, h - 1);
+            var rect = new RectangleF(pad + 0.5f, pad + 0.5f, w - 1, h - 1);
             using var path = RoundedRect(rect, rounded ? (h - 1) / 2f : 3 * scale);
+            DrawShadow(g, path, scale);
             using var brush = new SolidBrush(color);
-            using var pen = new Pen(Color.FromArgb(110, Color.White), 1f);
+            using var pen = OutlinePen(color, 1f);
+            using var textBrush = new SolidBrush(TextColorOn(color));
             g.FillPath(brush, path);
             g.DrawPath(pen, path);
             using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-            g.DrawString(text, font, Brushes.White, new RectangleF(0, 0, w, h), sf);
+            g.DrawString(text, font, textBrush, new RectangleF(pad, pad, w, h), sf);
         }
         return bmp;
     }
