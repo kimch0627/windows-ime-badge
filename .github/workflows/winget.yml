@@ -1,10 +1,14 @@
 # winget(Windows Package Manager) 등록·갱신.
 #
 # 정식 릴리스가 만들어지면 build.yml 이 이 워크플로를 부른다(workflow_call). 수동으로도 돌릴 수 있다(workflow_dispatch).
-# 1. winget/templates 에서 그 버전의 매니페스트를 만든다(설치 프로그램 SHA256 은 릴리스의 SHA256SUMS.txt 에서).
+# winget 관련 파일이 바뀐 브랜치 푸시에서는 최신 릴리스로 매니페스트만 만들어 스크립트를 검증한다(제출 없음).
+# 1. winget/templates 에서 그 버전의 매니페스트를 만든다(설치 프로그램 SHA256 은 릴리스의 SHA256SUMS.txt 에서, GITHUB_TOKEN 으로 API 접근).
 # 2. 저장소 시크릿 WINGET_TOKEN(public_repo 권한 PAT)이 있으면 wingetcreate 로 microsoft/winget-pkgs 에 PR 을 낸다.
 #    (wingetcreate 가 토큰 계정에 winget-pkgs 포크를 만들고 브랜치를 밀어 PR 을 연다.)
 #    없으면 매니페스트만 만들고 끝낸다. 절차는 docs/release.md.
+#
+# 주의: winget 은 설치 프로그램 URL 이 인증 없이 내려받아져야 한다. 저장소가 비공개(private)이면 매니페스트는 만들어져도
+#       winget-pkgs 검증에서 거부되므로, 등록하려면 저장소를 공개로 바꿔야 한다.
 name: winget
 
 on:
@@ -17,9 +21,16 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "릴리스 버전 (v1.2.3 또는 1.2.3). 해당 Release 가 이미 있어야 한다"
-        required: true
+        description: "릴리스 버전 (v1.2.3 또는 1.2.3). 비우면 최신 정식 릴리스"
+        required: false
         type: string
+        default: ""
+  push:
+    branches: ["**"]
+    paths:
+      - "winget/**"
+      - "tools/winget/**"
+      - ".github/workflows/winget.yml"
 
 permissions:
   contents: read
@@ -33,6 +44,8 @@ jobs:
       - name: Generate manifests
         id: gen
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./tools/winget/New-WingetManifest.ps1 -Version "${{ inputs.version }}" -OutDir out/winget
 
       - name: Show manifests
@@ -45,9 +58,10 @@ jobs:
         env:
           T: ${{ secrets.WINGET_TOKEN }}
         run: |
-          $ok = $env:T ? "true" : "false"
+          # 브랜치 푸시(검증용)에서는 제출하지 않는다.
+          $ok = ($env:T -and "${{ github.event_name }}" -ne "push") ? "true" : "false"
           "enabled=$ok" >> $env:GITHUB_OUTPUT
-          "winget submit: $ok"
+          "winget submit: $ok (event: ${{ github.event_name }})"
 
       - name: Submit to microsoft/winget-pkgs (wingetcreate)
         if: steps.tok.outputs.enabled == 'true'
@@ -56,7 +70,7 @@ jobs:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: |
           Invoke-WebRequest -Uri https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
-          $ver = "${{ inputs.version }}".TrimStart("v")
+          $ver = "${{ steps.gen.outputs.version }}"
           $dir = "out/winget/k/kimch0627/ImeBadge/$ver"
           & .\wingetcreate.exe submit --token $env:WINGET_TOKEN --prtitle "New version: kimch0627.ImeBadge version $ver" $dir
           if ($LASTEXITCODE -ne 0) { throw "wingetcreate submit failed ($LASTEXITCODE)" }
