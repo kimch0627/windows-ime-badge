@@ -854,9 +854,28 @@ static class Program
     [STAThread]
     static void Main(string[] args)
     {
+        // 창 없는 프로그램이라 예외가 나면 조용히 죽는다. --debug 여부와 상관없이 exe 옆 imebadge-crash.log 에
+        // 남기고 메시지 상자로 알린다. (트리밍 빌드에서 잘려 나간 코드를 찾을 때 특히 필요)
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => ReportCrash(e.ExceptionObject as Exception);
+        Application.ThreadException += (_, e) => ReportCrash(e.Exception);
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+
         Log.Enabled = args.Contains("--debug");
         Log.Write("=== ImeBadge start ===");
-        ApplicationConfiguration.Initialize();
-        Application.Run(new BadgeForm(Settings.Load()));
+        try
+        {
+            ApplicationConfiguration.Initialize();
+            Application.Run(new BadgeForm(Settings.Load()));
+        }
+        catch (Exception ex) { ReportCrash(ex); }
+    }
+
+    static void ReportCrash(Exception? ex)
+    {
+        if (ex is null) return;
+        string text = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} ImeBadge crashed{Environment.NewLine}{ex}{Environment.NewLine}";
+        try { File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "imebadge-crash.log"), text); } catch { }
+        try { MessageBox.Show(ex.ToString(), "ImeBadge 오류", MessageBoxButtons.OK, MessageBoxIcon.Error); } catch { }
+        Environment.Exit(1);
     }
 }
