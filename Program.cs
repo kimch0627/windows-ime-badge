@@ -92,7 +92,8 @@ static class Native
     public const uint ULW_ALPHA     = 0x02;
     public const byte AC_SRC_OVER   = 0x00;
     public const byte AC_SRC_ALPHA  = 0x01;
-    public const uint SWP_NOSIZE = 0x0001, SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
+    public const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
+    public static readonly IntPtr HWND_TOPMOST = new(-1);   // SetWindowPos: 최상위(topmost) 창들 중에서도 맨 위로
     public const uint MONITOR_DEFAULTTONEAREST = 2;
 
     public static string ClassName(IntPtr hwnd)
@@ -379,7 +380,7 @@ static class UiaCaret
 // ─────────────────────────────────────────────────────────────────
 enum ImeState { Unknown, Hangul, English, OtherLang }
 
-readonly record struct Snapshot(ImeState State, Rectangle? Caret);
+readonly record struct Snapshot(ImeState State, Rectangle? Caret, IntPtr Foreground = default);
 
 static class ImeReader
 {
@@ -421,7 +422,7 @@ static class ImeReader
             Log.WriteIfChanged($"fg='{Native.ClassName(fg)}' focus='{Native.ClassName(gti.hwndFocus)}' tid={tid} => {state}{dump}");
         }
 
-        return new(state, caret);
+        return new(state, caret, fg);
     }
 
     /// <summary>
@@ -568,6 +569,7 @@ sealed class BadgeForm : Form
     (ImeState state, BadgeStyle style, float scale, int opacity) _renderKey = (ImeState.Unknown, (BadgeStyle)(-1), 0, -1);
     Size _bitmapSize;
     Point _lastPos = new(int.MinValue, int.MinValue);
+    IntPtr _lastFg;                                 // 마지막으로 배지를 띄웠을 때의 활성 창
     bool _allowShow;
 
     public BadgeForm(Settings settings)
@@ -725,6 +727,10 @@ sealed class BadgeForm : Form
         pos.X = Math.Max(area.Left, Math.Min(pos.X, area.Right - bs.Width));
         pos.Y = Math.Max(area.Top, Math.Min(pos.Y, area.Bottom - bs.Height));
 
+        // FlowLauncher처럼 자기도 최상위(TopMost)인 창은 나중에 뜬 쪽이 위에 온다. 배지가 처음 보일 때,
+        // 활성 창이 바뀌었을 때, 위치가 바뀌었을 때마다 최상위 창들 중에서도 맨 위로 다시 올린다.
+        bool raise = !Visible || s.Foreground != _lastFg || _lastPos != pos;
+
         _allowShow = true;
         if (!Visible) Show();
 
@@ -733,14 +739,23 @@ sealed class BadgeForm : Form
             using (bmp) Present(bmp, pos);
             _renderKey = key;
             _bitmapSize = bs;
+            if (raise) RaiseToTop();
         }
         else if (_lastPos != pos)
         {
-            Native.SetWindowPos(Handle, IntPtr.Zero, pos.X, pos.Y, 0, 0,
-                                Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE);
+            Native.SetWindowPos(Handle, Native.HWND_TOPMOST, pos.X, pos.Y, 0, 0,
+                                Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);   // 이동과 동시에 맨 위로
         }
+        else if (raise) RaiseToTop();
+
         _lastPos = pos;
+        _lastFg = s.Foreground;
     }
+
+    /// <summary>위치·크기는 그대로 두고 z-order만 최상위 창들 중 맨 위로 올린다. 포커스는 건드리지 않는다.</summary>
+    void RaiseToTop() =>
+        Native.SetWindowPos(Handle, Native.HWND_TOPMOST, 0, 0, 0, 0,
+                            Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
 
     /// <summary>비트맵을 픽셀별 알파로 창에 올리면서 위치·크기도 함께 지정한다.</summary>
     void Present(Bitmap bmp, Point pos)

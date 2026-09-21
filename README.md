@@ -189,6 +189,7 @@ exe 옆에 `imebadge.log`가 생기고, 활성 창·caret 탐색 경로·IME 원
 | 스타일 | 효과 |
 |---|---|
 | `WS_EX_NOACTIVATE` + `ShowWithoutActivation` | 배지가 떠도 입력 중인 창의 포커스를 뺏지 않음 |
+| `TopMost` + 필요할 때마다 `SetWindowPos(HWND_TOPMOST)` | FlowLauncher처럼 자기도 최상위인 창보다 위에 오도록, 배지가 보이기 시작할 때·활성 창이 바뀔 때·위치가 바뀔 때 다시 맨 위로 올림 |
 | `WS_EX_TRANSPARENT` + `WS_EX_LAYERED` | 배지를 클릭해도 아래 창으로 클릭이 통과 |
 | `WS_EX_TOOLWINDOW` + `ShowInTaskbar=false` | 작업 표시줄과 Alt+Tab에 나타나지 않음 |
 | `SetVisibleCore` override | 첫 판정 전에는 창을 보이지 않아 시작 시 깜빡임 방지 |
