@@ -34,7 +34,7 @@ on:
         default: ""
 
 permissions:
-  contents: write   # Release 생성·태그 이동에 필요
+  contents: read   # 기본은 읽기. Release 생성·태그 이동이 필요한 build 잡만 아래에서 write 로 올린다
 
 env:
   DOTNET_NOLOGO: "1"
@@ -45,8 +45,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: 8.0.x
       - name: Test (ImeBadge.Core)
@@ -59,12 +59,14 @@ jobs:
   build:
     needs: test
     runs-on: windows-latest
+    permissions:
+      contents: write   # Release 생성·태그 이동
     outputs:
       release_tag: ${{ steps.ver.outputs.release_tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
         with:
           dotnet-version: 8.0.x
 
@@ -144,7 +146,7 @@ jobs:
 
       - name: Sign executables (Azure Trusted Signing)
         if: steps.sign.outputs.enabled == 'true'
-        uses: azure/trusted-signing-action@v0.5.1
+        uses: azure/trusted-signing-action@0d74250c661747df006298d0fb49944c10f16e03 # v0.5.1
         with:
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -169,7 +171,7 @@ jobs:
 
       - name: Sign installer (Azure Trusted Signing)
         if: steps.sign.outputs.enabled == 'true'
-        uses: azure/trusted-signing-action@v0.5.1
+        uses: azure/trusted-signing-action@0d74250c661747df006298d0fb49944c10f16e03 # v0.5.1
         with:
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -196,17 +198,18 @@ jobs:
           Get-Content out/SHA256SUMS.txt
 
       # 브랜치 푸시마다 롤링 태그(latest / dev-<브랜치>)를 이 커밋으로 옮기고 사전 릴리스 첨부 파일을 갱신한다.
+      # (Dependabot 이 미는 브랜치는 제외. 의존성 갱신마다 dev-dependabot-* 릴리스가 쌓이는 것을 막는다.)
       # 항상 같은 주소에서 최신 빌드를 받을 수 있다:
       #   https://github.com/<owner>/<repo>/releases/download/latest/ImeBadge-win-x64-selfcontained.exe
       - name: Move rolling tag (브랜치 푸시일 때만)
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && github.actor != 'dependabot[bot]'
         run: |
           git tag -f ${{ env.ROLLING_TAG }} ${{ github.sha }}
           git push -f origin ${{ env.ROLLING_TAG }}
 
       - name: Update rolling pre-release (브랜치 푸시일 때만)
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')
-        uses: softprops/action-gh-release@v2
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && github.actor != 'dependabot[bot]'
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ env.ROLLING_TAG }}
           name: "${{ env.ROLLING_TAG }} (${{ github.ref_name }} @ ${{ github.sha }})"
@@ -228,7 +231,7 @@ jobs:
 
       - name: "Release (태그 푸시 / release_tag 입력 / release: 커밋일 때만)"
         if: env.RELEASE_TAG != ''
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           target_commitish: ${{ github.sha }}
