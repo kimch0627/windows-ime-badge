@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-21
+
 ### 추가
 - winget 매니페스트(`kimch0627.ImeBadge`)와 자동 제출 워크플로(`WINGET_TOKEN` 시크릿이 있을 때).
 
@@ -13,6 +15,7 @@
 ### 수정
 - 설정 창의 "모양"·"동작"·"배지를 띄우지 않을 앱" 구역이 폭 0 으로 접혀 제목이 세로로 찍히고 항목이 보이지 않던 문제.
   (자동 크기 그룹박스 안에서 Dock 을 쓰지 않도록 레이아웃 변경.) 정보 창도 같은 방식으로 정리.
+- 롤링 사전 릴리스(`latest`, `dev-*`)에 설치 프로그램이 버전 이름으로 쌓이던 문제. 고정 이름 `ImeBadge-Setup.exe` 로 덮어쓴다.
 
 ## [1.0.0] - 2026-09-21
 
@@ -50,5 +53,6 @@
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/kimch0627/windows-ime-badge/compare/v0.7.2...v1.0.0
