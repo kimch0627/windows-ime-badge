@@ -18,13 +18,23 @@ on:
         description: "릴리스 버전 (v1.2.3 또는 1.2.3)"
         required: true
         type: string
+      submit:
+        description: "WINGET_TOKEN 이 있으면 winget-pkgs 에 제출"
+        required: false
+        type: boolean
+        default: true
   workflow_dispatch:
     inputs:
       version:
-        description: "릴리스 버전 (v1.2.3 또는 1.2.3). 비우면 최신 정식 릴리스"
+        description: "릴리스 버전 (v1.2.3 또는 1.2.3). 비우면 최신 정식 릴리스. 존재하는 릴리스여야 한다"
         required: false
         type: string
         default: ""
+      submit:
+        description: "WINGET_TOKEN 이 있으면 winget-pkgs 에 제출 (끄면 매니페스트만 생성)"
+        required: false
+        type: boolean
+        default: true
   push:
     branches: ["**"]
     paths:
@@ -58,10 +68,11 @@ jobs:
         env:
           T: ${{ secrets.WINGET_TOKEN }}
         run: |
-          # 브랜치 푸시(검증용)에서는 제출하지 않는다.
-          $ok = ($env:T -and "${{ github.event_name }}" -ne "push") ? "true" : "false"
+          # 제출은 명시적 입력(submit=true)일 때만. 브랜치 푸시(검증용)에는 입력이 없어 제출하지 않는다.
+          # (github.event_name 으로 구분하면 안 된다: build.yml 이 workflow_call 로 부를 때도 호출자의 이벤트 이름 "push" 가 보인다.)
+          $ok = ($env:T -and "${{ inputs.submit }}" -eq "true") ? "true" : "false"
           "enabled=$ok" >> $env:GITHUB_OUTPUT
-          "winget submit: $ok (event: ${{ github.event_name }})"
+          "winget submit: $ok (event: ${{ github.event_name }}, submit input: '${{ inputs.submit }}', token: $(if ($env:T) { 'set' } else { 'missing' }))"
 
       - name: Submit to microsoft/winget-pkgs (wingetcreate)
         if: steps.tok.outputs.enabled == 'true'
