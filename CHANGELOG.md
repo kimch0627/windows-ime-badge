@@ -4,10 +4,10 @@
 
 ## [Unreleased]
 
-### 수정
-- 설정 창을 열고 조작하면 배지가 깜빡이고 버튼·슬라이더 반응이 몇 초씩 늦던 문제. 우리 프로세스의 창(설정·정보 창)이 활성일 때
-  UI Automation 으로 caret 을 찾으려 해 같은 스레드에서 서로를 기다리며 시간 초과가 나던 것이 원인. 자기 창은 조사하지 않고 배지를 숨긴다.
-- 설정 창에서 값을 바꿀 때 단축키·트레이 아이콘을 매번 다시 등록하지 않고 관련 설정이 바뀌었을 때만 반영. "기본값 복원"도 한 번만 반영.
+## [1.1.0] - 2026-09-21
+
+트레이 아이콘이 한/영 상태를 보여 주고, 설정·정보 창이 Windows 다크 모드를 따르며, 배지 가독성과 설정 창 사용성을 전반적으로 손본 릴리스입니다.
+예전 설정 파일은 그대로 읽히며 새 항목은 기본값으로 채워집니다.
 
 ### 추가
 - 트레이 아이콘이 현재 상태를 보여 준다: 입력 중이면 배지 색의 "한"/"A", 입력 위치가 없으면 커서 아이콘, 일시 중지면 회색 + ‖ 표시.
@@ -45,6 +45,9 @@
 - Dependabot 브랜치 푸시에는 롤링 사전 릴리스를 만들지 않음.
 
 ### 수정
+- 설정 창을 열고 조작하면 배지가 깜빡이고 버튼·슬라이더 반응이 몇 초씩 늦던 문제. 우리 프로세스의 창(설정·정보 창)이 활성일 때
+  UI Automation 으로 caret 을 찾으려 해 같은 스레드에서 서로를 기다리며 시간 초과가 나던 것이 원인. 자기 창은 조사하지 않고 배지를 숨긴다.
+- 설정 창에서 값을 바꿀 때 단축키·트레이 아이콘을 매번 다시 등록하지 않고 관련 설정이 바뀌었을 때만 반영. "기본값 복원"도 한 번만 반영.
 - 설정 창의 확인·취소 버튼이 창을 닫지 않던 문제(모드리스 창은 DialogResult 만으로 닫히지 않는다).
 - winget 매니페스트 생성이 비공개 저장소에서 SHA256SUMS.txt 를 못 받아 실패하던 문제. GitHub API + 토큰으로 받는다.
   (winget 등록과 프로그램의 업데이트 확인은 저장소가 공개여야 동작한다. docs/release.md 참고.)
@@ -98,6 +101,7 @@
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/kimch0627/windows-ime-badge/compare/v0.7.2...v1.0.0
