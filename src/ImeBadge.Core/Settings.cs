@@ -1,0 +1,168 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace ImeBadge;
+
+public enum BadgeStyle { Box, Pill, Dot, Underline, DotFlash }
+public enum BadgePlacement { AboveRight, BelowRight }
+
+/// <summary>
+/// 사용자 설정. JSON 으로 저장된다(<see cref="SettingsStore"/>).
+/// 새 항목을 더할 때는 기본값을 반드시 주어야 예전 설정 파일도 그대로 읽힌다.
+/// </summary>
+public sealed class Settings
+{
+    // ── 모양 ──
+    public BadgeStyle Style { get; set; } = BadgeStyle.Pill;
+    public BadgePlacement Placement { get; set; } = BadgePlacement.AboveRight;
+    public int SizePercent { get; set; } = 100;
+    public int OpacityPercent { get; set; } = 100;
+    /// <summary>한글 상태 배지 색. "#RRGGBB".</summary>
+    public string HangulColor { get; set; } = DefaultHangulColor;
+    /// <summary>영문 상태 배지 색. "#RRGGBB".</summary>
+    public string EnglishColor { get; set; } = DefaultEnglishColor;
+
+    // ── 동작 ──
+    /// <summary>활성 창이 모니터 전체를 덮는(게임·전체 화면 동영상) 경우 배지를 숨긴다.</summary>
+    public bool HideOnFullscreen { get; set; } = true;
+    /// <summary>배지를 띄우지 않을 프로세스 이름 목록. 확장자 없이("mstsc"), 끝에 * 허용("Unreal*").</summary>
+    public List<string> ExcludedProcesses { get; set; } = new();
+    /// <summary>Ctrl+Alt+H 로 일시 중지를 켜고 끈다.</summary>
+    public bool HotkeyEnabled { get; set; } = true;
+    /// <summary>폴링 주기(ms). 50~1000.</summary>
+    public int PollIntervalMs { get; set; } = 100;
+
+    // ── 업데이트 ──
+    public bool CheckForUpdates { get; set; } = true;
+    public DateTime? LastUpdateCheckUtc { get; set; }
+
+    public const string DefaultHangulColor = "#0078D7";
+    public const string DefaultEnglishColor = "#3C3C3C";
+
+    /// <summary>범위를 벗어난 값을 안전한 값으로 되돌린다. 손으로 고친 설정 파일을 방어한다.</summary>
+    public void Normalize()
+    {
+        SizePercent = Math.Clamp(SizePercent, 50, 300);
+        OpacityPercent = Math.Clamp(OpacityPercent, 30, 100);
+        PollIntervalMs = Math.Clamp(PollIntervalMs, 50, 1000);
+        if (!Enum.IsDefined(Style)) Style = BadgeStyle.Pill;
+        if (!Enum.IsDefined(Placement)) Placement = BadgePlacement.AboveRight;
+        if (!ColorHex.TryParse(HangulColor, out _)) HangulColor = DefaultHangulColor;
+        if (!ColorHex.TryParse(EnglishColor, out _)) EnglishColor = DefaultEnglishColor;
+        ExcludedProcesses ??= new();
+        ExcludedProcesses.RemoveAll(string.IsNullOrWhiteSpace);
+    }
+
+    public Settings Clone()
+    {
+        var c = (Settings)MemberwiseClone();
+        c.ExcludedProcesses = new List<string>(ExcludedProcesses);
+        return c;
+    }
+
+    public void CopyFrom(Settings other)
+    {
+        Style = other.Style; Placement = other.Placement;
+        SizePercent = other.SizePercent; OpacityPercent = other.OpacityPercent;
+        HangulColor = other.HangulColor; EnglishColor = other.EnglishColor;
+        HideOnFullscreen = other.HideOnFullscreen;
+        ExcludedProcesses = new List<string>(other.ExcludedProcesses);
+        HotkeyEnabled = other.HotkeyEnabled; PollIntervalMs = other.PollIntervalMs;
+        CheckForUpdates = other.CheckForUpdates; LastUpdateCheckUtc = other.LastUpdateCheckUtc;
+    }
+}
+
+/// <summary>
+/// JSON 직렬화 코드를 컴파일 시점에 생성(source generator)한다. 리플렉션 기반 직렬화는 트리밍(trimming)하면
+/// 프로퍼티가 잘려 나가거나 아예 꺼지므로(IsReflectionEnabledByDefault=false) 쓰면 안 된다.
+/// 열거형(enum)은 예전 설정 파일과 호환되도록 계속 이름 문자열("Pill")로 저장한다.
+/// </summary>
+[JsonSourceGenerationOptions(WriteIndented = true, UseStringEnumConverter = true,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSerializable(typeof(Settings))]
+public sealed partial class SettingsJsonContext : JsonSerializerContext { }
+
+/// <summary>설정 파일을 읽고 쓴다. 예전 위치(exe 옆)의 파일이 있으면 첫 실행 때 새 위치로 옮겨 온다.</summary>
+public sealed class SettingsStore
+{
+    public string FilePath { get; }
+    public string? LegacyFilePath { get; }
+
+    public SettingsStore(string filePath, string? legacyFilePath = null)
+    {
+        FilePath = filePath;
+        LegacyFilePath = legacyFilePath;
+    }
+
+    public SettingsStore(AppPaths paths) : this(paths.SettingsFile, paths.LegacySettingsFile) { }
+
+    public Settings Load()
+    {
+        var s = TryRead(FilePath);
+        if (s is null && LegacyFilePath is not null && File.Exists(LegacyFilePath))
+        {
+            s = TryRead(LegacyFilePath);
+            if (s is not null)
+            {
+                Log.Write($"settings migrated from {LegacyFilePath}");
+                Save(s);   // 새 위치에 복사해 둔다. 예전 파일은 지우지 않는다(Program Files 는 지울 권한이 없을 수 있음).
+            }
+        }
+        s ??= new Settings();
+        s.Normalize();
+        return s;
+    }
+
+    public bool Save(Settings settings)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+            string tmp = FilePath + ".tmp";
+            File.WriteAllText(tmp, JsonSerializer.Serialize(settings, SettingsJsonContext.Default.Settings));
+            File.Move(tmp, FilePath, overwrite: true);   // 쓰다 말고 꺼져도 반쪽짜리 파일이 남지 않게
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("settings save failed", ex);
+            return false;
+        }
+    }
+
+    static Settings? TryRead(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return null;
+            return JsonSerializer.Deserialize(File.ReadAllText(path), SettingsJsonContext.Default.Settings);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"settings load failed ({path})", ex);
+            return null;
+        }
+    }
+}
+
+/// <summary>"#RRGGBB" / "#AARRGGBB" 문자열과 ARGB 정수 사이 변환. System.Drawing 없이 쓰려고 따로 둔다.</summary>
+public static class ColorHex
+{
+    public static bool TryParse(string? text, out int argb)
+    {
+        argb = 0;
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var span = text.AsSpan().Trim();
+        if (span.Length > 0 && span[0] == '#') span = span[1..];
+        if (span.Length != 6 && span.Length != 8) return false;
+        if (!uint.TryParse(span, System.Globalization.NumberStyles.HexNumber, null, out uint v)) return false;
+        if (span.Length == 6) v |= 0xFF000000;
+        argb = unchecked((int)v);
+        return true;
+    }
+
+    public static string ToHex(int argb) => "#" + (argb & 0xFFFFFF).ToString("X6");
+}

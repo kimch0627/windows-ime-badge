@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    WinForms·Win32 에 의존하지 않는 순수 로직(설정, 배지 위치 계산, 버전 비교, 제외 앱 매칭, 로그).
+    Windows 가 없는 환경(Linux CI, 개발자 PC)에서도 컴파일·단위 테스트가 되도록 net8.0 으로 둔다.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>ImeBadge</RootNamespace>
+    <AssemblyName>ImeBadge.Core</AssemblyName>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ImeBadge" />
+    <InternalsVisibleTo Include="ImeBadge.Core.Tests" />
+  </ItemGroup>
+</Project>

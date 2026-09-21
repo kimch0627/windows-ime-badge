@@ -1,7 +1,11 @@
 bin/
 obj/
+out/
+TestResults/
 *.user
 *.suo
 .vs/
 .idea/
 *.swp
+*.log
+installer/Output/
