@@ -47,6 +47,19 @@ CI(`.github/workflows/build.yml`)가 하는 일:
 
 SmartScreen 평판은 서명 후에도 다운로드 횟수가 쌓여야 경고가 사라집니다. EV 인증서는 즉시 평판을 받지만 비용이 큽니다.
 
+## 저장소 공개 여부 (중요)
+
+현재 저장소는 **비공개(private)** 입니다. 비공개 상태에서는 다음이 동작하지 않습니다.
+
+| 기능 | 이유 |
+|---|---|
+| 프로그램의 "업데이트 확인" | 인증 없이 `api.github.com/.../releases/latest` 를 읽는데, 비공개 저장소는 404 를 돌려준다 |
+| winget 등록 | winget-pkgs 검증기가 설치 프로그램 URL 을 인증 없이 내려받아 해시를 확인한다 |
+| README 의 다운로드 링크 | 로그인하지 않은 사용자에게는 404 |
+
+배포를 시작하려면 **Settings → General → Danger Zone → Change visibility → Public** 으로 바꿉니다.
+공개 전에 시크릿·개인정보가 커밋 이력에 없는지 확인하세요(이 저장소는 코드·문서·아이콘만 있습니다).
+
 ## winget 등록
 
 패키지 ID 는 `kimch0627.ImeBadge` 입니다. 등록되면 사용자는 `winget install kimch0627.ImeBadge` 한 줄로 설치합니다.
