@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
@@ -26,8 +27,11 @@ sealed class SettingsForm : Form
     HotkeyBox _hotkeyBox = null!;
     ListBox _excludedList = null!;
     ComboBox _newProcess = null!;
-    Panel _preview = null!;
+    PreviewPanel _preview = null!;
     readonly ToolTip _tips = new() { AutoPopDelay = 12000 };
+    // "점, 바뀔 때 1.5초 글자" 미리보기용. 실제 배지처럼 설정이 바뀐 직후 1.5초는 글자 배지를, 그 뒤엔 점을 보여 준다.
+    readonly System.Windows.Forms.Timer _flashTimer = new() { Interval = BadgeForm.FlashMs };
+    bool _flashing;
 
     /// <summary>편집 중 값이 바뀔 때마다 발생. 실제 설정에는 이미 복사되어 있으니 다시 그리기만 하면 된다(저장은 하지 않는다).</summary>
     public event Action? Changed;
@@ -51,6 +55,8 @@ sealed class SettingsForm : Form
         Font = Theme.DialogFont;
         AutoSize = true; AutoSizeMode = AutoSizeMode.GrowAndShrink;
         Padding = new Padding(12);
+
+        _flashTimer.Tick += (_, _) => { _flashTimer.Stop(); _flashing = false; _preview.Invalidate(); };
 
         Build();
         LoadDraftIntoControls();
@@ -190,9 +196,9 @@ sealed class SettingsForm : Form
     GroupBox BuildPreviewGroup()
     {
         var g = NewGroup("미리보기");
-        _preview = new Panel { Location = ContentOrigin, Width = InnerWidth, Height = 120, BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Tag = "custom-paint" };
+        _preview = new PreviewPanel { Location = ContentOrigin, Width = InnerWidth, Height = PreviewHeight, BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Tag = "custom-paint" };
         _preview.Paint += (_, e) => PaintPreview(e.Graphics);
-        _tips.SetToolTip(_preview, "왼쪽은 밝은 배경(메모장), 오른쪽은 어두운 배경(VS Code 등)에서의 모습입니다.");
+        _tips.SetToolTip(_preview, "왼쪽은 밝은 배경(메모장), 오른쪽은 어두운 배경(VS Code 등)에서의 모습입니다.\n배지가 옆줄 글자를 얼마나 가리는지, 불투명도를 낮추면 얼마나 비치는지도 볼 수 있습니다.");
         g.Controls.Add(_preview);
         return g;
     }
@@ -417,15 +423,49 @@ sealed class SettingsForm : Form
         RefreshPreview();
     }
 
-    void RefreshPreview() => _preview?.Invalidate();
+    /// <summary>미리보기를 다시 그린다. DotFlash 면 실제 배지처럼 글자 배지로 시작해 1.5초 뒤 점으로 바뀐다.</summary>
+    void RefreshPreview()
+    {
+        _flashTimer.Stop();
+        _flashing = _draft.Style == BadgeStyle.DotFlash;
+        if (_flashing) _flashTimer.Start();
+        _preview?.Invalidate();
+    }
+
+    // ── 미리보기 ──
+    // 작은 편집기처럼 여러 줄의 글을 놓고, 그중 두 줄(한글·영문) 끝에 caret 과 배지를 그린다.
+    // 옆줄 글자가 있어야 배지가 무엇을 얼마나 가리는지(위치)와 얼마나 비치는지(불투명도)가 눈에 보인다.
+    // 아래 값은 96 DPI 기준 픽셀이고 그릴 때 배율을 곱한다.
+    const int PreviewHeight = 240;
+    const int PreviewRowPitch = 28;      // 줄 간격. 100% 배지(약 26px)가 caret 줄과 옆줄 사이에 놓이며 옆줄 글자를 덮는다
+    const int PreviewTopMargin = 12, PreviewLeftMargin = 18;
+
+    /// <summary>
+    /// 미리보기 줄. 상태가 있는 줄은 글자 끝에 caret 과 그 상태의 배지를 그리고, 나머지는 옅은 색 채움 글이다.
+    /// caret 줄 위아래로 두 줄씩 두어 200% 크기까지는 배지가 잘리지 않고 고른 위치("위"·"아래")에 그대로 놓인다.
+    /// </summary>
+    static readonly (string text, ImeState? state)[] PreviewRows =
+    {
+        ("the quick brown fox", null),
+        ("over the lazy dog", null),
+        ("안녕하세요", ImeState.Hangul),
+        ("다람쥐 헌 쳇바퀴에", null),
+        ("타고파 abc def ghi", null),
+        ("hello world", ImeState.English),
+        ("가나다라 마바사아", null),
+        ("abcd efgh ijkl mnop", null),
+    };
 
     // 미리보기 배경. 왼쪽은 흰 종이(메모장), 오른쪽은 어두운 편집기(VS Code 기본 테마)와 비슷한 색.
     static readonly Color LightBg = Color.White, LightText = Color.Black;
     static readonly Color DarkBg = Color.FromArgb(0x1E, 0x1E, 0x1E), DarkText = Color.FromArgb(0xD4, 0xD4, 0xD4);
 
+    /// <summary>미리보기에 그릴 모양. DotFlash 는 바뀐 직후엔 글자 배지, 1.5초 뒤엔 점(<see cref="_flashing"/>).</summary>
+    BadgeStyle PreviewStyle => _draft.Style == BadgeStyle.DotFlash ? (_flashing ? BadgeStyle.Pill : BadgeStyle.Dot) : _draft.Style;
+
     /// <summary>
-    /// "안녕하세요|" 와 "hello|" 두 줄 옆에 실제 렌더러로 그린 배지를 놓는다.
     /// 왼쪽 절반은 밝은 배경, 오른쪽 절반은 어두운 배경이라 어느 편집기에서 써도 어떻게 보일지 한 번에 확인할 수 있다.
+    /// 배지는 실제 렌더러·위치 계산을 그대로 써서 창 밖 배지와 똑같이 보인다.
     /// </summary>
     void PaintPreview(Graphics g)
     {
@@ -438,32 +478,53 @@ sealed class SettingsForm : Form
 
     void PaintPreviewHalf(Graphics g, Rectangle area, Color bg, Color fg, float dpi)
     {
-        using (var bgBrush = new SolidBrush(bg)) g.FillRectangle(bgBrush, area);
-        float scale = dpi * _draft.SizePercent / 100f;
-        var theme = BadgeTheme.From(_draft);
-        var style = _draft.Style == BadgeStyle.DotFlash ? BadgeStyle.Pill : _draft.Style;
-        using var font = new Font(BadgeRenderer.FontFamily, 11f);
-        using var textBrush = new SolidBrush(fg);
-        using var caretPen = new Pen(fg);
-
-        var samples = new[] { (ImeState.Hangul, "안녕하세요"), (ImeState.English, "hello") };
-        int lineH = (int)(48 * dpi);
-        for (int i = 0; i < samples.Length; i++)
+        g.SetClip(area);   // 큰 배지가 반대쪽 배경으로 넘어가지 않게
+        try
         {
-            var (state, text) = samples[i];
-            var textSize = g.MeasureString(text, font);
-            float x = area.Left + 14 * dpi, y = area.Top + 20 * dpi + i * lineH;
-            g.DrawString(text, font, textBrush, x, y);
-            // 텍스트 끝에 세로 caret 을 그리고, 그 caret 기준으로 배지 위치를 계산한다.
-            var caret = new Rectangle((int)(x + textSize.Width - 2 * dpi), (int)y, 1, (int)textSize.Height);
-            g.DrawLine(caretPen, caret.Left, caret.Top, caret.Left, caret.Bottom);
+            using (var bgBrush = new SolidBrush(bg)) g.FillRectangle(bgBrush, area);
+            using var font = new Font(BadgeRenderer.FontFamily, 11f);
+            // 기본 StringFormat 은 글자 양옆에 여백을 더해 caret 이 마지막 글자에서 떨어져 보인다(배지가 왼쪽인지 오른쪽인지 헷갈림).
+            using var fmt = new StringFormat(StringFormat.GenericTypographic);
+            using var textBrush = new SolidBrush(fg);
+            using var fillerBrush = new SolidBrush(Mix(fg, bg, 0.55f));
+            using var caretPen = new Pen(fg, Math.Max(1f, (float)Math.Round(dpi)));
+            int lineH = (int)Math.Ceiling(font.GetHeight(g));
 
-            using var bmp = BadgeRenderer.Render(state, style, scale, theme, _draft.OpacityPercent);
-            var pos = BadgeLayout.Compute(new LayoutInput(caret, bmp.Size, style, _draft.Placement, scale, area));
-            // 픽셀 크기를 명시한다. Point 만 주는 오버로드는 비트맵의 DPI(96)와 화면 DPI 차이만큼 확대해 버린다.
-            g.DrawImage(bmp, new Rectangle(pos, bmp.Size), new Rectangle(Point.Empty, bmp.Size), GraphicsUnit.Pixel);
+            // 1) 글과 caret 을 먼저 모두 그린다. 배지는 그 위에 얹혀야 하므로(실제로도 배지는 최상위 창이다) 나중에 그린다.
+            var carets = new List<(ImeState state, Rectangle caret)>();
+            for (int r = 0; r < PreviewRows.Length; r++)
+            {
+                var (text, state) = PreviewRows[r];
+                float x = area.Left + PreviewLeftMargin * dpi, y = area.Top + (PreviewTopMargin + r * PreviewRowPitch) * dpi;
+                if (state is null) { g.DrawString(text, font, fillerBrush, x, y, fmt); continue; }
+
+                g.DrawString(text, font, textBrush, x, y, fmt);
+                float w = g.MeasureString(text, font, PointF.Empty, fmt).Width;
+                var caret = new Rectangle((int)Math.Round(x + w + dpi), (int)Math.Round(y), 1, lineH);
+                g.DrawLine(caretPen, caret.Left, caret.Top, caret.Left, caret.Bottom);
+                carets.Add((state.Value, caret));
+            }
+
+            // 2) 배지. 미리보기에서는 화면 가장자리 대피(위에 자리가 없으면 아래로, 왼쪽에 없으면 오른쪽으로)를 하지 않는다.
+            //    고른 위치를 그대로 지켜야 위/아래·왼쪽/오른쪽 차이가 보인다. 아주 크면(300%) 가장자리에서 잘려 보일 수 있다.
+            float scale = dpi * _draft.SizePercent / 100f;
+            var theme = BadgeTheme.From(_draft);
+            var style = PreviewStyle;
+            var room = Rectangle.Inflate(area, 4096, 4096);
+            foreach (var (state, caret) in carets)
+            {
+                using var bmp = BadgeRenderer.Render(state, style, scale, theme, _draft.OpacityPercent);
+                var pos = BadgeLayout.Compute(new LayoutInput(caret, bmp.Size, style, _draft.Placement, scale, room));
+                // 픽셀 크기를 명시한다. Point 만 주는 오버로드는 비트맵의 DPI(96)와 화면 DPI 차이만큼 확대해 버린다.
+                g.DrawImage(bmp, new Rectangle(pos, bmp.Size), new Rectangle(Point.Empty, bmp.Size), GraphicsUnit.Pixel);
+            }
         }
+        finally { g.ResetClip(); }
     }
+
+    /// <summary><paramref name="a"/> 에서 <paramref name="b"/> 쪽으로 <paramref name="t"/>(0~1)만큼 섞은 색.</summary>
+    static Color Mix(Color a, Color b, float t) => Color.FromArgb(
+        (int)Math.Round(a.R + (b.R - a.R) * t), (int)Math.Round(a.G + (b.G - a.G) * t), (int)Math.Round(a.B + (b.B - a.B) * t));
 
     /// <summary>[확인]: 자동 시작을 반영하고 저장을 알린다. 배지 설정은 이미 실제 설정에 들어가 있다.</summary>
     void Apply()
@@ -486,9 +547,17 @@ sealed class SettingsForm : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) _tips.Dispose();
+        if (disposing) { _flashTimer.Dispose(); _tips.Dispose(); }
         base.Dispose(disposing);
     }
+}
+
+/// <summary>
+/// 미리보기 패널. 슬라이더를 끌 때마다 통째로 다시 그리므로 이중 버퍼가 없으면 배경이 먼저 지워지며 깜빡인다.
+/// </summary>
+sealed class PreviewPanel : Panel
+{
+    public PreviewPanel() { DoubleBuffered = true; }
 }
 
 /// <summary>
