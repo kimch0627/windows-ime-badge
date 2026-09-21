@@ -14,6 +14,8 @@
 # Release 첨부 파일은 그 용량을 쓰지 않는다. 롤링 사전 릴리스는 태그(latest, dev-*)를 강제로 옮기는
 # 방식이라 v* 태그 트리거에 걸리지 않는다.
 #
+# winget: 정식 릴리스 뒤 winget.yml 을 호출해 매니페스트를 만들고, WINGET_TOKEN 이 있으면 winget-pkgs 에 PR 을 낸다.
+#
 # 코드 서명: 저장소 시크릿 AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET / SIGNING_ENDPOINT /
 # SIGNING_ACCOUNT / SIGNING_PROFILE 이 모두 있으면 Azure Trusted Signing 으로 exe 와 설치 프로그램에 서명한다.
 # 없으면 서명 단계를 건너뛴다(SmartScreen 경고가 뜨는 미서명 빌드). 자세한 절차는 docs/release.md.
@@ -57,6 +59,8 @@ jobs:
   build:
     needs: test
     runs-on: windows-latest
+    outputs:
+      release_tag: ${{ steps.ver.outputs.release_tag }}
     steps:
       - uses: actions/checkout@v4
 
@@ -79,6 +83,7 @@ jobs:
             if ($subject -match '^release:\s*(v\d+\.\d+\.\d+[0-9A-Za-z.-]*)') { $rel = $Matches[1]; $fromCommit = $true }
           }
           "RELEASE_TAG=$rel" >> $env:GITHUB_ENV
+          "release_tag=$rel" >> $env:GITHUB_OUTPUT
           "RELEASE_TAG_FROM_COMMIT=$fromCommit" >> $env:GITHUB_ENV
           if ($rel) { "정식 릴리스 태그: $rel (커밋 메시지에서: $fromCommit)" }
 
@@ -231,3 +236,12 @@ jobs:
             out/ImeBadge-win-x64.exe
             out/ImeBadge-win-x64-selfcontained.exe
             out/SHA256SUMS.txt
+
+  # 정식 릴리스가 만들어졌으면 winget 매니페스트를 만들고(WINGET_TOKEN 이 있으면) microsoft/winget-pkgs 에 PR 을 낸다.
+  winget:
+    needs: build
+    if: needs.build.outputs.release_tag != ''
+    uses: ./.github/workflows/winget.yml
+    with:
+      version: ${{ needs.build.outputs.release_tag }}
+    secrets: inherit
