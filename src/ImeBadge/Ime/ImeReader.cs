@@ -9,7 +9,8 @@ namespace ImeBadge;
 enum ImeState { Unknown, Hangul, English, OtherLang }
 
 /// <summary>한 번 읽은 결과. 배지를 띄우지 않을 이유가 있으면 <see cref="Suppressed"/> 에 적힌다.</summary>
-readonly record struct Snapshot(ImeState State, Rectangle? Caret, IntPtr Foreground = default, string? Suppressed = null);
+/// <param name="CapsLock">영문 모드이고 Caps Lock 이 켜져 있는가(설정에서 표시를 껐으면 항상 false).</param>
+readonly record struct Snapshot(ImeState State, Rectangle? Caret, IntPtr Foreground = default, string? Suppressed = null, bool CapsLock = false);
 
 /// <summary>활성 창의 caret 위치와 한/영 상태를 한 번 읽어 <see cref="Snapshot"/> 으로 돌려준다.</summary>
 static class ImeReader
@@ -57,6 +58,9 @@ static class ImeReader
         }
 
         var state = ReadImeState(fg, gti.hwndFocus, tid, dump);
+        // Caps Lock 은 한글 입력에 영향이 없으므로 영문 모드에서만 본다.
+        bool caps = settings.ShowCapsLock && state == ImeState.English && Native.IsCapsLockOn();
+        if (caps) dump?.Append(" caps");
 
         if (dump is not null)
         {
@@ -66,7 +70,7 @@ static class ImeReader
             Log.WriteIfChanged($"fg='{Native.ClassName(fg)}' focus='{Native.ClassName(gti.hwndFocus)}' tid={tid} pid={pid} => {state}{dump}");
         }
 
-        return new(state, caret, fg);
+        return new(state, caret, fg, CapsLock: caps);
     }
 
     /// <summary>

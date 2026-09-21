@@ -26,10 +26,13 @@ static class BadgeRenderer
 {
     public const string FontFamily = "Malgun Gothic";
 
-    public static (string text, Color color) Look(ImeState s, in BadgeTheme theme) => s switch
+    /// <summary>글자 배지 텍스트. 영문 + Caps Lock 이면 "ABC"(대문자가 나온다는 뜻).</summary>
+    public const string CapsLockText = "ABC";
+
+    public static (string text, Color color) Look(ImeState s, in BadgeTheme theme, bool capsLock = false) => s switch
     {
         ImeState.Hangul => ("한", theme.Hangul),
-        ImeState.English => ("A", theme.English),
+        ImeState.English => (capsLock ? CapsLockText : "A", theme.English),
         _ => ("?", theme.Other),
     };
 
@@ -37,9 +40,9 @@ static class BadgeRenderer
     public static Color TextColorOn(Color background) =>
         ColorHex.PrefersWhiteText(background.ToArgb()) ? Color.White : Color.Black;
 
-    public static Bitmap Render(ImeState state, BadgeStyle style, float scale, in BadgeTheme theme, int opacityPercent = 100)
+    public static Bitmap Render(ImeState state, BadgeStyle style, float scale, in BadgeTheme theme, int opacityPercent = 100, bool capsLock = false)
     {
-        var (text, color) = Look(state, theme);
+        var (text, color) = Look(state, theme, capsLock);
         var fill = Color.FromArgb(Math.Clamp(255 * opacityPercent / 100, 30, 255), color);
         return style switch
         {

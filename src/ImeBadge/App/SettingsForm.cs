@@ -22,7 +22,7 @@ sealed class SettingsForm : Form
     TrackBar _size = null!, _opacity = null!;
     NumericUpDown _poll = null!;
     Button _hangulColor = null!, _englishColor = null!;
-    CheckBox _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!;
+    CheckBox _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!;
     HotkeyBox _hotkeyBox = null!;
     ListBox _excludedList = null!;
     ComboBox _newProcess = null!;
@@ -139,6 +139,11 @@ sealed class SettingsForm : Form
         _animate.CheckedChanged += (_, _) => { _draft.Animate = _animate.Checked; Touch(); };
         AddRow(t, null, _animate);
         _tips.SetToolTip(_animate, "Windows 설정 → 접근성 → 시각 효과 → 애니메이션 효과가 꺼져 있으면 여기와 상관없이 생략합니다.");
+
+        _capsLock = new CheckBox { Text = "영문일 때 Caps Lock 표시  (A → ABC)(&C)", AutoSize = true };
+        _capsLock.CheckedChanged += (_, _) => { _draft.ShowCapsLock = _capsLock.Checked; Touch(); };
+        AddRow(t, null, _capsLock);
+        _tips.SetToolTip(_capsLock, "Caps Lock 이 켜져 있으면 배지 글자가 ABC 로, 트레이 아이콘은 A 아래 줄로 바뀝니다. 점·밑줄 모양에서는 차이가 없습니다.");
 
         g.Controls.Add(t);
         return g;
@@ -396,6 +401,7 @@ sealed class SettingsForm : Form
         PaintColorButton(_hangulColor, _draft.HangulColor);
         PaintColorButton(_englishColor, _draft.EnglishColor);
         _animate.Checked = _draft.Animate;
+        _capsLock.Checked = _draft.ShowCapsLock;
         _autostartBox.Checked = _autostart;
         _fullscreen.Checked = _draft.HideOnFullscreen;
         _trayStateBox.Checked = _draft.TrayShowsState;
@@ -446,11 +452,14 @@ sealed class SettingsForm : Form
         using var textBrush = new SolidBrush(fg);
         using var caretPen = new Pen(fg);
 
-        var samples = new[] { (ImeState.Hangul, "안녕하세요"), (ImeState.English, "hello") };
+        // Caps Lock 표시를 켰으면 영문 줄을 대문자 예시로 바꿔 "ABC" 배지도 미리 보여 준다.
+        var samples = _draft.ShowCapsLock
+            ? new[] { (ImeState.Hangul, "안녕하세요", false), (ImeState.English, "HELLO", true) }
+            : new[] { (ImeState.Hangul, "안녕하세요", false), (ImeState.English, "hello", false) };
         int lineH = (int)(48 * dpi);
         for (int i = 0; i < samples.Length; i++)
         {
-            var (state, text) = samples[i];
+            var (state, text, caps) = samples[i];
             var textSize = g.MeasureString(text, font);
             float x = area.Left + 14 * dpi, y = area.Top + 20 * dpi + i * lineH;
             g.DrawString(text, font, textBrush, x, y);
@@ -458,7 +467,7 @@ sealed class SettingsForm : Form
             var caret = new Rectangle((int)(x + textSize.Width - 2 * dpi), (int)y, 1, (int)textSize.Height);
             g.DrawLine(caretPen, caret.Left, caret.Top, caret.Left, caret.Bottom);
 
-            using var bmp = BadgeRenderer.Render(state, style, scale, theme, _draft.OpacityPercent);
+            using var bmp = BadgeRenderer.Render(state, style, scale, theme, _draft.OpacityPercent, caps);
             var pos = BadgeLayout.Compute(new LayoutInput(caret, bmp.Size, style, _draft.Placement, scale, area));
             // 픽셀 크기를 명시한다. Point 만 주는 오버로드는 비트맵의 DPI(96)와 화면 DPI 차이만큼 확대해 버린다.
             g.DrawImage(bmp, new Rectangle(pos, bmp.Size), new Rectangle(Point.Empty, bmp.Size), GraphicsUnit.Pixel);

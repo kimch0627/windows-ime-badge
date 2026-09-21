@@ -51,6 +51,7 @@ static class Native
     [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr hWnd, ref POINT pt);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
     [DllImport("user32.dll")] public static extern IntPtr GetKeyboardLayout(uint tid);
+    [DllImport("user32.dll")] public static extern short GetKeyState(int vKey);
     [DllImport("user32.dll")] public static extern bool IsHungAppWindow(IntPtr hWnd);
     [DllImport("imm32.dll")] public static extern IntPtr ImmGetDefaultIMEWnd(IntPtr hWnd);
     [DllImport("user32.dll")]
@@ -131,6 +132,10 @@ static class Native
     public const uint IME_CMODE_HANGUL = 0x0001;   // == IME_CMODE_NATIVE
     public const uint SMTO_ABORTIFHUNG = 0x0002;
     public const ushort LANG_KOREAN = 0x0412;
+    public const int VK_CAPITAL = 0x14;
+
+    /// <summary>Caps Lock 이 켜져 있는가. 토글 키는 GetKeyState 의 최하위 비트가 켜짐 상태다(스레드에 상관없이 전역 값).</summary>
+    public static bool IsCapsLockOn() => (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
 
     public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
     public const uint EVENT_OBJECT_FOCUS = 0x8005;

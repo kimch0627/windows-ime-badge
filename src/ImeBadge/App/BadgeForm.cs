@@ -38,13 +38,14 @@ sealed class BadgeForm : Form
     readonly NotifyIcon _tray;
     readonly TrayIcons _trayIcons = new();
     ImeState _trayState = ImeState.Unknown;   // 트레이 아이콘·툴팁이 마지막으로 반영한 상태
-    bool _trayPaused;
+    bool _trayPaused, _trayCaps;
     readonly Native.WinEventProc _eventProc;   // GC 회수 방지용 필드
     readonly IntPtr[] _hooks = new IntPtr[3];
 
     ImeState _lastState = ImeState.Unknown;
+    bool _lastCaps;
     DateTime _flashUntil = DateTime.MinValue;
-    (ImeState state, BadgeStyle style, float scale, int opacity, string hangul, string english) _renderKey;
+    (ImeState state, bool caps, BadgeStyle style, float scale, int opacity, string hangul, string english) _renderKey;
     Size _bitmapSize;
     Point _lastPos = new(int.MinValue, int.MinValue);
     IntPtr _lastFg;
@@ -204,7 +205,7 @@ sealed class BadgeForm : Form
         menu.Opening += (_, _) =>
         {
             RefreshChecks(menu.Items);
-            _statusItem.Text = "현재: " + StateText(_trayState);
+            _statusItem.Text = "현재: " + StateText(_trayState, _trayCaps);
             _pauseItem.Checked = _paused;
             _autostartItem.Checked = Autostart.IsEnabled();
         };
@@ -279,18 +280,18 @@ sealed class BadgeForm : Form
     }
 
     // ── 트레이 아이콘·툴팁 ──
-    string StateText(ImeState state) => _paused ? "일시 중지" : state switch
+    string StateText(ImeState state, bool caps = false) => _paused ? "일시 중지" : state switch
     {
         ImeState.Hangul => "한글 입력",
-        ImeState.English => "영문 입력",
+        ImeState.English => caps ? "영문 입력 (Caps Lock)" : "영문 입력",
         ImeState.OtherLang => "다른 언어 입력",
         _ => "입력 위치 없음",
     };
 
     /// <summary>툴팁: 이름 · 상태 · 단축키. NotifyIcon.Text 는 127자 제한이 있다.</summary>
-    string TrayText(ImeState state)
+    string TrayText(ImeState state, bool caps = false)
     {
-        string s = AppInfo.DisplayName + " · " + StateText(state);
+        string s = AppInfo.DisplayName + " · " + StateText(state, caps);
         if (_paused) s += _settings.HotkeyEnabled ? $" · {_settings.Hotkey} 로 재개" : "";
         else if (_settings.HotkeyEnabled) s += $" · {_settings.Hotkey} 일시 중지";
         if (Log.Enabled) s += " [debug]";
@@ -298,13 +299,13 @@ sealed class BadgeForm : Form
     }
 
     /// <summary>트레이 아이콘과 툴팁을 상태에 맞춘다. 같은 상태면 아무것도 하지 않는다(Shell_NotifyIcon 호출을 아낀다).</summary>
-    void UpdateTray(ImeState state, bool force = false)
+    void UpdateTray(ImeState state, bool caps = false, bool force = false)
     {
-        if (!_settings.TrayShowsState) state = ImeState.Unknown;
-        if (!force && state == _trayState && _paused == _trayPaused) return;
-        _trayState = state; _trayPaused = _paused;
-        _tray.Icon = _trayIcons.Get(state, _paused, SystemInformation.SmallIconSize.Width, BadgeTheme.From(_settings));
-        _tray.Text = TrayText(state);
+        if (!_settings.TrayShowsState) { state = ImeState.Unknown; caps = false; }
+        if (!force && state == _trayState && _paused == _trayPaused && caps == _trayCaps) return;
+        _trayState = state; _trayPaused = _paused; _trayCaps = caps;
+        _tray.Icon = _trayIcons.Get(state, _paused, SystemInformation.SmallIconSize.Width, BadgeTheme.From(_settings), caps);
+        _tray.Text = TrayText(state, caps);
     }
 
     /// <summary>색·DPI 가 바뀌어 캐시한 아이콘을 버리고 다시 그린다. 트레이가 버릴 아이콘을 가리키지 않도록 먼저 기본 아이콘으로 돌린다.</summary>
@@ -312,7 +313,7 @@ sealed class BadgeForm : Form
     {
         _tray.Icon = Icons.App;
         _trayIcons.Clear();
-        UpdateTray(_trayState, force: true);
+        UpdateTray(_trayState, _trayCaps, force: true);
     }
 
     static void RefreshChecks(ToolStripItemCollection items)
@@ -374,7 +375,7 @@ sealed class BadgeForm : Form
         Poll();
     }
 
-    void ResetRenderKey() => _renderKey = (ImeState.Unknown, (BadgeStyle)(-1), 0, -1, "", "");
+    void ResetRenderKey() => _renderKey = (ImeState.Unknown, false, (BadgeStyle)(-1), 0, -1, "", "");
 
     // ── 일시 중지 / 설정 / 정보 ──
     void TogglePause()
@@ -553,13 +554,13 @@ sealed class BadgeForm : Form
         var caret = s.Caret.Value;
         _lastSnapshot = s;
         bool appearing = !Visible;
-        bool changed = s.State != _lastState;
+        bool changed = s.State != _lastState || s.CapsLock != _lastCaps;   // Caps Lock 토글도 "바뀜"으로 알린다
         if (changed)
         {
-            _lastState = s.State;
+            _lastState = s.State; _lastCaps = s.CapsLock;
             _flashUntil = DateTime.Now.AddMilliseconds(FlashMs);
         }
-        UpdateTray(s.State);
+        UpdateTray(s.State, s.CapsLock);
 
         // 나타날 때는 페이드인, 보이는 중에 한/영이 바뀌면 펄스. 둘 다 "지금 바뀌었다"를 눈에 띄게 한다.
         if (AnimationsOn)
@@ -578,14 +579,14 @@ sealed class BadgeForm : Form
 
         float scale = Native.DpiScaleAt(caret.Location) * _settings.SizePercent / 100f * pulse;
 
-        var key = (s.State, style, scale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor);
+        var key = (s.State, s.CapsLock, style, scale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor);
         bool needRender = key != _renderKey || _lastBmp is null;
 
         Size bs = needRender ? Size.Empty : _bitmapSize;
         Bitmap? bmp = null;
         if (needRender)
         {
-            bmp = BadgeRenderer.Render(s.State, style, scale, BadgeTheme.From(_settings), _settings.OpacityPercent);
+            bmp = BadgeRenderer.Render(s.State, style, scale, BadgeTheme.From(_settings), _settings.OpacityPercent, s.CapsLock);
             bs = bmp.Size;
         }
 
