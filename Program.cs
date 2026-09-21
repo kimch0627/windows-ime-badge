@@ -57,6 +57,12 @@ static class Native
         uint idProcess, uint idThread, uint dwFlags);
     [DllImport("user32.dll")] public static extern bool UnhookWinEvent(IntPtr hHook);
 
+    // z-order 확인·조정
+    [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr hWnd, uint cmd);
+    [DllImport("user32.dll")] public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int index);
+    [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool attach);
+    [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+
     // 레이어드 창(픽셀별 투명도) 그리기
     [DllImport("user32.dll")] public static extern IntPtr GetDC(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
@@ -81,8 +87,13 @@ static class Native
     public const uint SMTO_ABORTIFHUNG      = 0x0002;
     public const ushort LANG_KOREAN         = 0x0412;
 
+    public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
     public const uint EVENT_OBJECT_IME_CHANGE = 0x8029;
     public const uint WINEVENT_OUTOFCONTEXT   = 0x0000;
+
+    public const uint GW_HWNDPREV  = 3;           // z-order에서 바로 위(더 앞) 창
+    public const int  GWL_EXSTYLE  = -20;
+    public const int  WS_EX_TOPMOST = 0x00000008;
 
     public const int WS_EX_TRANSPARENT = 0x00000020;
     public const int WS_EX_TOOLWINDOW  = 0x00000080;
@@ -102,6 +113,17 @@ static class Native
         var sb = new StringBuilder(128);
         GetClassName(hwnd, sb, sb.Capacity);
         return sb.ToString();
+    }
+
+    public static bool IsTopmost(IntPtr hwnd) =>
+        hwnd != IntPtr.Zero && ((long)GetWindowLongPtr(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+
+    /// <summary>z-order에서 <paramref name="a"/>가 <paramref name="b"/>보다 위(앞)에 있는가. b에서 위로 올라가며 찾는다.</summary>
+    public static bool IsAbove(IntPtr a, IntPtr b)
+    {
+        for (var h = GetWindow(b, GW_HWNDPREV); h != IntPtr.Zero; h = GetWindow(h, GW_HWNDPREV))
+            if (h == a) return true;
+        return false;
     }
 
     /// <summary>해당 지점이 속한 모니터의 DPI 배율 (96 DPI = 1.0).</summary>
@@ -562,7 +584,7 @@ sealed class BadgeForm : Form
     readonly System.Windows.Forms.Timer _timer = new() { Interval = 100 };
     readonly NotifyIcon _tray;
     readonly Native.WinEventProc _imeChangeProc;   // GC 회수 방지용 필드
-    IntPtr _hook;
+    IntPtr _hook, _fgHook;
 
     ImeState _lastState = ImeState.Unknown;
     DateTime _flashUntil = DateTime.MinValue;       // DotFlash: 변경 직후 글자를 보여 주는 시한
@@ -598,6 +620,9 @@ sealed class BadgeForm : Form
         _hook = Native.SetWinEventHook(Native.EVENT_OBJECT_IME_CHANGE, Native.EVENT_OBJECT_IME_CHANGE,
                                        IntPtr.Zero, _imeChangeProc, 0, 0, Native.WINEVENT_OUTOFCONTEXT);
         Log.Write(_hook == IntPtr.Zero ? "IME change hook FAILED" : "IME change hook registered");
+        // 활성 창이 바뀌면 100ms 타이머를 기다리지 않고 바로 다시 읽는다. (최상위 창 위로 배지를 올리는 지연을 줄임)
+        _fgHook = Native.SetWinEventHook(Native.EVENT_SYSTEM_FOREGROUND, Native.EVENT_SYSTEM_FOREGROUND,
+                                         IntPtr.Zero, _imeChangeProc, 0, 0, Native.WINEVENT_OUTOFCONTEXT);
     }
 
     // ── 트레이 메뉴 ──
@@ -748,6 +773,11 @@ sealed class BadgeForm : Form
         }
         else if (raise) RaiseToTop();
 
+        // 활성 창이 자기도 최상위(TopMost)라면(FlowLauncher 등) 매 틱 실제 z-order를 확인한다. 활성 창이 뒤늦게
+        // 활성화되며 다시 위로 올라오거나, 백그라운드 프로세스의 z-order 변경이 활성 창 아래로 제한되는 경우가 있다.
+        if (Native.IsTopmost(s.Foreground) && Native.IsAbove(s.Foreground, Handle))
+            RaiseAbove(s.Foreground);
+
         _lastPos = pos;
         _lastFg = s.Foreground;
     }
@@ -756,6 +786,23 @@ sealed class BadgeForm : Form
     void RaiseToTop() =>
         Native.SetWindowPos(Handle, Native.HWND_TOPMOST, 0, 0, 0, 0,
                             Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+
+    /// <summary>
+    /// 활성 창 <paramref name="fg"/>보다 위로 올린다. 보통의 SetWindowPos로 안 되면(Windows는 마지막 입력을 받지 않은
+    /// 프로세스가 활성 창 위로 창을 올리는 것을 막는다) 활성 창 스레드의 입력 큐에 잠깐 붙어 그 권한을 빌린 뒤 바로 떼어 낸다.
+    /// </summary>
+    void RaiseAbove(IntPtr fg)
+    {
+        RaiseToTop();
+        if (!Native.IsAbove(fg, Handle)) return;
+
+        uint fgTid = Native.GetWindowThreadProcessId(fg, IntPtr.Zero), me = Native.GetCurrentThreadId();
+        if (fgTid == 0 || fgTid == me) return;
+        if (!Native.AttachThreadInput(me, fgTid, true)) { Log.WriteIfChanged($"raise: AttachThreadInput failed fg='{Native.ClassName(fg)}'"); return; }
+        try { RaiseToTop(); }
+        finally { Native.AttachThreadInput(me, fgTid, false); }
+        Log.WriteIfChanged($"raise: via AttachThreadInput fg='{Native.ClassName(fg)}' ok={!Native.IsAbove(fg, Handle)}");
+    }
 
     /// <summary>비트맵을 픽셀별 알파로 창에 올리면서 위치·크기도 함께 지정한다.</summary>
     void Present(Bitmap bmp, Point pos)
@@ -793,6 +840,7 @@ sealed class BadgeForm : Form
         if (disposing)
         {
             if (_hook != IntPtr.Zero) { Native.UnhookWinEvent(_hook); _hook = IntPtr.Zero; }
+            if (_fgHook != IntPtr.Zero) { Native.UnhookWinEvent(_fgHook); _fgHook = IntPtr.Zero; }
             _timer.Dispose();
             _tray.Visible = false;
             _tray.Dispose();
