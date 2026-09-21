@@ -189,6 +189,8 @@ jobs:
           Copy-Item out/fd/ImeBadge.exe out/ImeBadge-win-x64.exe
           Copy-Item out/sc/ImeBadge.exe out/ImeBadge-win-x64-selfcontained.exe
           Copy-Item installer/Output/ImeBadge-Setup-*.exe out/
+          # 롤링 사전 릴리스용 고정 이름. 버전이 든 이름으로 올리면 커밋마다 파일이 쌓여 덮어써지지 않는다.
+          Copy-Item installer/Output/ImeBadge-Setup-*.exe out/ImeBadge-Setup.exe
           Get-ChildItem out/*.exe | ForEach-Object { "{0,-48} {1,8:N1} MB" -f $_.Name, ($_.Length / 1MB) }
           Get-ChildItem out/*.exe | ForEach-Object { "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } | Set-Content out/SHA256SUMS.txt
           Get-Content out/SHA256SUMS.txt
@@ -211,7 +213,7 @@ jobs:
           body: "`${{ github.ref_name }}` 브랜치의 최신 자동 빌드입니다. 커밋마다 덮어써집니다. 검증된 버전은 v* 릴리스를 받으세요."
           prerelease: true
           files: |
-            out/ImeBadge-Setup-*.exe
+            out/ImeBadge-Setup.exe
             out/ImeBadge-win-x64.exe
             out/ImeBadge-win-x64-selfcontained.exe
             out/SHA256SUMS.txt
