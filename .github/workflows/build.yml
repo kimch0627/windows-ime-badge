@@ -1,31 +1,28 @@
-# main에 푸시하거나 v* 태그를 푸시하면 Windows 러너에서 exe를 빌드한다.
-# - 모든 빌드: 작은 exe(런타임 필요)를 Actions Artifacts 에 업로드 (7일 보관)
-#              계정의 아티팩트 저장 용량이 차면 업로드만 실패하고 빌드는 성공으로 남긴다.
-# - v* 태그:   자체 포함 exe까지 빌드하고 GitHub Release 에 두 파일을 첨부
-#              (Release 첨부 파일은 Actions 저장 용량을 쓰지 않는다)
-# - 수동 실행(Actions 탭 > build > Run workflow)에서 release_tag 를 넣으면 태그 푸시 없이도
-#   그 이름으로 태그와 Release 를 만든다.
+# 어느 브랜치든 푸시하면 Windows 러너에서 exe 두 개를 만든다.
+#
+# | 계기                         | 만드는 것                     | 결과물 위치                                   |
+# |------------------------------|-------------------------------|-----------------------------------------------|
+# | 아무 브랜치에 push           | 작은 exe + self-contained exe | Actions 탭 > 해당 실행 > Artifacts (3일 보관)  |
+# | main 에 push                 | 위와 같음                     | + Releases 의 `latest` 사전 릴리스를 갱신      |
+# | v* 태그 push / 수동 release_tag | 위와 같음                  | + 그 태그의 정식 Release                       |
+#
+# Artifacts 는 계정의 Actions 저장 용량을 쓰므로(초과 시 업로드만 실패하고 빌드는 성공 처리)
+# 보관 기간을 짧게 둔다. Release 첨부 파일은 그 용량을 쓰지 않는다.
 name: build
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]
     tags: ["v*"]
-  pull_request:
   workflow_dispatch:
     inputs:
       release_tag:
         description: "릴리스 태그 (예: v0.5.0). 비우면 빌드만 한다"
         required: false
         default: ""
-      build_selfcontained:
-        description: "릴리스 없이 self-contained exe도 빌드해 크기만 로그로 확인"
-        type: boolean
-        required: false
-        default: false
 
 permissions:
-  contents: write   # Release 생성에 필요
+  contents: write   # Release 생성·태그 이동에 필요
 
 jobs:
   build:
@@ -45,9 +42,7 @@ jobs:
           dotnet publish ImeBadge.csproj -c Release -r win-x64 --self-contained false
           -p:PublishSingleFile=true -p:DebugType=none -o out/fd
 
-      - name: Publish (self-contained, 런타임 포함) — 릴리스이거나 build_selfcontained 체크일 때
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '' || inputs.build_selfcontained
-        # 압축(EnableCompressionInSingleFile)과 언어 리소스 제외는 csproj에 있다.
+      - name: Publish (self-contained, 런타임 포함, 트리밍·압축은 csproj 설정)
         run: >
           dotnet publish ImeBadge.csproj -c Release -r win-x64 --self-contained true
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
@@ -57,17 +52,41 @@ jobs:
         shell: pwsh
         run: |
           Copy-Item out/fd/ImeBadge.exe out/ImeBadge-win-x64.exe
-          if (Test-Path out/sc/ImeBadge.exe) { Copy-Item out/sc/ImeBadge.exe out/ImeBadge-win-x64-selfcontained.exe }
+          Copy-Item out/sc/ImeBadge.exe out/ImeBadge-win-x64-selfcontained.exe
           Get-ChildItem out/*.exe | ForEach-Object { "{0,-40} {1,8:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+          # 아티팩트 이름에 쓸 수 없는 문자('/')를 바꾼다. 예: claude/foo-bar → claude-foo-bar
+          $branch = "${{ github.ref_name }}" -replace '[/\\:<>|*?"]', '-'
+          "ARTIFACT_NAME=ImeBadge-$branch-$('${{ github.sha }}'.Substring(0, 7))" >> $env:GITHUB_ENV
 
-      - name: Upload artifact (작은 exe만, 7일 보관)
+      - name: Upload artifacts (3일 보관)
         uses: actions/upload-artifact@v4
         continue-on-error: true   # 아티팩트 저장 용량 초과 시에도 빌드는 성공 처리
         with:
-          name: ImeBadge-win-x64
-          path: out/ImeBadge-win-x64.exe
-          retention-days: 7
+          name: ${{ env.ARTIFACT_NAME }}
+          path: out/*.exe
+          retention-days: 3
           if-no-files-found: error
+
+      # main 에 푸시될 때마다 `latest` 태그를 이 커밋으로 옮기고 사전 릴리스 첨부 파일을 갱신한다.
+      # 항상 같은 주소에서 최신 빌드를 받을 수 있다:
+      #   https://github.com/<owner>/<repo>/releases/download/latest/ImeBadge-win-x64-selfcontained.exe
+      - name: Move `latest` tag (main 푸시일 때만)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git tag -f latest ${{ github.sha }}
+          git push -f origin latest
+
+      - name: Update `latest` pre-release (main 푸시일 때만)
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "latest (main ${{ github.sha }})"
+          body: "main 브랜치의 최신 자동 빌드입니다. 검증된 버전은 v* 릴리스를 받으세요."
+          prerelease: true
+          files: |
+            out/ImeBadge-win-x64.exe
+            out/ImeBadge-win-x64-selfcontained.exe
 
       - name: Release (태그 푸시 또는 release_tag 입력일 때만)
         if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''

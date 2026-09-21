@@ -27,8 +27,13 @@ GitHub **Releases** 페이지에서 최신 버전의 exe를 받으면 됩니다.
 기본 Windows에는 .NET 8 런타임이 들어 있지 않습니다. 작은 exe는 이미 런타임이 있는 PC(다른 .NET 8
 프로그램이나 개발 도구를 설치한 경우)에서 쓰는 보조 파일입니다.
 
-exe는 GitHub Actions가 자동으로 빌드합니다. `main`에 푸시될 때마다 빌드 결과가 Actions
-탭의 Artifacts에 올라가고, `v1.2.3` 형태의 태그를 푸시하면 Releases에 자동으로 등록됩니다.
+exe는 GitHub Actions가 자동으로 빌드합니다.
+
+| 언제 | 어디서 받나 |
+|---|---|
+| 어느 브랜치든 푸시 | Actions 탭 → 해당 실행 → Artifacts (3일 보관, 로그인 필요) |
+| `main`에 푸시 | Releases의 **`latest`** 사전 릴리스가 항상 최신 빌드로 갱신됨 |
+| `v1.2.3` 형태의 태그 푸시 | 그 버전의 정식 Release |
 
 ```powershell
 git tag v0.5.0
