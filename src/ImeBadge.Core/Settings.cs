@@ -38,8 +38,11 @@ public sealed class Settings
     // ── 업데이트 ──
     public bool CheckForUpdates { get; set; } = true;
     public DateTime? LastUpdateCheckUtc { get; set; }
+    /// <summary>"이 버전 건너뛰기"를 누른 릴리스 태그("v1.2.3"). 이 버전은 자동 알림을 띄우지 않는다.</summary>
+    public string? SkippedUpdateTag { get; set; }
 
-    public const string DefaultHangulColor = "#0078D7";
+    /// <summary>Windows 11 기본 강조색. 흰 글자와의 대비가 5.7:1 로 WCAG AA(4.5:1)를 여유 있게 넘는다.</summary>
+    public const string DefaultHangulColor = "#0067C0";
     public const string DefaultEnglishColor = "#3C3C3C";
 
     /// <summary>범위를 벗어난 값을 안전한 값으로 되돌린다. 손으로 고친 설정 파일을 방어한다.</summary>
@@ -72,6 +75,7 @@ public sealed class Settings
         ExcludedProcesses = new List<string>(other.ExcludedProcesses);
         HotkeyEnabled = other.HotkeyEnabled; PollIntervalMs = other.PollIntervalMs;
         CheckForUpdates = other.CheckForUpdates; LastUpdateCheckUtc = other.LastUpdateCheckUtc;
+        SkippedUpdateTag = other.SkippedUpdateTag;
     }
 }
 
@@ -165,4 +169,32 @@ public static class ColorHex
     }
 
     public static string ToHex(int argb) => "#" + (argb & 0xFFFFFF).ToString("X6");
+
+    /// <summary>
+    /// WCAG 상대 휘도(relative luminance). 0(검정)~1(흰색). 사람 눈이 느끼는 밝기라서 단순 RGB 평균과 다르다.
+    /// 예: 순수 파랑 #0000FF 는 0.07 로 아주 어둡고, 순수 초록 #00FF00 은 0.72 로 밝다.
+    /// </summary>
+    public static double RelativeLuminance(int argb)
+    {
+        static double Channel(int v)
+        {
+            double c = v / 255.0;
+            return c <= 0.03928 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
+        }
+        return 0.2126 * Channel((argb >> 16) & 0xFF) + 0.7152 * Channel((argb >> 8) & 0xFF) + 0.0722 * Channel(argb & 0xFF);
+    }
+
+    /// <summary>WCAG 대비율(contrast ratio). 1(같음)~21(흰/검). 본문 글자는 4.5 이상이 권장(AA).</summary>
+    public static double ContrastRatio(int a, int b)
+    {
+        double la = RelativeLuminance(a), lb = RelativeLuminance(b);
+        return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
+    }
+
+    /// <summary>
+    /// 이 배경색 위에 글자를 놓을 때 흰 글자가 나으면 true, 검은 글자가 나으면 false. 사용자가 고른 어떤 색에도 글자가 보이게 한다.
+    /// 대비율을 단순 비교하면 중간 톤 파랑(#0078D7)에서 검은 글자가 아주 근소하게 이기지만 실제로는 흰 글자가 더 잘 읽힌다.
+    /// 그래서 휘도 임계값을 쓴다. 0.36 은 Windows 강조색 규칙과 맞는 값이다(파랑·빨강·청록 → 흰 글자, 노랑·금색 → 검은 글자).
+    /// </summary>
+    public static bool PrefersWhiteText(int argb) => RelativeLuminance(argb) < 0.36;
 }

@@ -1,6 +1,5 @@
 using System;
 using System.Drawing;
-using System.Drawing.Imaging;
 using System.Linq;
 using System.Windows.Forms;
 
@@ -17,7 +16,8 @@ sealed class SettingsForm : Form
     bool _autostart;
 
     ComboBox _style = null!, _placement = null!;
-    NumericUpDown _size = null!, _opacity = null!, _poll = null!;
+    TrackBar _size = null!, _opacity = null!;
+    NumericUpDown _poll = null!;
     Button _hangulColor = null!, _englishColor = null!;
     CheckBox _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!;
     TextBox _excluded = null!;
@@ -25,20 +25,6 @@ sealed class SettingsForm : Form
 
     /// <summary>[확인]으로 설정이 실제 반영된 뒤 발생.</summary>
     public event Action? Applied;
-
-    static readonly (string label, BadgeStyle value)[] Styles =
-    {
-        ("사각 배지  [한]", BadgeStyle.Box),
-        ("둥근 배지  (한)", BadgeStyle.Pill),
-        ("점  ●", BadgeStyle.Dot),
-        ("밑줄  ▬", BadgeStyle.Underline),
-        ("점 + 바뀔 때만 글자", BadgeStyle.DotFlash),
-    };
-    static readonly (string label, BadgePlacement value)[] Placements =
-    {
-        ("커서 오른쪽 위", BadgePlacement.AboveRight),
-        ("커서 오른쪽 아래", BadgePlacement.BelowRight),
-    };
 
     public SettingsForm(Settings live)
     {
@@ -107,22 +93,18 @@ sealed class SettingsForm : Form
         var t = NewTable();
 
         _style = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
-        _style.Items.AddRange(Styles.Select(s => (object)s.label).ToArray());
-        _style.SelectedIndexChanged += (_, _) => { _draft.Style = Styles[Math.Max(0, _style.SelectedIndex)].value; RefreshPreview(); };
+        _style.Items.AddRange(Labels.Styles.Select(s => (object)s.label).ToArray());
+        _style.SelectedIndexChanged += (_, _) => { _draft.Style = Labels.Styles[Math.Max(0, _style.SelectedIndex)].value; RefreshPreview(); };
         AddRow(t, "배지 모양", _style);
 
         _placement = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
-        _placement.Items.AddRange(Placements.Select(p => (object)p.label).ToArray());
-        _placement.SelectedIndexChanged += (_, _) => { _draft.Placement = Placements[Math.Max(0, _placement.SelectedIndex)].value; RefreshPreview(); };
+        _placement.Items.AddRange(Labels.Placements.Select(p => (object)p.label).ToArray());
+        _placement.SelectedIndexChanged += (_, _) => { _draft.Placement = Labels.Placements[Math.Max(0, _placement.SelectedIndex)].value; RefreshPreview(); };
         AddRow(t, "위치", _placement);
 
-        _size = new NumericUpDown { Minimum = 50, Maximum = 300, Increment = 10, Width = 80 };
-        _size.ValueChanged += (_, _) => { _draft.SizePercent = (int)_size.Value; RefreshPreview(); };
-        AddRow(t, "크기 (%)", _size);
-
-        _opacity = new NumericUpDown { Minimum = 30, Maximum = 100, Increment = 5, Width = 80 };
-        _opacity.ValueChanged += (_, _) => { _draft.OpacityPercent = (int)_opacity.Value; RefreshPreview(); };
-        AddRow(t, "불투명도 (%)", _opacity);
+        // 크기·불투명도는 눈으로 맞추는 값이라 숫자 입력보다 슬라이더가 자연스럽다(Windows 설정 앱과 같은 방식).
+        AddRow(t, "크기", Slider(out _size, 50, 300, 5, 25, v => { _draft.SizePercent = v; RefreshPreview(); }));
+        AddRow(t, "불투명도", Slider(out _opacity, 30, 100, 5, 10, v => { _draft.OpacityPercent = v; RefreshPreview(); }));
 
         _hangulColor = ColorButton(() => _draft.HangulColor, v => _draft.HangulColor = v);
         AddRow(t, "한글 배지 색", _hangulColor);
@@ -231,6 +213,33 @@ sealed class SettingsForm : Form
         }
     }
 
+    /// <summary>
+    /// 퍼센트 슬라이더 + 현재 값 라벨. 마우스로 끌면 <paramref name="step"/> 단위로 맞춰 준다(예: 137% → 135%).
+    /// 키보드 화살표는 step 씩, Page Up/Down 은 <paramref name="page"/> 씩 움직인다.
+    /// </summary>
+    static Control Slider(out TrackBar bar, int min, int max, int step, int page, Action<int> onChange)
+    {
+        var panel = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty };
+        var tb = new TrackBar
+        {
+            Minimum = min, Maximum = max, SmallChange = step, LargeChange = page, TickFrequency = page,
+            AutoSize = false, Width = 170, Height = 30, Margin = new Padding(0, 0, 4, 0),
+        };
+        var value = new Label { AutoSize = true, Margin = new Padding(0, 6, 0, 0), Text = $"{tb.Value}%" };   // 값이 최소값 그대로면 ValueChanged 가 안 오므로 미리 적는다
+        tb.ValueChanged += (_, _) =>
+        {
+            int v = (int)Math.Round(tb.Value / (double)step) * step;
+            v = Math.Clamp(v, min, max);
+            if (v != tb.Value) { tb.Value = v; return; }   // 되돌아와서 다시 처리된다
+            value.Text = $"{v}%";
+            onChange(v);
+        };
+        panel.Controls.Add(tb);
+        panel.Controls.Add(value);
+        bar = tb;
+        return panel;
+    }
+
     Button ColorButton(Func<string> get, Action<string> set)
     {
         var b = new Button { Width = 120, Height = 26, TextAlign = ContentAlignment.MiddleCenter, FlatStyle = FlatStyle.Flat };
@@ -245,11 +254,12 @@ sealed class SettingsForm : Form
         return b;
     }
 
+    /// <summary>버튼을 그 색으로 칠하고, 글자색은 배지와 같은 규칙(<see cref="BadgeRenderer.TextColorOn"/>)으로 고른다.</summary>
     static void PaintColorButton(Button b, string hex)
     {
         var c = ToColor(hex);
         b.BackColor = c;
-        b.ForeColor = c.GetBrightness() < 0.55f ? Color.White : Color.Black;
+        b.ForeColor = BadgeRenderer.TextColorOn(c);
         b.Text = hex.ToUpperInvariant();
     }
 
@@ -257,10 +267,10 @@ sealed class SettingsForm : Form
 
     void LoadDraftIntoControls()
     {
-        _style.SelectedIndex = Array.FindIndex(Styles, s => s.value == _draft.Style);
-        _placement.SelectedIndex = Array.FindIndex(Placements, p => p.value == _draft.Placement);
-        _size.Value = Math.Clamp(_draft.SizePercent, (int)_size.Minimum, (int)_size.Maximum);
-        _opacity.Value = Math.Clamp(_draft.OpacityPercent, (int)_opacity.Minimum, (int)_opacity.Maximum);
+        _style.SelectedIndex = Array.FindIndex(Labels.Styles, s => s.value == _draft.Style);
+        _placement.SelectedIndex = Array.FindIndex(Labels.Placements, p => p.value == _draft.Placement);
+        _size.Value = Math.Clamp(_draft.SizePercent, _size.Minimum, _size.Maximum);
+        _opacity.Value = Math.Clamp(_draft.OpacityPercent, _opacity.Minimum, _opacity.Maximum);
         _poll.Value = Math.Clamp(_draft.PollIntervalMs, (int)_poll.Minimum, (int)_poll.Maximum);
         PaintColorButton(_hangulColor, _draft.HangulColor);
         PaintColorButton(_englishColor, _draft.EnglishColor);
@@ -274,17 +284,32 @@ sealed class SettingsForm : Form
 
     void RefreshPreview() => _preview?.Invalidate();
 
-    /// <summary>"안녕하세요|" 와 "hello|" 두 줄 옆에 실제 렌더러로 그린 배지를 놓는다.</summary>
+    // 미리보기 배경. 왼쪽은 흰 종이(메모장), 오른쪽은 어두운 편집기(VS Code 기본 테마)와 비슷한 색.
+    static readonly Color LightBg = Color.White, LightText = Color.Black;
+    static readonly Color DarkBg = Color.FromArgb(0x1E, 0x1E, 0x1E), DarkText = Color.FromArgb(0xD4, 0xD4, 0xD4);
+
+    /// <summary>
+    /// "안녕하세요|" 와 "hello|" 두 줄 옆에 실제 렌더러로 그린 배지를 놓는다.
+    /// 왼쪽 절반은 밝은 배경, 오른쪽 절반은 어두운 배경이라 어느 편집기에서 써도 어떻게 보일지 한 번에 확인할 수 있다.
+    /// </summary>
     void PaintPreview(Graphics g)
     {
-        g.Clear(Color.White);
         float dpi = DeviceDpi / 96f;
+        var client = _preview.ClientRectangle;
+        int half = client.Width / 2;
+        PaintPreviewHalf(g, new Rectangle(client.Left, client.Top, half, client.Height), LightBg, LightText, dpi);
+        PaintPreviewHalf(g, new Rectangle(client.Left + half, client.Top, client.Width - half, client.Height), DarkBg, DarkText, dpi);
+    }
+
+    void PaintPreviewHalf(Graphics g, Rectangle area, Color bg, Color fg, float dpi)
+    {
+        using (var bgBrush = new SolidBrush(bg)) g.FillRectangle(bgBrush, area);
         float scale = dpi * _draft.SizePercent / 100f;
         var theme = BadgeTheme.From(_draft);
         var style = _draft.Style == BadgeStyle.DotFlash ? BadgeStyle.Pill : _draft.Style;
         using var font = new Font(BadgeRenderer.FontFamily, 11f);
-        using var ia = new ImageAttributes();
-        ia.SetColorMatrix(new ColorMatrix { Matrix33 = _draft.OpacityPercent / 100f });
+        using var textBrush = new SolidBrush(fg);
+        using var caretPen = new Pen(fg);
 
         var samples = new[] { (ImeState.Hangul, "안녕하세요"), (ImeState.English, "hello") };
         int lineH = (int)(48 * dpi);
@@ -292,15 +317,16 @@ sealed class SettingsForm : Form
         {
             var (state, text) = samples[i];
             var textSize = g.MeasureString(text, font);
-            float x = 14 * dpi, y = 20 * dpi + i * lineH;
-            g.DrawString(text, font, Brushes.Black, x, y);
+            float x = area.Left + 14 * dpi, y = area.Top + 20 * dpi + i * lineH;
+            g.DrawString(text, font, textBrush, x, y);
             // 텍스트 끝에 세로 caret 을 그리고, 그 caret 기준으로 배지 위치를 계산한다.
             var caret = new Rectangle((int)(x + textSize.Width - 2 * dpi), (int)y, 1, (int)textSize.Height);
-            g.DrawLine(Pens.Black, caret.Left, caret.Top, caret.Left, caret.Bottom);
+            g.DrawLine(caretPen, caret.Left, caret.Top, caret.Left, caret.Bottom);
 
-            using var bmp = BadgeRenderer.Render(state, style, scale, theme);
-            var pos = BadgeLayout.Compute(new LayoutInput(caret, bmp.Size, style, _draft.Placement, scale, _preview.ClientRectangle));
-            g.DrawImage(bmp, new Rectangle(pos, bmp.Size), 0, 0, bmp.Width, bmp.Height, GraphicsUnit.Pixel, ia);
+            using var bmp = BadgeRenderer.Render(state, style, scale, theme, _draft.OpacityPercent);
+            var pos = BadgeLayout.Compute(new LayoutInput(caret, bmp.Size, style, _draft.Placement, scale, area));
+            // 픽셀 크기를 명시한다. Point 만 주는 오버로드는 비트맵의 DPI(96)와 화면 DPI 차이만큼 확대해 버린다.
+            g.DrawImage(bmp, new Rectangle(pos, bmp.Size), new Rectangle(Point.Empty, bmp.Size), GraphicsUnit.Pixel);
         }
     }
 

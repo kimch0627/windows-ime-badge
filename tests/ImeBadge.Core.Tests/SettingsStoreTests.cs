@@ -39,6 +39,7 @@ public sealed class SettingsStoreTests : IDisposable
             ExcludedProcesses = new List<string> { "mstsc", "Unreal*" },
             HideOnFullscreen = false,
             LastUpdateCheckUtc = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc),
+            SkippedUpdateTag = "v9.9.9",
         };
         Assert.True(store.Save(s));
 
@@ -51,6 +52,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(new[] { "mstsc", "Unreal*" }, back.ExcludedProcesses);
         Assert.False(back.HideOnFullscreen);
         Assert.Equal(s.LastUpdateCheckUtc, back.LastUpdateCheckUtc);
+        Assert.Equal("v9.9.9", back.SkippedUpdateTag);
         Assert.False(File.Exists(P("settings.json.tmp")));   // 임시 파일은 남지 않는다
     }
 
@@ -145,4 +147,35 @@ public sealed class ColorHexTests
 
     [Fact]
     public void ToHex_DropsAlpha() => Assert.Equal("#0078D7", ColorHex.ToHex(unchecked((int)0xFF0078D7)));
+
+    [Fact]
+    public void RelativeLuminance_BlackAndWhite()
+    {
+        Assert.Equal(0.0, ColorHex.RelativeLuminance(unchecked((int)0xFF000000)), 3);
+        Assert.Equal(1.0, ColorHex.RelativeLuminance(unchecked((int)0xFFFFFFFF)), 3);
+    }
+
+    [Fact]
+    public void ContrastRatio_WhiteOnDefaultHangulColor_MeetsAA()
+    {
+        Assert.True(ColorHex.TryParse(Settings.DefaultHangulColor, out int blue));
+        Assert.True(ColorHex.ContrastRatio(blue, unchecked((int)0xFFFFFFFF)) >= 4.5);
+        Assert.Equal(21.0, ColorHex.ContrastRatio(0, unchecked((int)0xFFFFFFFF)), 1);
+    }
+
+    [Theory]
+    [InlineData("#0078D7", true)]    // 파랑(예전 기본값): 흰 글자
+    [InlineData("#0067C0", true)]    // 파랑(기본값): 흰 글자
+    [InlineData("#E74856", true)]    // Windows 빨강 강조색: 흰 글자
+    [InlineData("#00B294", true)]    // Windows 청록 강조색: 흰 글자
+    [InlineData("#3C3C3C", true)]    // 진회색: 흰 글자
+    [InlineData("#FFB900", false)]   // Windows 금색 강조색: 검은 글자
+    [InlineData("#FFD34D", false)]   // 노랑: 검은 글자
+    [InlineData("#FFFFFF", false)]
+    [InlineData("#000000", true)]
+    public void PrefersWhiteText_PicksReadableColor(string hex, bool white)
+    {
+        Assert.True(ColorHex.TryParse(hex, out int argb));
+        Assert.Equal(white, ColorHex.PrefersWhiteText(argb));
+    }
 }

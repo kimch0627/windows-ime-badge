@@ -137,38 +137,31 @@ sealed class BadgeForm : Form
 
         _pauseItem = new ToolStripMenuItem("일시 중지(&P)", null, (_, _) => TogglePause()) { ShortcutKeyDisplayString = "Ctrl+Alt+H" };
         menu.Items.Add(_pauseItem);
-        menu.Items.Add(new ToolStripMenuItem("설정(&S)...", null, (_, _) => OpenSettings()));
+        // 더블클릭과 같은 동작인 "설정"을 굵게: Windows 관행에서 굵은 항목이 기본 동작이다.
+        var settingsItem = new ToolStripMenuItem("설정(&S)...", null, (_, _) => OpenSettings());
+        settingsItem.Font = new Font(settingsItem.Font, FontStyle.Bold);
+        menu.Items.Add(settingsItem);
         menu.Items.Add(new ToolStripSeparator());
 
         var shape = new ToolStripMenuItem("모양(&M)");
-        AddRadio(shape, "사각 배지  [한]", () => _settings.Style == BadgeStyle.Box, () => _settings.Style = BadgeStyle.Box);
-        AddRadio(shape, "둥근 배지  (한)", () => _settings.Style == BadgeStyle.Pill, () => _settings.Style = BadgeStyle.Pill);
-        AddRadio(shape, "점  ●", () => _settings.Style == BadgeStyle.Dot, () => _settings.Style = BadgeStyle.Dot);
-        AddRadio(shape, "밑줄  ▬", () => _settings.Style == BadgeStyle.Underline, () => _settings.Style = BadgeStyle.Underline);
-        AddRadio(shape, "점 + 바뀔 때만 글자", () => _settings.Style == BadgeStyle.DotFlash, () => _settings.Style = BadgeStyle.DotFlash);
+        foreach (var (label, value) in Labels.Styles)
+            AddRadio(shape, label, () => _settings.Style == value, () => _settings.Style = value);
         menu.Items.Add(shape);
 
         var place = new ToolStripMenuItem("위치(&L)");
-        AddRadio(place, "커서 오른쪽 위", () => _settings.Placement == BadgePlacement.AboveRight, () => _settings.Placement = BadgePlacement.AboveRight);
-        AddRadio(place, "커서 오른쪽 아래", () => _settings.Placement == BadgePlacement.BelowRight, () => _settings.Placement = BadgePlacement.BelowRight);
+        foreach (var (label, value) in Labels.Placements)
+            AddRadio(place, label, () => _settings.Placement == value, () => _settings.Placement = value);
         menu.Items.Add(place);
 
-        var size = new ToolStripMenuItem("크기(&Z)");
-        foreach (var (label, pct) in new[] { ("작게 (80%)", 80), ("보통 (100%)", 100), ("크게 (130%)", 130), ("아주 크게 (160%)", 160) })
-            AddRadio(size, label, () => _settings.SizePercent == pct, () => _settings.SizePercent = pct);
-        menu.Items.Add(size);
-
-        var opacity = new ToolStripMenuItem("투명도(&O)");
-        foreach (var (label, pct) in new[] { ("불투명 (100%)", 100), ("살짝 비침 (85%)", 85), ("반투명 (70%)", 70), ("많이 비침 (50%)", 50) })
-            AddRadio(opacity, label, () => _settings.OpacityPercent == pct, () => _settings.OpacityPercent = pct);
-        menu.Items.Add(opacity);
+        menu.Items.Add(PresetMenu("크기(&Z)", Labels.SizePresets, () => _settings.SizePercent, v => _settings.SizePercent = v));
+        menu.Items.Add(PresetMenu("불투명도(&O)", Labels.OpacityPresets, () => _settings.OpacityPercent, v => _settings.OpacityPercent = v));
 
         menu.Items.Add(new ToolStripSeparator());
         _autostartItem = new ToolStripMenuItem("로그인 시 자동 시작(&A)", null, (_, _) =>
         {
             bool on = !Autostart.IsEnabled();
             if (!Autostart.Set(on))
-                MessageBox.Show("자동 시작 설정을 바꾸지 못했습니다. 로그 폴더의 errors.log 를 확인하세요.", AppInfo.ProductName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                Dialogs.Warning("자동 시작 설정을 바꾸지 못했습니다.", "로그 폴더의 errors.log 에 원인이 기록되어 있습니다. (트레이 메뉴 → 정보 → 로그 폴더 열기)");
         });
         menu.Items.Add(_autostartItem);
         menu.Items.Add(new ToolStripMenuItem("업데이트 확인(&U)", null, (_, _) => CheckForUpdates(manual: true)));
@@ -201,6 +194,26 @@ sealed class BadgeForm : Form
         var item = new ToolStripMenuItem(text) { Tag = isOn };
         item.Click += (_, _) => { apply(); OnSettingsChanged(); };
         parent.DropDownItems.Add(item);
+    }
+
+    /// <summary>
+    /// 퍼센트 프리셋 하위 메뉴. 설정 창에서 프리셋에 없는 값(예: 90%)을 골랐으면 체크된 항목이 하나도 없어 혼란스러우므로,
+    /// 그럴 때만 맨 아래에 "사용자 지정 (90%)" 항목을 체크된 채로 보여 준다.
+    /// </summary>
+    ToolStripMenuItem PresetMenu(string title, (string label, int pct)[] presets, Func<int> get, Action<int> set)
+    {
+        var menu = new ToolStripMenuItem(title);
+        foreach (var (label, pct) in presets)
+            AddRadio(menu, label, () => get() == pct, () => set(pct));
+        var custom = new ToolStripMenuItem { Enabled = false, Visible = false, Checked = true };
+        menu.DropDownItems.Add(custom);
+        menu.DropDownOpening += (_, _) =>
+        {
+            int v = get();
+            custom.Visible = Array.FindIndex(presets, p => p.pct == v) < 0;
+            custom.Text = $"사용자 지정 ({v}%)";
+        };
+        return menu;
     }
 
     /// <summary>설정이 바뀐 뒤 공통 처리: 저장, 다시 그리기, 단축키·주기 반영.</summary>
@@ -262,15 +275,15 @@ sealed class BadgeForm : Form
             {
                 _pendingUpdateUrl = info.Url;
                 Log.Write($"update available: {info.Tag}");
-                _tray.ShowBalloonTip(10000, "새 버전이 있습니다",
-                    $"{AppInfo.ProductName} {info.Tag} 을(를) 받을 수 있습니다. (현재 {AppVersion.Display})\n클릭하면 다운로드 페이지가 열립니다.", ToolTipIcon.Info);
+                if (manual) OfferUpdate(info);
+                else if (info.Tag != _settings.SkippedUpdateTag)
+                    _tray.ShowBalloonTip(10000, "새 버전이 있습니다",
+                        $"{AppInfo.ProductName} {info.Tag} 을(를) 받을 수 있습니다. (현재 {AppVersion.Display})\n클릭하면 다운로드 페이지가 열립니다.", ToolTipIcon.Info);
             }
             else if (manual)
             {
-                MessageBox.Show(info is null
-                        ? $"아직 정식 릴리스가 없습니다. (현재 {AppVersion.Display})"
-                        : $"최신 버전을 쓰고 있습니다. (현재 {AppVersion.Display}, 최신 {info.Tag})",
-                    AppInfo.ProductName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Dialogs.Info(info is null ? "아직 정식 릴리스가 없습니다." : "최신 버전을 쓰고 있습니다.",
+                    info is null ? $"현재 {AppVersion.Display}" : $"현재 {AppVersion.Display}, 최신 {info.Tag}");
             }
         }
         catch (OperationCanceledException) { }
@@ -278,9 +291,19 @@ sealed class BadgeForm : Form
         {
             Log.Error("update check failed", ex);
             if (manual)
-                MessageBox.Show("업데이트 정보를 가져오지 못했습니다. 네트워크 연결을 확인한 뒤 다시 시도하세요.\n\n" + ex.Message,
-                    AppInfo.ProductName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                Dialogs.Warning("업데이트 정보를 가져오지 못했습니다.", "네트워크 연결을 확인한 뒤 다시 시도하세요.", ex.Message);
         }
+    }
+
+    /// <summary>수동 확인에서 새 버전을 찾았을 때: 열기 / 나중에 / 이 버전 건너뛰기.</summary>
+    void OfferUpdate(UpdateInfo info)
+    {
+        int choice = Dialogs.Choose($"새 버전 {info.Tag} 이(가) 있습니다.", $"현재 {AppVersion.Display} 을(를) 쓰고 있습니다.", TaskDialogIcon.Information,
+            ("다운로드 페이지 열기", "브라우저에서 릴리스 페이지를 엽니다."),
+            ("나중에", "다음에 다시 알립니다."),
+            ("이 버전 건너뛰기", $"{info.Tag} 은(는) 자동으로 알리지 않습니다. 더 새 버전이 나오면 다시 알립니다."));
+        if (choice == 0) AboutForm.Open(info.Url);
+        else if (choice == 2) { _settings.SkippedUpdateTag = info.Tag; _store.Save(_settings); }
     }
 
     // ── 시스템 이벤트 ──
@@ -399,7 +422,7 @@ sealed class BadgeForm : Form
         Bitmap? bmp = null;
         if (needRender)
         {
-            bmp = BadgeRenderer.Render(s.State, style, scale, BadgeTheme.From(_settings));
+            bmp = BadgeRenderer.Render(s.State, style, scale, BadgeTheme.From(_settings), _settings.OpacityPercent);
             bs = bmp.Size;
         }
 
@@ -484,11 +507,12 @@ sealed class BadgeForm : Form
             var size = new Native.SIZE(bmp.Width, bmp.Height);
             var src = new Native.POINT(0, 0);
             var dst = new Native.POINT(pos.X, pos.Y);
+            // 불투명도는 렌더러가 배경 픽셀의 알파로 이미 반영했다(글자는 또렷하게 유지). 창 전체 알파는 255 로 둔다.
             var blend = new Native.BLENDFUNCTION
             {
                 BlendOp = Native.AC_SRC_OVER,
                 BlendFlags = 0,
-                SourceConstantAlpha = (byte)Math.Clamp(255 * _settings.OpacityPercent / 100, 30, 255),
+                SourceConstantAlpha = 255,
                 AlphaFormat = Native.AC_SRC_ALPHA,
             };
             Native.UpdateLayeredWindow(Handle, screenDc, ref dst, ref size, memDc, ref src, 0, ref blend, Native.ULW_ALPHA);
