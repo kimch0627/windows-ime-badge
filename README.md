@@ -9,6 +9,7 @@ Windows 10/11에서 **글자를 입력하기 전에** 지금 키보드가 한글
 ```
 
 무료이며 소스가 공개되어 있습니다(Apache License 2.0). 개인정보를 수집하지 않습니다([PRIVACY.md](PRIVACY.md)).
+설정 창·메뉴는 한국어와 영어를 지원합니다(Windows 표시 언어를 따르며 설정에서 바꿀 수 있음). *The UI is available in English: Settings → Behavior → Language.*
 
 ## 처음 쓰는 분을 위한 설명
 
@@ -77,6 +78,7 @@ winget install kimch0627.ImeBadge
 | | 단축키 | 일시 중지 켜기/끄기. 기본 Ctrl+Alt+H. 입력칸을 클릭하고 원하는 조합을 누르면 바뀜(Ctrl·Alt·Win 중 하나 필수). 다른 프로그램과 겹치면 끌 수 있음 |
 | | 새 버전 알림 | 하루 한 번 GitHub 에서 확인. 끄면 네트워크 접속이 전혀 없음 |
 | | 확인 주기 | 50~1000 ms. 기본 100. 작을수록 빨리 반응하고 CPU 를 조금 더 씀 |
+| | 언어 | 설정 창·트레이 메뉴·알림의 언어. 시스템 언어(자동, 기본) / 한국어 / English. 바꾸면 설정 창이 새 언어로 바로 다시 열리고 편집 중이던 값은 유지. 배지 글자(`한`/`A`)는 바뀌지 않음 |
 | 미리보기 | | 현재 설정으로 실제 렌더러가 그린 배지. 왼쪽은 밝은 배경(메모장), 오른쪽은 어두운 배경(VS Code 등) |
 | 배지를 띄우지 않을 앱 | 프로세스 이름 목록 | 실행 중인 앱을 목록에서 고르거나 이름을 직접 입력해 추가. `.exe` 생략 가능, 끝에 `*` 는 앞부분 일치. 예: `mstsc`, `Unreal*` |
 
@@ -120,6 +122,7 @@ src/ImeBadge.Core/      순수 로직. WinForms·Win32 의존 없음 → Linux �
   ProcessFilter.cs      제외 앱 목록 매칭
   Hotkey.cs             "Ctrl+Alt+H" ↔ (보조키, 가상 키) 변환·검증
   VersionInfo.cs        "v1.2.3" 비교 (업데이트 확인)
+  Strings.cs            UI 문구 테이블(한국어·영어)과 언어 선택. resx 대신 코드 사전이라 트리밍·단일 파일에 영향이 없고 키 일치를 테스트로 검사
   Log.cs                디버그 로그·오류 로그, 1 MB 회전
 src/ImeBadge/           Windows 앱
   Native/Native.cs      Win32 P/Invoke 와 상수
@@ -234,6 +237,17 @@ installer/ImeBadge.iss  Inno Setup 스크립트
 
 `ApplicationHighDpiMode=PerMonitorV2`(csproj)가 없으면 DPI 스케일링이 켜진 모니터에서
 caret 좌표와 배지 위치가 어긋납니다.
+
+### UI 언어
+
+문구는 `Core/Strings.cs` 의 두 사전(한국어·영어)에서 키로 찾습니다(`Strings.Get("menu.pause")`). resx 와 위성 어셈블리 대신
+코드 사전을 쓰는 이유는 트리밍·단일 파일 exe 에서 리소스 로딩을 신경 쓸 필요가 없고, 두 언어의 키가 같은지·자리표시자 개수가 같은지·
+같은 메뉴 안의 니모닉(`&`)이 겹치지 않는지를 단위 테스트(`StringsTests`)가 검사하기 때문입니다. 비유하면 두 권의 사전을 나란히
+놓고 표제어가 빠진 쪽을 찾는 것입니다.
+
+언어는 설정 `Language`(Auto/Korean/English) 로 정하고, Auto 는 `CultureInfo.CurrentUICulture` 가 한국어인지로 판단합니다.
+설정 창에서 언어를 바꾸면 `SettingsForm` 이 `LanguageChanged` 를 올리고, `BadgeForm` 이 같은 편집 상태(취소 기준값 포함)를
+이어받는 새 창(`Reopen`)으로 갈아 끼운 뒤 트레이 메뉴를 다시 만듭니다. 배지 글자(`한`/`A`)와 로그는 언어와 무관합니다.
 
 ### 테마(밝게/어둡게)
 

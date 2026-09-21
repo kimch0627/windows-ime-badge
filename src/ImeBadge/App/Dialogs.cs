@@ -40,7 +40,7 @@ static class Dialogs
             Log.Error("TaskDialog failed; falling back to MessageBox", ex);
             // 첫 항목을 "예", 나머지를 "아니요"로 뭉뚱그린다. 드문 경로라 정확한 선택지보다 동작하는 쪽을 택한다.
             string body = text is null ? heading : heading + "\n\n" + text;
-            body += $"\n\n[예] {commands[0].title}";
+            body += "\n\n" + Strings.Format("dialog.yesPrefix", commands[0].title);
             return MessageBox.Show(body, AppInfo.ProductName, MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes ? 0 : -1;
         }
     }
@@ -54,9 +54,9 @@ static class Dialogs
         try
         {
             var page = NewPage(heading, text, TaskDialogIcon.Error, details);
-            var open = new TaskDialogButton("로그 폴더 열기");
+            var open = new TaskDialogButton(Strings.Get("dialog.openLogDir"));
             page.Buttons.Add(open);
-            page.Buttons.Add(new TaskDialogButton("닫기"));
+            page.Buttons.Add(new TaskDialogButton(Strings.Get("dialog.close")));
             page.Footnote = new TaskDialogFootnote(logDir);
             return TaskDialog.ShowDialog(page, TaskDialogStartupLocation.CenterScreen) == open;
         }
@@ -95,7 +95,7 @@ static class Dialogs
             SizeToContent = true,
         };
         if (!string.IsNullOrWhiteSpace(details))
-            page.Expander = new TaskDialogExpander(details) { CollapsedButtonText = "자세히", ExpandedButtonText = "간단히" };
+            page.Expander = new TaskDialogExpander(details) { CollapsedButtonText = Strings.Get("dialog.details"), ExpandedButtonText = Strings.Get("dialog.brief") };
         return page;
     }
 }

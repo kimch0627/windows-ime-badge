@@ -152,8 +152,7 @@ sealed class BadgeForm : Form
         {
             once.Dispose();
             if (_firstRun)
-                _tray.ShowBalloonTip(8000, AppInfo.DisplayName,
-                    "커서 옆에 한/영 배지가 표시됩니다. 트레이 아이콘을 우클릭하면 모양과 동작을 바꿀 수 있습니다.", ToolTipIcon.Info);
+                _tray.ShowBalloonTip(8000, AppInfo.DisplayName, Strings.Get("app.firstRun"), ToolTipIcon.Info);
             if (UpdateChecker.IsDue(_settings)) CheckForUpdates(manual: false);
         };
         once.Start();
@@ -177,7 +176,7 @@ sealed class BadgeForm : Form
         if (_hotkeyRegistered) return;
         Log.Error($"hotkey {hk} registration failed (already used by another app?)");
         if (warnOnFailure)
-            Dialogs.Warning($"단축키 {hk} 을(를) 등록하지 못했습니다.", "다른 프로그램이 같은 조합을 쓰고 있을 수 있습니다. 설정에서 다른 조합을 고르세요.");
+            Dialogs.Warning(Strings.Format("hotkey.failed", hk), Strings.Get("hotkey.failed.text"));
     }
 
     // ── 트레이 메뉴 ──
@@ -190,45 +189,45 @@ sealed class BadgeForm : Form
         menu.Items.Add(_statusItem);
         menu.Items.Add(new ToolStripSeparator());
 
-        _pauseItem = new ToolStripMenuItem("일시 중지(&P)", null, (_, _) => TogglePause()) { ShortcutKeyDisplayString = _settings.HotkeyEnabled ? _settings.Hotkey : null };
+        _pauseItem = new ToolStripMenuItem(Strings.Get("menu.pause"), null, (_, _) => TogglePause()) { ShortcutKeyDisplayString = _settings.HotkeyEnabled ? _settings.Hotkey : null };
         menu.Items.Add(_pauseItem);
         // 더블클릭과 같은 동작인 "설정"을 굵게: Windows 관행에서 굵은 항목이 기본 동작이다.
-        var settingsItem = new ToolStripMenuItem("설정(&S)...", null, (_, _) => OpenSettings());
+        var settingsItem = new ToolStripMenuItem(Strings.Get("menu.settings"), null, (_, _) => OpenSettings());
         settingsItem.Font = new Font(settingsItem.Font, FontStyle.Bold);
         menu.Items.Add(settingsItem);
         menu.Items.Add(new ToolStripSeparator());
 
-        var shape = new ToolStripMenuItem("모양(&M)");
+        var shape = new ToolStripMenuItem(Strings.Get("menu.style"));
         foreach (var (label, value) in Labels.Styles)
             AddRadio(shape, label, () => _settings.Style == value, () => _settings.Style = value);
         menu.Items.Add(shape);
 
-        var place = new ToolStripMenuItem("위치(&L)");
+        var place = new ToolStripMenuItem(Strings.Get("menu.placement"));
         foreach (var (label, value) in Labels.Placements)
             AddRadio(place, label, () => _settings.Placement == value, () => _settings.Placement = value);
         menu.Items.Add(place);
 
-        menu.Items.Add(PresetMenu("크기(&Z)", Labels.SizePresets, () => _settings.SizePercent, v => _settings.SizePercent = v));
-        menu.Items.Add(PresetMenu("불투명도(&O)", Labels.OpacityPresets, () => _settings.OpacityPercent, v => _settings.OpacityPercent = v));
+        menu.Items.Add(PresetMenu(Strings.Get("menu.size"), Labels.SizePresets, () => _settings.SizePercent, v => _settings.SizePercent = v));
+        menu.Items.Add(PresetMenu(Strings.Get("menu.opacity"), Labels.OpacityPresets, () => _settings.OpacityPercent, v => _settings.OpacityPercent = v));
 
         menu.Items.Add(new ToolStripSeparator());
-        _autostartItem = new ToolStripMenuItem("로그인 시 자동 시작(&A)", null, (_, _) =>
+        _autostartItem = new ToolStripMenuItem(Strings.Get("menu.autostart"), null, (_, _) =>
         {
             bool on = !Autostart.IsEnabled();
             if (!Autostart.Set(on))
-                Dialogs.Warning("자동 시작 설정을 바꾸지 못했습니다.", "로그 폴더의 errors.log 에 원인이 기록되어 있습니다. (트레이 메뉴 → 정보 → 로그 폴더 열기)");
+                Dialogs.Warning(Strings.Get("autostart.failed"), Strings.Get("autostart.failed.text"));
         });
         menu.Items.Add(_autostartItem);
-        menu.Items.Add(new ToolStripMenuItem("업데이트 확인(&U)", null, (_, _) => CheckForUpdates(manual: true)));
-        menu.Items.Add(new ToolStripMenuItem("정보(&I)...", null, (_, _) => OpenAbout()));
+        menu.Items.Add(new ToolStripMenuItem(Strings.Get("menu.checkUpdates"), null, (_, _) => CheckForUpdates(manual: true)));
+        menu.Items.Add(new ToolStripMenuItem(Strings.Get("menu.about"), null, (_, _) => OpenAbout()));
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(new ToolStripMenuItem("종료(&X)", null, (_, _) => Application.Exit()));
+        menu.Items.Add(new ToolStripMenuItem(Strings.Get("menu.exit"), null, (_, _) => Application.Exit()));
 
         // 메뉴를 열 때마다 체크 표시를 현재 상태에 맞춘다.
         menu.Opening += (_, _) =>
         {
             RefreshChecks(menu.Items);
-            _statusItem.Text = "현재: " + StateText(_trayState, _trayCaps);
+            _statusItem.Text = Strings.Format("menu.current", StateText(_trayState, _trayCaps));
             _pauseItem.Checked = _paused;
             _autostartItem.Checked = Autostart.IsEnabled();
         };
@@ -303,20 +302,20 @@ sealed class BadgeForm : Form
     }
 
     // ── 트레이 아이콘·툴팁 ──
-    string StateText(ImeState state, bool caps = false) => _paused ? "일시 중지" : state switch
+    string StateText(ImeState state, bool caps = false) => Strings.Get(_paused ? "state.paused" : state switch
     {
-        ImeState.Hangul => "한글 입력",
-        ImeState.English => caps ? "영문 입력 (Caps Lock)" : "영문 입력",
-        ImeState.OtherLang => "다른 언어 입력",
-        _ => "입력 위치 없음",
-    };
+        ImeState.Hangul => "state.hangul",
+        ImeState.English => caps ? "state.englishCaps" : "state.english",
+        ImeState.OtherLang => "state.other",
+        _ => "state.none",
+    });
 
     /// <summary>툴팁: 이름 · 상태 · 단축키. NotifyIcon.Text 는 127자 제한이 있다.</summary>
     string TrayText(ImeState state, bool caps = false)
     {
         string s = AppInfo.DisplayName + " · " + StateText(state, caps);
-        if (_paused) s += _settings.HotkeyEnabled ? $" · {_settings.Hotkey} 로 재개" : "";
-        else if (_settings.HotkeyEnabled) s += $" · {_settings.Hotkey} 일시 중지";
+        if (_paused) s += _settings.HotkeyEnabled ? Strings.Format("tray.resumeWith", _settings.Hotkey) : "";
+        else if (_settings.HotkeyEnabled) s += Strings.Format("tray.pauseWith", _settings.Hotkey);
         if (Log.Enabled) s += " [debug]";
         return s.Length > 127 ? s[..127] : s;
     }
@@ -371,16 +370,17 @@ sealed class BadgeForm : Form
         {
             int v = get();
             custom.Visible = Array.FindIndex(presets, p => p.pct == v) < 0;
-            custom.Text = $"사용자 지정 ({v}%)";
+            custom.Text = Strings.Format("menu.custom", v);
         };
         return menu;
     }
 
-    // 마지막으로 반영한 단축키·트레이 관련 설정. 설정 창에서 슬라이더를 끌 때마다 불리므로, 실제로 바뀐 것만 다시 적용한다.
+    // 마지막으로 반영한 단축키·트레이·언어 설정. 설정 창에서 슬라이더를 끌 때마다 불리므로, 실제로 바뀐 것만 다시 적용한다.
     (bool enabled, string hotkey) _appliedHotkey;
     (string hangul, string english, bool showState) _appliedTray;
+    bool _appliedKorean = Strings.IsKorean;
 
-    /// <summary>설정이 바뀐 뒤 공통 처리: 저장(편집 중 미리 반영일 때는 생략), 다시 그리기, 단축키·주기·트레이 반영.</summary>
+    /// <summary>설정이 바뀐 뒤 공통 처리: 저장(편집 중 미리 반영일 때는 생략), 다시 그리기, 단축키·주기·트레이·언어 반영.</summary>
     void OnSettingsChanged(bool save = true)
     {
         _settings.Normalize();
@@ -389,6 +389,9 @@ sealed class BadgeForm : Form
         _flashUntil = DateTime.Now.AddMilliseconds(FlashMs); // DotFlash면 바로 글자를 한 번 보여 준다
         _timer.Interval = _settings.PollIntervalMs;
 
+        Strings.Setting = _settings.Language;
+        if (Strings.IsKorean != _appliedKorean) { _appliedKorean = Strings.IsKorean; ApplyLanguage(); }
+
         var hk = (_settings.HotkeyEnabled, _settings.Hotkey);
         if (hk != _appliedHotkey || save) { _appliedHotkey = hk; ApplyHotkey(warnOnFailure: save); }
 
@@ -396,6 +399,17 @@ sealed class BadgeForm : Form
         if (tray != _appliedTray) { _appliedTray = tray; RefreshTray(); }
 
         Poll();
+    }
+
+    /// <summary>UI 언어가 바뀌면 트레이 메뉴를 새 문구로 다시 만들고 툴팁을 갱신한다. 열려 있는 정보 창은 닫는다(다시 열면 새 언어).</summary>
+    void ApplyLanguage()
+    {
+        var old = _tray.ContextMenuStrip;
+        _tray.ContextMenuStrip = BuildMenu();
+        old?.Dispose();
+        ApplyHotkey();                           // 새 메뉴의 "일시 중지" 항목에 단축키 표시
+        UpdateTray(_trayState, _trayCaps, force: true);
+        if (_aboutForm is { IsDisposed: false }) _aboutForm.Close();
     }
 
     void ResetRenderKey() => _renderKey = (ImeState.Unknown, false, (BadgeStyle)(-1), 0, -1, "", "");
@@ -412,12 +426,26 @@ sealed class BadgeForm : Form
     void OpenSettings()
     {
         if (_settingsForm is { IsDisposed: false }) { _settingsForm.Activate(); return; }
-        _settingsForm = new SettingsForm(_settings);
-        _settingsForm.Changed += () => OnSettingsChanged(save: false);   // 편집 중: 배지에 바로 반영, 저장은 아직
-        _settingsForm.Applied += () => OnSettingsChanged();               // 확인·취소: 저장
-        _settingsForm.FormClosed += (_, _) => { _settingsForm?.Dispose(); _settingsForm = null; };
-        _settingsForm.Show();
-        _settingsForm.Activate();
+        ShowSettings(new SettingsForm(_settings));
+    }
+
+    void ShowSettings(SettingsForm form)
+    {
+        _settingsForm = form;
+        form.Changed += () => OnSettingsChanged(save: false);   // 편집 중: 배지에 바로 반영, 저장은 아직
+        form.Applied += () => OnSettingsChanged();               // 확인·취소: 저장
+        form.FormClosed += (_, _) => { if (ReferenceEquals(_settingsForm, form)) _settingsForm = null; form.Dispose(); };
+        // 언어를 바꾸면 창의 모든 문구를 새로 그려야 한다. 같은 편집 상태를 이어받는 새 창으로 갈아 끼운다(이벤트 처리가 끝난 뒤).
+        form.LanguageChanged += () => BeginInvoke(() =>
+        {
+            if (form.IsDisposed || !ReferenceEquals(_settingsForm, form)) return;
+            var next = form.Reopen();
+            form.Detach();
+            form.Close();
+            ShowSettings(next);
+        });
+        form.Show();
+        form.Activate();
     }
 
     void OpenAbout()
@@ -447,13 +475,13 @@ sealed class BadgeForm : Form
                 Log.Write($"update available: {info.Tag}");
                 if (manual) OfferUpdate(info);
                 else if (info.Tag != _settings.SkippedUpdateTag)
-                    _tray.ShowBalloonTip(10000, "새 버전이 있습니다",
-                        $"{AppInfo.ProductName} {info.Tag} 을(를) 받을 수 있습니다. (현재 {AppVersion.Display})\n클릭하면 다운로드 페이지가 열립니다.", ToolTipIcon.Info);
+                    _tray.ShowBalloonTip(10000, Strings.Get("update.balloon.title"),
+                        Strings.Format("update.balloon.text", AppInfo.ProductName, info.Tag, AppVersion.Display), ToolTipIcon.Info);
             }
             else if (manual)
             {
-                Dialogs.Info(info is null ? "아직 정식 릴리스가 없습니다." : "최신 버전을 쓰고 있습니다.",
-                    info is null ? $"현재 {AppVersion.Display}" : $"현재 {AppVersion.Display}, 최신 {info.Tag}");
+                Dialogs.Info(Strings.Get(info is null ? "update.none" : "update.latest"),
+                    info is null ? Strings.Format("update.current", AppVersion.Display) : Strings.Format("update.currentLatest", AppVersion.Display, info.Tag));
             }
         }
         catch (OperationCanceledException) { }
@@ -461,17 +489,17 @@ sealed class BadgeForm : Form
         {
             Log.Error("update check failed", ex);
             if (manual)
-                Dialogs.Warning("업데이트 정보를 가져오지 못했습니다.", "네트워크 연결을 확인한 뒤 다시 시도하세요.", ex.Message);
+                Dialogs.Warning(Strings.Get("update.failed"), Strings.Get("update.failed.text"), ex.Message);
         }
     }
 
     /// <summary>수동 확인에서 새 버전을 찾았을 때: 열기 / 나중에 / 이 버전 건너뛰기.</summary>
     void OfferUpdate(UpdateInfo info)
     {
-        int choice = Dialogs.Choose($"새 버전 {info.Tag} 이(가) 있습니다.", $"현재 {AppVersion.Display} 을(를) 쓰고 있습니다.", TaskDialogIcon.Information,
-            ("다운로드 페이지 열기", "브라우저에서 릴리스 페이지를 엽니다."),
-            ("나중에", "다음에 다시 알립니다."),
-            ("이 버전 건너뛰기", $"{info.Tag} 은(는) 자동으로 알리지 않습니다. 더 새 버전이 나오면 다시 알립니다."));
+        int choice = Dialogs.Choose(Strings.Format("update.offer.heading", info.Tag), Strings.Format("update.offer.text", AppVersion.Display), TaskDialogIcon.Information,
+            (Strings.Get("update.open"), Strings.Get("update.open.note")),
+            (Strings.Get("update.later"), Strings.Get("update.later.note")),
+            (Strings.Get("update.skip"), Strings.Format("update.skip.note", info.Tag)));
         if (choice == 0) AboutForm.Open(info.Url);
         else if (choice == 2) { _settings.SkippedUpdateTag = info.Tag; _store.Save(_settings); }
     }

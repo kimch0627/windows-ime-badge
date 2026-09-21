@@ -32,6 +32,7 @@ static class Program
             var store = new SettingsStore(paths);
             bool firstRun = !File.Exists(store.FilePath) && !(store.LegacyFilePath is { } legacy && File.Exists(legacy));
             var settings = store.Load();
+            Strings.Setting = settings.Language;   // 그 전(중복 실행 안내·치명적 오류)에는 Windows 표시 언어를 따른다
             Autostart.RefreshIfEnabled();
 
             Application.Run(new BadgeForm(settings, store, paths, firstRun));
