@@ -62,9 +62,15 @@ sealed class SettingsForm : Form
     }
 
     // ── 화면 구성 ──
+    // 레이아웃 원칙: 자동 크기(AutoSize) 컨테이너 안에는 Dock 을 쓰지 않는다. AutoSize 부모는 자식 크기로 자기 크기를 정하고,
+    // Dock 된 자식은 부모 크기로 자기 크기를 정하므로 서로를 기다리다 폭 0 으로 접힌다(제목이 세로로 찍히던 문제).
+    // 그룹박스는 고정 폭(GroupWidth)을 주고 높이만 내용에 맞춘다. 96 DPI 기준 픽셀이며 고DPI 에서는 WinForms 가 배율을 곱한다.
+    const int GroupWidth = 400;
+    const int InnerWidth = GroupWidth - 2 * 12;
+
     void Build()
     {
-        var root = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Fill };
+        var root = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Location = new Point(12, 12) };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
@@ -81,7 +87,7 @@ sealed class SettingsForm : Form
         root.Controls.Add(right, 1, 0);
 
         // 아래: 버튼
-        var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Fill, Margin = new Padding(0, 8, 0, 0) };
+        var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Anchor = AnchorStyles.Right, Margin = new Padding(0, 8, 0, 0) };
         var cancel = new Button { Text = "취소", DialogResult = DialogResult.Cancel, AutoSize = true };
         var ok = new Button { Text = "확인", AutoSize = true };
         var reset = new Button { Text = "기본값 복원", AutoSize = true, Margin = new Padding(24, 3, 3, 3) };
@@ -160,7 +166,7 @@ sealed class SettingsForm : Form
     GroupBox BuildPreviewGroup()
     {
         var g = NewGroup("미리보기");
-        _preview = new Panel { Width = 300, Height = 110, BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Margin = new Padding(6) };
+        _preview = new Panel { Location = ContentOrigin, Width = InnerWidth, Height = 120, BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle };
         _preview.Paint += (_, e) => PaintPreview(e.Graphics);
         g.Controls.Add(_preview);
         return g;
@@ -170,13 +176,13 @@ sealed class SettingsForm : Form
     {
         var g = NewGroup("배지를 띄우지 않을 앱");
         var t = NewTable();
-        _excluded = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, Width = 300, Height = 90, AcceptsReturn = true };
+        _excluded = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, Width = InnerWidth - 6, Height = 90, AcceptsReturn = true };
         _excluded.TextChanged += (_, _) =>
             _draft.ExcludedProcesses = _excluded.Lines.Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
         AddRow(t, null, _excluded);
         AddRow(t, null, new Label
         {
-            Text = "한 줄에 하나, 실행 파일 이름(.exe 생략 가능). 끝에 * 를 붙이면 앞부분만 맞으면 됩니다.\n예)  mstsc\n      vmware-vmx\n      Unreal*",
+            Text = "한 줄에 하나, 실행 파일 이름(.exe 생략 가능).\n끝에 * 를 붙이면 앞부분만 맞으면 됩니다.\n예)  mstsc  /  vmware-vmx  /  Unreal*",
             ForeColor = SystemColors.GrayText,
             AutoSize = true,
         });
@@ -185,12 +191,24 @@ sealed class SettingsForm : Form
     }
 
     // ── 도우미 ──
+    /// <summary>그룹박스 안에서 내용이 시작하는 위치(제목 줄 아래).</summary>
+    static readonly Point ContentOrigin = new(12, 26);
+
+    /// <summary>폭은 고정(GroupWidth), 높이는 내용에 맞춰 자란다. 자식은 Dock 없이 <see cref="ContentOrigin"/> 에 둔다.</summary>
     static GroupBox NewGroup(string title) =>
-        new() { Text = title, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(8, 4, 8, 8), Margin = new Padding(0, 0, 0, 8) };
+        new()
+        {
+            Text = title,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            MinimumSize = new Size(GroupWidth, 0),
+            Padding = new Padding(12, 4, 12, 12),
+            Margin = new Padding(0, 0, 0, 10),
+        };
 
     static TableLayoutPanel NewTable()
     {
-        var t = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Top };
+        var t = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Location = ContentOrigin };
         t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         return t;

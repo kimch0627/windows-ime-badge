@@ -22,7 +22,8 @@ sealed class AboutForm : Form
         AutoSize = true; AutoSizeMode = AutoSizeMode.GrowAndShrink;
         Padding = new Padding(16);
 
-        var root = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Fill };
+        // AutoSize 폼 안에서는 Dock 을 쓰지 않는다(SettingsForm 의 설명 참고). 왼쪽 위에 두면 폼이 내용 + Padding 만큼 자란다.
+        var root = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Location = new Point(16, 16) };
         root.Controls.Add(new Label { Text = AppInfo.DisplayName, Font = new Font(Font.FontFamily, 12f, FontStyle.Bold), AutoSize = true, Margin = new Padding(0, 0, 0, 4) });
         root.Controls.Add(new Label { Text = $"버전 {AppVersion.Display}", AutoSize = true, Margin = new Padding(0, 0, 0, 12) });
         root.Controls.Add(new Label
