@@ -59,13 +59,14 @@ if (-not $Sha256) {
             $asset = $rel.assets | Where-Object { $_.name -eq 'SHA256SUMS.txt' } | Select-Object -First 1
             if (-not $asset) { throw "릴리스 v$Version 에 SHA256SUMS.txt 가 아직 없습니다." }
             $h = $headers.Clone(); $h['Accept'] = 'application/octet-stream'
-            (Invoke-WebRequest -Uri $asset.url -Headers $h -UseBasicParsing).Content
+            # Content 는 byte[] 다. 함수 밖으로 나가면 PowerShell 이 배열을 요소별로 풀어 버리므로 여기서 바로 문자열로 만든다.
+            [System.Text.Encoding]::UTF8.GetString((Invoke-WebRequest -Uri $asset.url -Headers $h -UseBasicParsing).Content)
         }
         else {
-            (Invoke-WebRequest -Uri "https://github.com/$Repo/releases/download/v$Version/SHA256SUMS.txt" -UseBasicParsing).Content
+            [string](Invoke-WebRequest -Uri "https://github.com/$Repo/releases/download/v$Version/SHA256SUMS.txt" -UseBasicParsing).Content
         }
     } 'SHA256SUMS.txt 다운로드'
-    if ($sums -is [byte[]]) { $sums = [System.Text.Encoding]::UTF8.GetString($sums) }
+    $sums = [string]$sums
     $line = ($sums -split "`n") | Where-Object { $_ -match [regex]::Escape($installerName) } | Select-Object -First 1
     if (-not $line) { throw "SHA256SUMS.txt 에 $installerName 이 없습니다." }
     $Sha256 = ($line -split '\s+')[0]
