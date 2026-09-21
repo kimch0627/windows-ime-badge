@@ -86,6 +86,15 @@ winget install wingetcreate
 wingetcreate submit winget/manifests/k/kimch0627/ImeBadge/1.0.0  # 브라우저 로그인 또는 --token <PAT>
 ```
 
+### wingetcreate 버전 올리기
+
+`winget.yml` 은 `wingetcreate.exe` 를 특정 릴리스 버전과 SHA256 으로 고정해 받습니다(공급망 보호).
+새 버전으로 올리려면 microsoft/winget-create 릴리스에서 exe 를 받아 해시를 구한 뒤 `$wcVersion`, `$wcSha256` 두 값을 함께 바꿉니다.
+
+```powershell
+(Get-FileHash .\wingetcreate.exe -Algorithm SHA256).Hash
+```
+
 ### 심사에서 확인하는 것
 
 - 첫 등록은 사람이 검토합니다(보통 며칠). `Publisher`(kimch0627)와 `PackageName`(ImeBadge)이 exe 파일 속성의

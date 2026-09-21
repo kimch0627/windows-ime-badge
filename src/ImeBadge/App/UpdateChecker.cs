@@ -45,7 +45,8 @@ static class UpdateChecker
         string json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         var rel = JsonSerializer.Deserialize(json, GitHubJsonContext.Default.GitHubRelease);
         if (rel?.TagName is null || rel.Draft || rel.Prerelease) return null;
-        return new UpdateInfo(rel.TagName, rel.HtmlUrl ?? AppInfo.ReleasesUrl);
+        // 응답의 링크는 https://github.com/... 일 때만 그대로 열고, 아니면 릴리스 목록 페이지로 대신한다.
+        return new UpdateInfo(rel.TagName, SafeUrl.GitHubOr(rel.HtmlUrl, AppInfo.ReleasesUrl));
     }
 }
 
