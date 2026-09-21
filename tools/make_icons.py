@@ -7,43 +7,49 @@
 "한" 같은 특정 언어 글자를 쓰지 않는다. 나중에 일본어·중국어 IME 를 지원해도 아이콘은 그대로 쓸 수 있고,
 글꼴 없이 도형만으로 그리므로 어느 환경에서나 같은 결과가 나온다.
 paused.ico 는 회색 버전(일시 중지 상태의 트레이 아이콘).
+
+작은 크기(16·20·24px, 트레이·제목 표시줄)는 Windows 아이콘 지침대로 단순화한 도형을 따로 그린다:
+반투명 외곽선을 빼고, 커서 막대와 배지 테두리를 굵게 해서 축소해도 뭉개지지 않게 한다.
 """
 import os
 
 from PIL import Image, ImageDraw
 
 SIZES = [16, 20, 24, 32, 40, 48, 64, 128, 256]
+SMALL = 24   # 이 크기 이하는 단순화 도형
 OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "src", "ImeBadge", "Assets")
 
-BLUE = (0, 120, 215, 255)       # #0078D7, 한글 배지 기본색과 같다
+BLUE = (0, 103, 192, 255)       # #0067C0, 한글 배지 기본색(Settings.DefaultHangulColor)과 같다
 GRAY = (140, 140, 140, 255)
 WHITE = (255, 255, 255, 255)
 BADGE = (255, 211, 77, 255)     # 배지: 배경과 대비되는 따뜻한 색
 
 
 def render(size: int, fill: tuple) -> Image.Image:
+    small = size <= SMALL
     # 4배로 그린 뒤 축소해 가장자리를 부드럽게
     s = size * 4
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
 
-    pad = int(s * 0.04)
+    pad = 0 if small else int(s * 0.04)
     d.rounded_rectangle((pad, pad, s - pad, s - pad), radius=int(s * 0.22), fill=fill,
-                        outline=(255, 255, 255, 110), width=max(1, s // 64))
+                        outline=None if small else (255, 255, 255, 110), width=max(1, s // 64))
 
     # 텍스트 커서(I-beam): 세로 막대 + 위아래 짧은 가로선. 왼쪽으로 조금 치우쳐 오른쪽 위에 배지 자리를 남긴다.
-    cx = int(s * 0.42)
-    top, bottom = int(s * 0.24), int(s * 0.80)
-    bar = max(2, int(s * 0.075))
-    serif = int(s * 0.13)
+    cx = int(s * 0.40)
+    top, bottom = int(s * 0.22), int(s * 0.82)
+    bar = max(2, int(s * (0.11 if small else 0.075)))
+    serif = int(s * (0.16 if small else 0.13))
     d.rounded_rectangle((cx - bar // 2, top, cx + bar // 2, bottom), radius=bar // 2, fill=WHITE)
     for y in (top, bottom):
         d.rounded_rectangle((cx - serif, y - bar // 2, cx + serif, y + bar // 2), radius=bar // 2, fill=WHITE)
 
     # 커서 오른쪽 위의 배지(원). 실제 프로그램이 caret 옆에 띄우는 배지의 위치와 같다.
-    r = int(s * 0.14)
-    bx, by = int(s * 0.70), int(s * 0.30)
-    d.ellipse((bx - r, by - r, bx + r, by + r), fill=BADGE, outline=WHITE, width=max(1, s // 48))
+    r = int(s * (0.17 if small else 0.14))
+    bx, by = int(s * 0.72), int(s * 0.30)
+    ring = max(4, s // 16) if small else max(1, s // 48)   # 작은 크기에서는 축소 후에도 1px 이상 남게
+    d.ellipse((bx - r, by - r, bx + r, by + r), fill=BADGE, outline=WHITE, width=ring)
 
     return img.resize((size, size), Image.LANCZOS)
 

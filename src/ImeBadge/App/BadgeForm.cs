@@ -141,13 +141,19 @@ sealed class BadgeForm : Form
         base.OnHandleDestroyed(e);
     }
 
-    void ApplyHotkey()
+    /// <summary>설정의 단축키를 전역으로 등록한다. <paramref name="warnOnFailure"/> 면 실패를 사용자에게도 알린다(설정 저장 시).</summary>
+    void ApplyHotkey(bool warnOnFailure = false)
     {
         if (!IsHandleCreated) return;
         if (_hotkeyRegistered) { Native.UnregisterHotKey(Handle, HotkeyId); _hotkeyRegistered = false; }
+        _pauseItem.ShortcutKeyDisplayString = _settings.HotkeyEnabled ? _settings.Hotkey : null;
         if (!_settings.HotkeyEnabled) return;
-        _hotkeyRegistered = Native.RegisterHotKey(Handle, HotkeyId, Native.MOD_CONTROL | Native.MOD_ALT | Native.MOD_NOREPEAT, 'H');
-        if (!_hotkeyRegistered) Log.Error("hotkey Ctrl+Alt+H registration failed (already used by another app?)");
+        if (!HotkeySpec.TryParse(_settings.Hotkey, out var hk)) hk = HotkeySpec.Default;
+        _hotkeyRegistered = Native.RegisterHotKey(Handle, HotkeyId, (uint)hk.Modifiers | Native.MOD_NOREPEAT, (uint)hk.Key);
+        if (_hotkeyRegistered) return;
+        Log.Error($"hotkey {hk} registration failed (already used by another app?)");
+        if (warnOnFailure)
+            Dialogs.Warning($"단축키 {hk} 을(를) 등록하지 못했습니다.", "다른 프로그램이 같은 조합을 쓰고 있을 수 있습니다. 설정에서 다른 조합을 고르세요.");
     }
 
     // ── 트레이 메뉴 ──
@@ -160,7 +166,7 @@ sealed class BadgeForm : Form
         menu.Items.Add(_statusItem);
         menu.Items.Add(new ToolStripSeparator());
 
-        _pauseItem = new ToolStripMenuItem("일시 중지(&P)", null, (_, _) => TogglePause()) { ShortcutKeyDisplayString = "Ctrl+Alt+H" };
+        _pauseItem = new ToolStripMenuItem("일시 중지(&P)", null, (_, _) => TogglePause()) { ShortcutKeyDisplayString = _settings.HotkeyEnabled ? _settings.Hotkey : null };
         menu.Items.Add(_pauseItem);
         // 더블클릭과 같은 동작인 "설정"을 굵게: Windows 관행에서 굵은 항목이 기본 동작이다.
         var settingsItem = new ToolStripMenuItem("설정(&S)...", null, (_, _) => OpenSettings());
@@ -285,8 +291,8 @@ sealed class BadgeForm : Form
     string TrayText(ImeState state)
     {
         string s = AppInfo.DisplayName + " · " + StateText(state);
-        if (_paused) s += _settings.HotkeyEnabled ? " · Ctrl+Alt+H 로 재개" : "";
-        else if (_settings.HotkeyEnabled) s += " · Ctrl+Alt+H 일시 중지";
+        if (_paused) s += _settings.HotkeyEnabled ? $" · {_settings.Hotkey} 로 재개" : "";
+        else if (_settings.HotkeyEnabled) s += $" · {_settings.Hotkey} 일시 중지";
         if (Log.Enabled) s += " [debug]";
         return s.Length > 127 ? s[..127] : s;
     }
@@ -354,7 +360,7 @@ sealed class BadgeForm : Form
         ResetRenderKey();                                   // 다음 틱에 강제로 다시 그림
         _flashUntil = DateTime.Now.AddMilliseconds(FlashMs); // DotFlash면 바로 글자를 한 번 보여 준다
         _timer.Interval = _settings.PollIntervalMs;
-        ApplyHotkey();
+        ApplyHotkey(warnOnFailure: save);
         RefreshTray();   // 배지 색이나 "트레이에 상태 표시" 설정이 바뀌었을 수 있다
         Poll();
     }
@@ -384,7 +390,7 @@ sealed class BadgeForm : Form
     void OpenAbout()
     {
         if (_aboutForm is { IsDisposed: false }) { _aboutForm.Activate(); return; }
-        _aboutForm = new AboutForm(_paths);
+        _aboutForm = new AboutForm(_paths, _settings, () => CheckForUpdates(manual: true));
         _aboutForm.FormClosed += (_, _) => { _aboutForm?.Dispose(); _aboutForm = null; };
         _aboutForm.Show();
         _aboutForm.Activate();

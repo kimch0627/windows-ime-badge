@@ -99,8 +99,11 @@ static class Theme
             case NumericUpDown num:
                 if (p.Dark) { num.BackColor = p.Input; num.ForeColor = p.Text; num.BorderStyle = BorderStyle.FixedSingle; }
                 break;
-            case TrackBar track:
-                track.BackColor = bg;
+            case ListBox list:
+                if (p.Dark) { list.BackColor = p.Input; list.ForeColor = p.Text; list.BorderStyle = BorderStyle.FixedSingle; }
+                break;
+            case TrackBar or PictureBox:
+                c.BackColor = bg;
                 break;
             case Panel:   // TableLayoutPanel, FlowLayoutPanel 포함
                 if (c.Tag is not "custom-paint") c.BackColor = bg;

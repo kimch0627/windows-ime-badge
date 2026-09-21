@@ -73,11 +73,13 @@ winget install kimch0627.ImeBadge
 | 동작 | 로그인 시 자동 시작 | 트레이 메뉴와 같은 설정 |
 | | 전체 화면 앱에서 숨김 | 게임·전체 화면 동영상처럼 모니터 전체를 덮는 창에서는 배지를 띄우지 않음 (기본 켜짐) |
 | | 트레이 아이콘에도 상태 표시 | 끄면 트레이 아이콘은 항상 커서 모양 (기본 켜짐) |
-| | Ctrl+Alt+H 단축키 | 다른 프로그램과 겹치면 끌 수 있음 |
+| | 단축키 | 일시 중지 켜기/끄기. 기본 Ctrl+Alt+H. 입력칸을 클릭하고 원하는 조합을 누르면 바뀜(Ctrl·Alt·Win 중 하나 필수). 다른 프로그램과 겹치면 끌 수 있음 |
 | | 새 버전 알림 | 하루 한 번 GitHub 에서 확인. 끄면 네트워크 접속이 전혀 없음 |
 | | 확인 주기 | 50~1000 ms. 기본 100. 작을수록 빨리 반응하고 CPU 를 조금 더 씀 |
 | 미리보기 | | 현재 설정으로 실제 렌더러가 그린 배지. 왼쪽은 밝은 배경(메모장), 오른쪽은 어두운 배경(VS Code 등) |
-| 배지를 띄우지 않을 앱 | 프로세스 이름 목록 | 한 줄에 하나. `.exe` 생략 가능, 끝에 `*` 는 앞부분 일치. 예: `mstsc`, `Unreal*` |
+| 배지를 띄우지 않을 앱 | 프로세스 이름 목록 | 실행 중인 앱을 목록에서 고르거나 이름을 직접 입력해 추가. `.exe` 생략 가능, 끝에 `*` 는 앞부분 일치. 예: `mstsc`, `Unreal*` |
+
+각 항목에 마우스를 올리면 짧은 설명(툴팁)이 보이고, Alt+밑줄 글자로 항목에 바로 갈 수 있습니다.
 
 설정을 바꾸면 창 밖의 실제 배지에 **바로** 반영되어 결과를 보면서 고를 수 있습니다. **확인**을 누르면 저장되고,
 **취소**하거나 창을 닫으면 창을 열 때의 설정으로 되돌아갑니다. 설정·정보 창은 Windows 의 밝게/어둡게 앱 모드를 따릅니다.
@@ -87,6 +89,7 @@ winget install kimch0627.ImeBadge
 ### 문제가 생기면
 
 - 트레이 아이콘 우클릭 → 정보 → **로그 폴더 열기**. `errors.log` 에 오류가 기록됩니다.
+- 정보 창의 **진단 정보 복사**를 누르면 Windows·.NET 버전, DPI, 테마, 현재 설정 요약이 클립보드에 복사됩니다. 이슈에 붙여 넣어 주세요.
 - 특정 앱에서 배지가 안 뜨거나 위치가 틀리면 프로그램을 종료한 뒤 `ImeBadge.exe --debug` 로 실행하고 다시 시도하세요.
   `imebadge.log` 에 활성 창·caret 탐색 경로·IME 원시 값이 남습니다.
 - [이슈](https://github.com/kimch0627/windows-ime-badge/issues)에 로그와 함께 올려 주세요. 템플릿이 준비되어 있습니다.
@@ -114,6 +117,7 @@ src/ImeBadge.Core/      순수 로직. WinForms·Win32 의존 없음 → Linux �
   Settings.cs           설정 모델, JSON source generator, SettingsStore(읽기·쓰기·이관), ColorHex
   BadgeLayout.cs        caret 과 배지 크기로 배지 위치를 계산
   ProcessFilter.cs      제외 앱 목록 매칭
+  Hotkey.cs             "Ctrl+Alt+H" ↔ (보조키, 가상 키) 변환·검증
   VersionInfo.cs        "v1.2.3" 비교 (업데이트 확인)
   Log.cs                디버그 로그·오류 로그, 1 MB 회전
 src/ImeBadge/           Windows 앱
@@ -134,7 +138,8 @@ src/ImeBadge/           Windows 앱
   App/Dialogs.cs        TaskDialog 래퍼 (실패하면 MessageBox 로 대체)
   App/Labels.cs         트레이 메뉴·설정 창이 함께 쓰는 문구·프리셋
   App/Theme.cs          밝게/어둡게 테마 감지·적용, 카드형 그룹 상자, 평면 메뉴 렌더러
-  Assets/*.ico          tools/make_icons.py 로 생성. 언어 중립 도형(커서 + 배지)이라 다른 언어 IME 를 지원해도 그대로 쓴다
+  Assets/*.ico          tools/make_icons.py 로 생성. 언어 중립 도형(커서 + 배지)이라 다른 언어 IME 를 지원해도 그대로 쓴다.
+                        16·20·24px 는 외곽선을 빼고 획을 굵게 한 단순화 도형(Windows 아이콘 지침)
 tests/ImeBadge.Core.Tests/  xUnit
 installer/ImeBadge.iss  Inno Setup 스크립트
 ```

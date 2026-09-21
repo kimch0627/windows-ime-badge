@@ -32,8 +32,10 @@ public sealed class Settings
     public bool HideOnFullscreen { get; set; } = true;
     /// <summary>배지를 띄우지 않을 프로세스 이름 목록. 확장자 없이("mstsc"), 끝에 * 허용("Unreal*").</summary>
     public List<string> ExcludedProcesses { get; set; } = new();
-    /// <summary>Ctrl+Alt+H 로 일시 중지를 켜고 끈다.</summary>
+    /// <summary>단축키로 일시 중지를 켜고 끈다.</summary>
     public bool HotkeyEnabled { get; set; } = true;
+    /// <summary>일시 중지 단축키. "Ctrl+Alt+H" 형식(<see cref="HotkeySpec"/>). 읽을 수 없으면 기본값으로 돌아간다.</summary>
+    public string Hotkey { get; set; } = HotkeySpec.Default.ToString();
     /// <summary>폴링 주기(ms). 50~1000.</summary>
     public int PollIntervalMs { get; set; } = 100;
     /// <summary>트레이 아이콘에 현재 한/영 상태를 보여 준다("한"/"A"). 끄면 항상 기본 아이콘.</summary>
@@ -59,6 +61,7 @@ public sealed class Settings
         if (!Enum.IsDefined(Placement)) Placement = BadgePlacement.AboveRight;
         if (!ColorHex.TryParse(HangulColor, out _)) HangulColor = DefaultHangulColor;
         if (!ColorHex.TryParse(EnglishColor, out _)) EnglishColor = DefaultEnglishColor;
+        Hotkey = HotkeySpec.TryParse(Hotkey, out var hk) ? hk.ToString() : HotkeySpec.Default.ToString();
         ExcludedProcesses ??= new();
         ExcludedProcesses.RemoveAll(string.IsNullOrWhiteSpace);
     }
@@ -77,7 +80,7 @@ public sealed class Settings
         HangulColor = other.HangulColor; EnglishColor = other.EnglishColor; Animate = other.Animate;
         HideOnFullscreen = other.HideOnFullscreen;
         ExcludedProcesses = new List<string>(other.ExcludedProcesses);
-        HotkeyEnabled = other.HotkeyEnabled; PollIntervalMs = other.PollIntervalMs; TrayShowsState = other.TrayShowsState;
+        HotkeyEnabled = other.HotkeyEnabled; Hotkey = other.Hotkey; PollIntervalMs = other.PollIntervalMs; TrayShowsState = other.TrayShowsState;
         CheckForUpdates = other.CheckForUpdates; LastUpdateCheckUtc = other.LastUpdateCheckUtc;
         SkippedUpdateTag = other.SkippedUpdateTag;
     }
