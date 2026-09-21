@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### 보안
+- 워크플로의 외부 액션을 커밋 SHA 로 고정(Dependabot 이 갱신). 워크플로 기본 권한을 읽기로 낮추고 릴리스 잡만 쓰기.
+- wingetcreate 를 버전·SHA256 고정으로 받아 해시를 확인.
+- 업데이트 알림이 여는 링크를 `https://github.com` 주소일 때만 열고, 아니면 릴리스 목록 페이지로 대체.
+- Dependabot 브랜치 푸시에는 롤링 사전 릴리스를 만들지 않음.
+
 ### 수정
 - winget 매니페스트 생성이 비공개 저장소에서 SHA256SUMS.txt 를 못 받아 실패하던 문제. GitHub API + 토큰으로 받는다.
   (winget 등록과 프로그램의 업데이트 확인은 저장소가 공개여야 동작한다. docs/release.md 참고.)

@@ -3,7 +3,7 @@
 # 정식 릴리스가 만들어지면 build.yml 이 이 워크플로를 부른다(workflow_call). 수동으로도 돌릴 수 있다(workflow_dispatch).
 # winget 관련 파일이 바뀐 브랜치 푸시에서는 최신 릴리스로 매니페스트만 만들어 스크립트를 검증한다(제출 없음).
 # 1. winget/templates 에서 그 버전의 매니페스트를 만든다(설치 프로그램 SHA256 은 릴리스의 SHA256SUMS.txt 에서, GITHUB_TOKEN 으로 API 접근).
-# 2. 저장소 시크릿 WINGET_TOKEN(public_repo 권한 PAT)이 있으면 wingetcreate 로 microsoft/winget-pkgs 에 PR 을 낸다.
+# 2. 저장소 시크릿 WINGET_TOKEN(public_repo 권한 PAT)이 있으면 wingetcreate(버전·SHA256 고정)로 microsoft/winget-pkgs 에 PR 을 낸다.
 #    (wingetcreate 가 토큰 계정에 winget-pkgs 포크를 만들고 브랜치를 밀어 PR 을 연다.)
 #    없으면 매니페스트만 만들고 끝낸다. 절차는 docs/release.md.
 #
@@ -39,7 +39,7 @@ jobs:
   submit:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Generate manifests
         id: gen
@@ -69,7 +69,12 @@ jobs:
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: |
-          Invoke-WebRequest -Uri https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          # 버전과 SHA256 을 고정해 받는다. 새 버전으로 올릴 때는 두 값을 함께 바꾼다 (docs/release.md).
+          $wcVersion = "v1.12.13.0"
+          $wcSha256  = "24042BD37915805615E6CF969AC57C6439124C3FE85823327F5F3FB24BD9FFEA"
+          Invoke-WebRequest -Uri "https://github.com/microsoft/winget-create/releases/download/$wcVersion/wingetcreate.exe" -OutFile wingetcreate.exe
+          $actual = (Get-FileHash wingetcreate.exe -Algorithm SHA256).Hash
+          if ($actual -ne $wcSha256) { throw "wingetcreate.exe 해시 불일치: $actual (기대 $wcSha256)" }
           $ver = "${{ steps.gen.outputs.version }}"
           $dir = "out/winget/k/kimch0627/ImeBadge/$ver"
           & .\wingetcreate.exe submit --token $env:WINGET_TOKEN --prtitle "New version: kimch0627.ImeBadge version $ver" $dir

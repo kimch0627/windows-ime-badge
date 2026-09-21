@@ -71,7 +71,7 @@ sealed class BadgeForm : Form
         _tray.DoubleClick += (_, _) => OpenSettings();
         _tray.BalloonTipClicked += (_, _) =>
         {
-            if (_pendingUpdateUrl is not null) AboutForm.Open(_pendingUpdateUrl);
+            if (_pendingUpdateUrl is not null) AboutForm.Open(SafeUrl.GitHubOr(_pendingUpdateUrl, AppInfo.ReleasesUrl));
             else OpenSettings();
         };
 
