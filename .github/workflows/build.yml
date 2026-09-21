@@ -1,20 +1,28 @@
-# 어느 브랜치든 푸시하면 Windows 러너에서 exe 두 개를 만들어 Releases 에 올린다.
+# 빌드·테스트·배포 워크플로.
 #
-# | 계기                            | 결과물 위치 (Releases 탭)                                  |
-# |---------------------------------|------------------------------------------------------------|
-# | main 에 push                    | `latest` 사전 릴리스를 그 커밋으로 갱신 (고정 주소로 최신 빌드)  |
-# | 다른 브랜치에 push              | `dev-<브랜치명>` 사전 릴리스를 그 커밋으로 갱신              |
-# | v* 태그 push / 수동 release_tag | 그 태그의 정식 Release                                     |
+# | 계기                            | 결과물 위치 (Releases 탭)                                       |
+# |---------------------------------|-----------------------------------------------------------------|
+# | PR                              | 테스트 + 빌드만 (릴리스 없음)                                     |
+# | main 에 push                    | `latest` 사전 릴리스를 그 커밋으로 갱신 (고정 주소로 최신 빌드)      |
+# | 다른 브랜치에 push              | `dev-<브랜치명>` 사전 릴리스를 그 커밋으로 갱신                    |
+# | v* 태그 push / 수동 release_tag | 그 태그의 정식 Release (버전 번호가 exe·설치 프로그램에 새겨진다)   |
+#
+# 결과물 세 가지: 설치 프로그램(권장), self-contained exe(무설치), framework-dependent exe(.NET 8 런타임 필요).
 #
 # Actions Artifacts 는 쓰지 않는다. 이 계정은 아티팩트 저장 용량 한도에 걸려 업로드가 실패한다.
 # Release 첨부 파일은 그 용량을 쓰지 않는다. 롤링 사전 릴리스는 태그(latest, dev-*)를 강제로 옮기는
 # 방식이라 v* 태그 트리거에 걸리지 않는다.
+#
+# 코드 서명: 저장소 시크릿 AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET / SIGNING_ENDPOINT /
+# SIGNING_ACCOUNT / SIGNING_PROFILE 이 모두 있으면 Azure Trusted Signing 으로 exe 와 설치 프로그램에 서명한다.
+# 없으면 서명 단계를 건너뛴다(SmartScreen 경고가 뜨는 미서명 빌드). 자세한 절차는 docs/release.md.
 name: build
 
 on:
   push:
     branches: ["**"]
     tags: ["v*"]
+  pull_request:
   workflow_dispatch:
     inputs:
       release_tag:
@@ -25,8 +33,28 @@ on:
 permissions:
   contents: write   # Release 생성·태그 이동에 필요
 
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+
 jobs:
+  # Windows 없이 도는 순수 로직 테스트. 빠르게 실패를 알린다.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Test (ImeBadge.Core)
+        run: dotnet test tests/ImeBadge.Core.Tests/ImeBadge.Core.Tests.csproj -c Release --logger "trx;LogFileName=core.trx"
+      - name: Format check (whitespace)
+        run: |
+          dotnet format whitespace src/ImeBadge.Core/ImeBadge.Core.csproj --verify-no-changes
+          dotnet format whitespace tests/ImeBadge.Core.Tests/ImeBadge.Core.Tests.csproj --verify-no-changes
+
   build:
+    needs: test
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,42 +63,124 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      # 버전 결정: v1.2.3 태그 → 1.2.3, 수동 release_tag → 그 값, 그 외 → 0.0.0-<브랜치>.<sha7> (개발 빌드)
+      - name: Decide version
+        id: ver
+        shell: pwsh
+        run: |
+          $ref = "${{ github.ref }}"
+          $manual = "${{ inputs.release_tag }}"
+          if ($ref -like "refs/tags/v*") { $v = $ref.Substring("refs/tags/v".Length) }
+          elseif ($manual -ne "") { $v = $manual.TrimStart("v") }
+          else {
+            $branch = "${{ github.head_ref || github.ref_name }}" -replace '[^0-9A-Za-z-]', '-'
+            $v = "0.0.0-$branch.$("${{ github.sha }}".Substring(0,7))"
+          }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          "VERSION=$v" >> $env:GITHUB_ENV
+          # 롤링 사전 릴리스의 태그 이름: main → latest, 그 외 → dev-<브랜치명> ('/' 등은 '-'로)
+          $rb = "${{ github.ref_name }}" -replace '[/\\:<>|*?"~^ ]', '-'
+          $tag = if ($ref -eq "refs/heads/main") { "latest" } else { "dev-$rb" }
+          "ROLLING_TAG=$tag" >> $env:GITHUB_ENV
+          "version = $v, rolling tag = $tag"
+
       - name: Restore
-        run: dotnet restore ImeBadge.csproj
+        run: dotnet restore ImeBadge.sln
+
+      - name: Build (Debug, 전체 솔루션 — 경고를 오류로)
+        run: dotnet build ImeBadge.sln -c Debug --no-restore
+
+      - name: Test (Windows)
+        run: dotnet test tests/ImeBadge.Core.Tests/ImeBadge.Core.Tests.csproj -c Release --no-restore
 
       - name: Publish (framework-dependent, .NET 8 런타임 필요)
         run: >
-          dotnet publish ImeBadge.csproj -c Release -r win-x64 --self-contained false
-          -p:PublishSingleFile=true -p:DebugType=none -o out/fd
+          dotnet publish src/ImeBadge/ImeBadge.csproj -c Release -r win-x64 --self-contained false
+          -p:PublishSingleFile=true -p:DebugType=none -p:Version=${{ env.VERSION }} -o out/fd
 
       - name: Publish (self-contained, 런타임 포함, 트리밍·압축은 csproj 설정)
         run: >
-          dotnet publish ImeBadge.csproj -c Release -r win-x64 --self-contained true
+          dotnet publish src/ImeBadge/ImeBadge.csproj -c Release -r win-x64 --self-contained true
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
-          -p:DebugType=none -o out/sc
+          -p:DebugType=none -p:Version=${{ env.VERSION }} -o out/sc
 
-      - name: Rename outputs
+      - name: Check signing secrets
+        id: sign
+        shell: pwsh
+        env:
+          T: ${{ secrets.AZURE_TENANT_ID }}
+          C: ${{ secrets.AZURE_CLIENT_ID }}
+          S: ${{ secrets.AZURE_CLIENT_SECRET }}
+          E: ${{ secrets.SIGNING_ENDPOINT }}
+          A: ${{ secrets.SIGNING_ACCOUNT }}
+          P: ${{ secrets.SIGNING_PROFILE }}
+        run: |
+          $ok = ($env:T -and $env:C -and $env:S -and $env:E -and $env:A -and $env:P) ? "true" : "false"
+          "enabled=$ok" >> $env:GITHUB_OUTPUT
+          "code signing: $ok"
+
+      - name: Sign executables (Azure Trusted Signing)
+        if: steps.sign.outputs.enabled == 'true'
+        uses: azure/trusted-signing-action@v0.5.1
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.SIGNING_PROFILE }}
+          files-folder: out
+          files-folder-filter: exe
+          files-folder-recurse: true
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
+          & $iscc "/DMyAppVersion=${{ env.VERSION }}" "/DMySourceExe=..\out\sc\ImeBadge.exe" installer\ImeBadge.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)" }
+
+      - name: Sign installer (Azure Trusted Signing)
+        if: steps.sign.outputs.enabled == 'true'
+        uses: azure/trusted-signing-action@v0.5.1
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.SIGNING_PROFILE }}
+          files-folder: installer/Output
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Collect outputs
         shell: pwsh
         run: |
           Copy-Item out/fd/ImeBadge.exe out/ImeBadge-win-x64.exe
           Copy-Item out/sc/ImeBadge.exe out/ImeBadge-win-x64-selfcontained.exe
-          Get-ChildItem out/*.exe | ForEach-Object { "{0,-40} {1,8:N1} MB" -f $_.Name, ($_.Length / 1MB) }
-          # 롤링 사전 릴리스의 태그 이름: main → latest, 그 외 → dev-<브랜치명> ('/' 등은 '-'로)
-          $branch = "${{ github.ref_name }}" -replace '[/\\:<>|*?"~^ ]', '-'
-          $tag = if ("${{ github.ref }}" -eq "refs/heads/main") { "latest" } else { "dev-$branch" }
-          "ROLLING_TAG=$tag" >> $env:GITHUB_ENV
+          Copy-Item installer/Output/ImeBadge-Setup-*.exe out/
+          Get-ChildItem out/*.exe | ForEach-Object { "{0,-48} {1,8:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+          Get-ChildItem out/*.exe | ForEach-Object { "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } | Set-Content out/SHA256SUMS.txt
+          Get-Content out/SHA256SUMS.txt
 
       # 브랜치 푸시마다 롤링 태그(latest / dev-<브랜치>)를 이 커밋으로 옮기고 사전 릴리스 첨부 파일을 갱신한다.
       # 항상 같은 주소에서 최신 빌드를 받을 수 있다:
       #   https://github.com/<owner>/<repo>/releases/download/latest/ImeBadge-win-x64-selfcontained.exe
       - name: Move rolling tag (브랜치 푸시일 때만)
-        if: startsWith(github.ref, 'refs/heads/')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')
         run: |
           git tag -f ${{ env.ROLLING_TAG }} ${{ github.sha }}
           git push -f origin ${{ env.ROLLING_TAG }}
 
       - name: Update rolling pre-release (브랜치 푸시일 때만)
-        if: startsWith(github.ref, 'refs/heads/')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.ROLLING_TAG }}
@@ -78,8 +188,10 @@ jobs:
           body: "`${{ github.ref_name }}` 브랜치의 최신 자동 빌드입니다. 커밋마다 덮어써집니다. 검증된 버전은 v* 릴리스를 받으세요."
           prerelease: true
           files: |
+            out/ImeBadge-Setup-*.exe
             out/ImeBadge-win-x64.exe
             out/ImeBadge-win-x64-selfcontained.exe
+            out/SHA256SUMS.txt
 
       - name: Release (태그 푸시 또는 release_tag 입력일 때만)
         if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
@@ -89,5 +201,7 @@ jobs:
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
           files: |
+            out/ImeBadge-Setup-*.exe
             out/ImeBadge-win-x64.exe
             out/ImeBadge-win-x64-selfcontained.exe
+            out/SHA256SUMS.txt
