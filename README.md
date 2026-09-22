@@ -191,8 +191,8 @@ installer/ImeBadge.iss  Inno Setup 스크립트
    - 3순위: IMM32 조합 창 위치 (`Ime/ImmCaret.cs`). 자체 커서를 그리는 앱(Xshell 같은 터미널)은 한글 조합 글자가 커서 자리에
      나타나도록 `ImmSetCompositionWindow` 로 IME 에 커서 위치를 알려 줍니다. 그 값을 앱의 기본 IME 창에
      `WM_IME_CONTROL`/`IMC_GETCOMPOSITIONWINDOW` 로 되물어 읽고, `IMC_GETCOMPOSITIONFONT` 의 글꼴 높이를 caret 높이로 씁니다.
-     결과 버퍼가 상대 프로세스 안에 있어야 하므로 `VirtualAllocEx` 로 잠시 빌리고 `ReadProcessMemory` 로 읽습니다(쓰기는 하지 않음).
-     열 수 없는 프로세스(관리자 권한 등)와 위치를 정해 준 적이 없는 앱(`CFS_DEFAULT`)은 건너뜁니다. 앱이 커서가 움직일 때마다
+     이 두 하위 명령의 결과 구조체는 user32 가 프로세스 사이로 옮겨 주므로 우리 쪽 버퍼를 넘기면 됩니다(상대 프로세스 메모리에
+     손대지 않음). 위치를 정해 준 적이 없는 앱(`CFS_DEFAULT`)과 창 밖 좌표는 건너뜁니다. 앱이 커서가 움직일 때마다
      갱신하면 배지도 따라가고, 조합을 시작할 때만 갱신하면 마지막 한글 입력 자리에 머무릅니다.
    - 마지막 대안: 그래도 못 찾았고 "커서를 못 찾는 앱" 목록(`CornerBadgeProcesses`, 기본 `Xshell*`)에 있으면 포커스 창의
      사각형을 넘겨 배지를 그 왼쪽 아래 모서리에 고정합니다(`BadgeLayout.Corner`). 위치 설정은 적용하지 않습니다.

@@ -69,7 +69,7 @@ static class ImeReader
             if (gti.hwndCaret != IntPtr.Zero) dump?.Append(" caret:win32-empty");   // caret 창은 있지만 높이 0
             caret = UiaCaret.Find(dump, out bool readOnly);
             // 자체 커서를 그리는 앱(Xshell 등)은 IME 에 알려 준 조합 창 위치가 곧 커서 자리다. 읽기 전용 컨트롤은 그대로 숨긴다.
-            if (caret is null && !readOnly) caret = ImmCaret.Find(gti.hwndFocus, pid, dump);
+            if (caret is null && !readOnly) caret = ImmCaret.Find(gti.hwndFocus, dump);
         }
 
         // 그래도 못 찾았고 "모서리에 표시할 앱" 이면 포커스 창의 사각형을 넘겨 왼쪽 아래 모서리에 띄우게 한다.
