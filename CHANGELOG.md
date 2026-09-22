@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-22
+
+Xshell 처럼 자체 커서를 그려 Windows 가 커서 위치를 모르는 터미널에서도 배지를 볼 수 있게 한 릴리스입니다.
+예전 설정 파일은 그대로 읽히며 새 항목("커서를 못 찾는 앱" = `Xshell*`, 이미지 커서 추적 = 꺼짐)은 기본값으로 채워집니다.
+
 ### 추가
 - Xshell 처럼 자체 커서를 그리는 앱(Win32 caret 도 UI Automation 텍스트 정보도 없음)에서도 배지가 뜬다.
   "커서를 못 찾는 앱" 목록(설정 창, 기본 `Xshell*`)에 있는 앱은 배지를 입력 창의 왼쪽 아래 모서리에 고정해 띄운다.
@@ -144,7 +149,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.0.0...v1.0.1
