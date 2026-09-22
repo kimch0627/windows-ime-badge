@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Windows.Forms;
 
@@ -10,6 +11,7 @@ namespace ImeBadge;
 /// 설정 창. 바꾸는 즉시 실제 배지에 반영되어(WYSIWYG) 화면 밖 배지로 결과를 바로 볼 수 있고,
 /// [확인]을 누르면 저장, [취소]나 닫기를 누르면 창을 열 때의 설정으로 되돌린다.
 /// 편집은 복사본(<see cref="_draft"/>)에 하고 매번 실제 설정(<see cref="_live"/>)으로 복사한다.
+/// 모양은 Windows 11 설정 앱을 따른다: 제목·설명이 붙은 카드, 토글 스위치, 강조색 슬라이더, 그림 타일 선택, 색 견본.
 /// 미리보기는 실제 렌더러(<see cref="BadgeRenderer"/>)로 그려 창 밖 배지와 똑같이 보인다.
 /// </summary>
 sealed class SettingsForm : Form
@@ -20,11 +22,13 @@ sealed class SettingsForm : Form
     readonly bool _builtKorean = Strings.IsKorean;   // 이 창을 만들 때의 언어. 바뀌면 새 창으로 갈아 끼운다
     bool _autostart, _dirty, _loading, _detached;
 
-    ComboBox _style = null!, _placement = null!, _language = null!;
-    TrackBar _size = null!, _opacity = null!;
+    TilePicker _style = null!, _placement = null!;
+    AccentSlider _size = null!, _opacity = null!;
     NumericUpDown _poll = null!;
-    Button _hangulColor = null!, _englishColor = null!;
-    CheckBox _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!;
+    ComboBox _language = null!;
+    ColorSwatches _hangulColor = null!, _englishColor = null!;
+    Label _hangulHex = null!, _englishHex = null!;
+    ToggleSwitch _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!;
     HotkeyBox _hotkeyBox = null!;
     ListBox _excludedList = null!;
     ComboBox _newProcess = null!;
@@ -61,7 +65,7 @@ sealed class SettingsForm : Form
         AutoScaleDimensions = new SizeF(96F, 96F);   // 아래 픽셀 크기들은 96 DPI 기준. 고DPI 에서 WinForms 가 배율을 곱한다
         Font = Theme.DialogFont;
         AutoSize = true; AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        Padding = new Padding(12);
+        Padding = new Padding(Outer);
 
         _flashTimer.Tick += (_, _) => { _flashTimer.Stop(); _flashing = false; _preview.Invalidate(); };
 
@@ -92,59 +96,81 @@ sealed class SettingsForm : Form
     // ── 화면 구성 ──
     // 레이아웃 원칙: 자동 크기(AutoSize) 컨테이너 안에는 Dock 을 쓰지 않는다. AutoSize 부모는 자식 크기로 자기 크기를 정하고,
     // Dock 된 자식은 부모 크기로 자기 크기를 정하므로 서로를 기다리다 폭 0 으로 접힌다(제목이 세로로 찍히던 문제).
-    // 그룹박스는 고정 폭(GroupWidth)을 주고 높이만 내용에 맞춘다. 96 DPI 기준 픽셀이며 고DPI 에서는 WinForms 가 배율을 곱한다.
-    const int GroupWidth = 400;
-    const int InnerWidth = GroupWidth - 2 * 12;
+    // 카드는 고정 폭(GroupWidth)을 주고 높이만 내용에 맞춘다. 96 DPI 기준 픽셀이며 고DPI 에서는 WinForms 가 배율을 곱한다.
+    // 간격은 8px 격자: 바깥 여백 20, 카드 사이 12, 카드 안쪽 16, 행 사이 8.
+    const int Outer = 20, GroupWidth = 424, CardInset = 16, CardGap = 12;
+    const int InnerWidth = GroupWidth - 2 * CardInset;
 
     void Build()
     {
-        var root = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Location = new Point(12, 12) };
+        var root = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Location = new Point(Outer, Outer) };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
+        // 머리: 아이콘 + 제목 + 한 줄 안내
+        var header = BuildHeader();
+        root.Controls.Add(header, 0, 0);
+        root.SetColumnSpan(header, 2);
+
         // 왼쪽: 모양 + 동작
-        var left = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = new Padding(0, 0, 8, 0) };
+        var left = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = new Padding(0, 0, CardGap, 0) };
         left.Controls.Add(BuildLookGroup());
         left.Controls.Add(BuildBehaviorGroup());
-        root.Controls.Add(left, 0, 0);
+        root.Controls.Add(left, 0, 1);
 
         // 오른쪽: 미리보기 + 제외 앱
         var right = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false };
         right.Controls.Add(BuildPreviewGroup());
         right.Controls.Add(BuildExcludeGroup());
-        root.Controls.Add(right, 1, 0);
+        root.Controls.Add(right, 1, 1);
 
-        // 아래: 버튼
+        // 아래: 버튼. 오른쪽 끝에 확인·취소, 왼쪽으로 떨어져 기본값 복원.
         var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Anchor = AnchorStyles.Right, Margin = new Padding(0, 8, 0, 0) };
-        var cancel = new Button { Text = Strings.Get("settings.cancel"), DialogResult = DialogResult.Cancel, AutoSize = true };
-        var ok = new Button { Text = Strings.Get("settings.ok"), AutoSize = true };
-        var reset = new Button { Text = Strings.Get("settings.reset"), AutoSize = true, Margin = new Padding(24, 3, 3, 3) };
+        var cancel = new AccentButton { Text = Strings.Get("settings.cancel"), DialogResult = DialogResult.Cancel, AutoSize = true, Margin = new Padding(8, 0, 0, 0) };
+        var ok = new AccentButton { Text = Strings.Get("settings.ok"), Primary = true, AutoSize = true, Margin = new Padding(8, 0, 0, 0) };
+        var reset = new AccentButton { Text = Strings.Get("settings.reset"), AutoSize = true, Margin = new Padding(24, 0, 0, 0) };
         // 모드리스(Show) 창은 DialogResult 만으로는 닫히지 않는다. 명시적으로 닫는다.
         ok.Click += (_, _) => { Apply(); DialogResult = DialogResult.OK; Close(); };
         cancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
         reset.Click += (_, _) => { _draft.CopyFrom(new Settings()); LoadDraftIntoControls(); };
         buttons.Controls.Add(cancel); buttons.Controls.Add(ok); buttons.Controls.Add(reset);
-        root.Controls.Add(buttons, 0, 1);
+        root.Controls.Add(buttons, 0, 2);
         root.SetColumnSpan(buttons, 2);
 
         AcceptButton = ok; CancelButton = cancel;
         Controls.Add(root);
     }
 
+    Control BuildHeader()
+    {
+        var row = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = new Padding(0, 0, 0, 16) };
+        var pic = new PictureBox { Size = new Size(40, 40), SizeMode = PictureBoxSizeMode.Zoom, Margin = new Padding(0, 2, 12, 0) };
+        using (var big = new Icon(Icons.App, 128, 128)) pic.Image = big.ToBitmap();
+        var texts = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty };
+        texts.Controls.Add(new Label { Text = Strings.Get("settings.heading"), Font = Theme.TitleFont(Font), AutoSize = true, Margin = new Padding(0, 0, 0, 2) });
+        texts.Controls.Add(new Label { Text = Strings.Get("settings.subtitle"), ForeColor = SystemColors.GrayText, AutoSize = true, Margin = Padding.Empty });
+        row.Controls.Add(pic);
+        row.Controls.Add(texts);
+        return row;
+    }
+
     GroupBox BuildLookGroup()
     {
-        var g = NewGroup(Strings.Get("group.look"));
-        var t = NewTable();
+        var g = NewGroup(Strings.Get("group.look"), Strings.Get("group.look.desc"));
+        var t = NewTable(g);
 
-        _style = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
-        _style.Items.AddRange(Labels.Styles.Select(s => (object)s.label).ToArray());
-        _style.SelectedIndexChanged += (_, _) => { _draft.Style = Labels.Styles[Math.Max(0, _style.SelectedIndex)].value; Touch(); };
-        AddRow(t, Strings.Get("look.style"), _style);
+        // 배지 모양: 실제 렌더러로 그린 타일에서 고른다.
+        AddRow(t, null, FieldLabel(Strings.Get("look.style")));
+        _style = new TilePicker { TileSize = new Size(68, 58) };
+        _style.SetTiles(Labels.Styles.Select(s => new TilePicker.Tile(s.value, ShortStyle(s.value), (gr, r, p) => DrawStyleTile(gr, r, p, s.value))));
+        _style.SelectedChanged += (_, _) => { if (_style.SelectedValue is BadgeStyle v) { _draft.Style = v; Touch(); } };
+        AddRow(t, null, _style);
 
-        _placement = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
-        _placement.Items.AddRange(Labels.Placements.Select(p => (object)p.label).ToArray());
-        _placement.SelectedIndexChanged += (_, _) => { _draft.Placement = Labels.Placements[Math.Max(0, _placement.SelectedIndex)].value; Touch(); };
-        AddRow(t, Strings.Get("look.placement"), _placement);
+        AddRow(t, null, FieldLabel(Strings.Get("look.placement")));
+        _placement = new TilePicker { TileSize = new Size(68, 58) };
+        _placement.SetTiles(Labels.Placements.Select(pl => new TilePicker.Tile(pl.value, ShortPlacement(pl.value), (gr, r, p) => DrawPlacementTile(gr, r, p, pl.value))));
+        _placement.SelectedChanged += (_, _) => { if (_placement.SelectedValue is BadgePlacement v) { _draft.Placement = v; Touch(); } };
+        AddRow(t, null, _placement);
         _tips.SetToolTip(_placement, Strings.Get("look.placement.tip"));
 
         // 크기·불투명도는 눈으로 맞추는 값이라 숫자 입력보다 슬라이더가 자연스럽다(Windows 설정 앱과 같은 방식).
@@ -153,20 +179,16 @@ sealed class SettingsForm : Form
         _tips.SetToolTip(_size, Strings.Get("look.size.tip"));
         _tips.SetToolTip(_opacity, Strings.Get("look.opacity.tip"));
 
-        _hangulColor = ColorButton(() => _draft.HangulColor, v => _draft.HangulColor = v);
-        AddRow(t, Strings.Get("look.hangulColor"), _hangulColor);
-        _englishColor = ColorButton(() => _draft.EnglishColor, v => _draft.EnglishColor = v);
-        AddRow(t, Strings.Get("look.englishColor"), _englishColor);
-        _tips.SetToolTip(_hangulColor, Strings.Get("look.color.tip"));
-        _tips.SetToolTip(_englishColor, Strings.Get("look.color.tip"));
+        AddRow(t, Strings.Get("look.hangulColor"), Swatches(out _hangulColor, out _hangulHex, v => _draft.HangulColor = v));
+        AddRow(t, Strings.Get("look.englishColor"), Swatches(out _englishColor, out _englishHex, v => _draft.EnglishColor = v));
+        _tips.SetToolTip(_hangulColor, Strings.Get("look.swatch.tip"));
+        _tips.SetToolTip(_englishColor, Strings.Get("look.swatch.tip"));
 
-        _animate = new CheckBox { Text = Strings.Get("look.animate"), AutoSize = true };
-        _animate.CheckedChanged += (_, _) => { _draft.Animate = _animate.Checked; Touch(); };
+        _animate = Toggle(Strings.Get("look.animate"), v => { _draft.Animate = v; Touch(); });
         AddRow(t, null, _animate);
         _tips.SetToolTip(_animate, Strings.Get("look.animate.tip"));
 
-        _capsLock = new CheckBox { Text = Strings.Get("look.capsLock"), AutoSize = true };
-        _capsLock.CheckedChanged += (_, _) => { _draft.ShowCapsLock = _capsLock.Checked; Touch(); };
+        _capsLock = Toggle(Strings.Get("look.capsLock"), v => { _draft.ShowCapsLock = v; Touch(); });
         AddRow(t, null, _capsLock);
         _tips.SetToolTip(_capsLock, Strings.Get("look.capsLock.tip"));
 
@@ -176,25 +198,22 @@ sealed class SettingsForm : Form
 
     GroupBox BuildBehaviorGroup()
     {
-        var g = NewGroup(Strings.Get("group.behavior"));
-        var t = NewTable();
+        var g = NewGroup(Strings.Get("group.behavior"), Strings.Get("group.behavior.desc"));
+        var t = NewTable(g);
 
-        _autostartBox = new CheckBox { Text = Strings.Get("behavior.autostart"), AutoSize = true };
-        _autostartBox.CheckedChanged += (_, _) => _autostart = _autostartBox.Checked;   // 레지스트리는 [확인] 때만 만진다
+        _autostartBox = Toggle(Strings.Get("behavior.autostart"), v => _autostart = v);   // 레지스트리는 [확인] 때만 만진다
         AddRow(t, null, _autostartBox);
 
-        _fullscreen = new CheckBox { Text = Strings.Get("behavior.fullscreen"), AutoSize = true };
-        _fullscreen.CheckedChanged += (_, _) => { _draft.HideOnFullscreen = _fullscreen.Checked; Touch(); };
+        _fullscreen = Toggle(Strings.Get("behavior.fullscreen"), v => { _draft.HideOnFullscreen = v; Touch(); });
         AddRow(t, null, _fullscreen);
 
-        _trayStateBox = new CheckBox { Text = Strings.Get("behavior.trayState"), AutoSize = true };
-        _trayStateBox.CheckedChanged += (_, _) => { _draft.TrayShowsState = _trayStateBox.Checked; Touch(); };
+        _trayStateBox = Toggle(Strings.Get("behavior.trayState"), v => { _draft.TrayShowsState = v; Touch(); });
         AddRow(t, null, _trayStateBox);
 
-        // 단축키: 체크박스 + 키 조합을 받는 입력칸을 한 줄에.
+        // 단축키: 토글 + 키 조합을 받는 입력칸을 한 줄에.
         var hotkeyRow = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty };
-        _hotkey = new CheckBox { Text = Strings.Get("behavior.hotkey"), AutoSize = true, Margin = new Padding(0, 4, 8, 0) };
-        _hotkey.CheckedChanged += (_, _) => { _draft.HotkeyEnabled = _hotkey.Checked; _hotkeyBox.Enabled = _hotkey.Checked; Touch(); };
+        _hotkey = Toggle(Strings.Get("behavior.hotkey"), v => { _draft.HotkeyEnabled = v; _hotkeyBox.Enabled = v; Touch(); });
+        _hotkey.Margin = new Padding(0, 0, 12, 0);
         _hotkeyBox = new HotkeyBox { Width = 130 };
         _hotkeyBox.HotkeyChanged += spec => { _draft.Hotkey = spec.ToString(); Touch(); };
         _tips.SetToolTip(_hotkeyBox, Strings.Get("behavior.hotkey.tip"));
@@ -202,15 +221,14 @@ sealed class SettingsForm : Form
         hotkeyRow.Controls.Add(_hotkeyBox);
         AddRow(t, null, hotkeyRow);
 
-        _updates = new CheckBox { Text = Strings.Get("behavior.updates"), AutoSize = true };
-        _updates.CheckedChanged += (_, _) => { _draft.CheckForUpdates = _updates.Checked; Touch(); };
+        _updates = Toggle(Strings.Get("behavior.updates"), v => { _draft.CheckForUpdates = v; Touch(); });
         AddRow(t, null, _updates);
         _tips.SetToolTip(_updates, Strings.Get("behavior.updates.tip"));
 
         _poll = new NumericUpDown { Minimum = 50, Maximum = 1000, Increment = 50, Width = 80 };
         _poll.ValueChanged += (_, _) => { _draft.PollIntervalMs = (int)_poll.Value; Touch(); };
         AddRow(t, Strings.Get("behavior.poll"), _poll);
-        AddRow(t, null, new Label { Text = Strings.Get("behavior.poll.note"), ForeColor = SystemColors.GrayText, AutoSize = true });
+        AddRow(t, null, Hint(Strings.Get("behavior.poll.note")));
         _tips.SetToolTip(_poll, Strings.Get("behavior.poll.tip"));
 
         _language = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
@@ -225,8 +243,8 @@ sealed class SettingsForm : Form
 
     GroupBox BuildPreviewGroup()
     {
-        var g = NewGroup(Strings.Get("group.preview"));
-        _preview = new PreviewPanel { Location = ContentOrigin, Width = InnerWidth, Height = PreviewHeight, BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Tag = "custom-paint" };
+        var g = NewGroup(Strings.Get("group.preview"), Strings.Get("group.preview.desc"));
+        _preview = new PreviewPanel { Location = g.ContentOrigin, Width = InnerWidth, Height = PreviewHeight, Tag = "custom-paint" };
         _preview.Paint += (_, e) => PaintPreview(e.Graphics);
         _tips.SetToolTip(_preview, Strings.Get("preview.tip"));
         g.Controls.Add(_preview);
@@ -235,34 +253,146 @@ sealed class SettingsForm : Form
 
     GroupBox BuildExcludeGroup()
     {
-        var g = NewGroup(Strings.Get("group.exclude"));
-        var t = NewTable();
+        var g = NewGroup(Strings.Get("group.exclude"), Strings.Get("group.exclude.desc"));
+        var t = NewTable(g);
 
         _excludedList = new ListBox { Width = InnerWidth - 6, Height = 72, IntegralHeight = false };
         AddRow(t, null, _excludedList);
 
         // 실행 중인 앱에서 고르거나 이름을 직접 쓴다. 목록은 펼칠 때마다 새로 읽는다.
         var row = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty };
-        _newProcess = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Width = 190, Margin = new Padding(0, 0, 4, 0) };
+        _newProcess = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Width = 196, Margin = new Padding(0, 2, 8, 0) };
         _newProcess.DropDown += (_, _) => FillRunningApps();
         _newProcess.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) { AddExcluded(); e.SuppressKeyPress = true; } };
         _tips.SetToolTip(_newProcess, Strings.Get("exclude.new.tip"));
-        var add = new Button { Text = Strings.Get("exclude.add"), AutoSize = true, Margin = new Padding(0, 0, 4, 0) };
+        var add = new AccentButton { Text = Strings.Get("exclude.add"), AutoSize = true, Margin = new Padding(0, 0, 8, 0) };
         add.Click += (_, _) => AddExcluded();
-        var remove = new Button { Text = Strings.Get("exclude.remove"), AutoSize = true, Margin = Padding.Empty };
+        var remove = new AccentButton { Text = Strings.Get("exclude.remove"), AutoSize = true, Margin = Padding.Empty };
         remove.Click += (_, _) => RemoveExcluded();
         _excludedList.KeyDown += (_, e) => { if (e.KeyCode == Keys.Delete) RemoveExcluded(); };
         row.Controls.Add(_newProcess); row.Controls.Add(add); row.Controls.Add(remove);
         AddRow(t, null, row);
 
-        AddRow(t, null, new Label
-        {
-            Text = Strings.Get("exclude.note"),
-            ForeColor = SystemColors.GrayText,
-            AutoSize = true,
-        });
+        AddRow(t, null, Hint(Strings.Get("exclude.note")));
         g.Controls.Add(t);
         return g;
+    }
+
+    // ── 타일 그리기 ──
+    static string ShortStyle(BadgeStyle s) => Strings.Get(s switch
+    {
+        BadgeStyle.Box => "style.short.box", BadgeStyle.Pill => "style.short.pill", BadgeStyle.Dot => "style.short.dot",
+        BadgeStyle.Underline => "style.short.underline", _ => "style.short.dotFlash",
+    });
+
+    static string ShortPlacement(BadgePlacement p) => Strings.Get(p switch
+    {
+        BadgePlacement.AboveRight => "place.short.aboveRight", BadgePlacement.BelowRight => "place.short.belowRight",
+        BadgePlacement.AboveLeft => "place.short.aboveLeft", _ => "place.short.belowLeft",
+    });
+
+    /// <summary>모양 타일: 짧은 caret 오른쪽에 그 모양의 한글 배지를 실제 렌더러로 그린다.</summary>
+    void DrawStyleTile(Graphics g, RectangleF r, Theme.Palette p, BadgeStyle style)
+    {
+        float dpi = DeviceDpi / 96f;
+        var theme = BadgeTheme.From(_draft);
+        var draw = style == BadgeStyle.DotFlash ? BadgeStyle.Pill : style;
+        using var bmp = BadgeRenderer.Render(ImeState.Hangul, draw, 0.85f * dpi, theme, 100);
+        var caret = new Rectangle((int)(r.Left + 6 * dpi), (int)(r.Top + r.Height / 2 - 8 * dpi), 1, (int)(16 * dpi));
+        using (var pen = new Pen(p.Text, Math.Max(1f, dpi))) g.DrawLine(pen, caret.Left, caret.Top, caret.Left, caret.Bottom);
+        // 밑줄은 caret 아래, 나머지는 caret 오른쪽에 세로 가운데.
+        var pos = style == BadgeStyle.Underline
+            ? new Point(caret.Left - bmp.Width / 2 + 1, caret.Bottom + (int)(2 * dpi))
+            : new Point(caret.Right + (int)(4 * dpi), (int)(r.Top + r.Height / 2 - bmp.Height / 2f));
+        g.DrawImage(bmp, new Rectangle(pos, bmp.Size), new Rectangle(Point.Empty, bmp.Size), GraphicsUnit.Pixel);
+    }
+
+    /// <summary>위치 타일: 가운데 caret 을 두고 그 위치에 점 배지를 놓는다. 어디에 뜨는지 한눈에 보인다.</summary>
+    void DrawPlacementTile(Graphics g, RectangleF r, Theme.Palette p, BadgePlacement placement)
+    {
+        float dpi = DeviceDpi / 96f;
+        var caret = new Rectangle((int)(r.Left + r.Width / 2), (int)(r.Top + r.Height / 2 - 8 * dpi), 1, (int)(16 * dpi));
+        using (var pen = new Pen(p.Text, Math.Max(1f, dpi))) g.DrawLine(pen, caret.Left, caret.Top, caret.Left, caret.Bottom);
+        using var bmp = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Dot, dpi, BadgeTheme.From(_draft), 100);
+        var pos = BadgeLayout.Compute(new LayoutInput(caret, bmp.Size, BadgeStyle.Dot, placement, dpi, Rectangle.Round(r)));
+        g.DrawImage(bmp, new Rectangle(pos, bmp.Size), new Rectangle(Point.Empty, bmp.Size), GraphicsUnit.Pixel);
+    }
+
+    // ── 도우미 ──
+    /// <summary>폭은 고정(GroupWidth), 높이는 내용에 맞춰 자란다. 자식은 Dock 없이 <see cref="CardGroupBox.ContentOrigin"/> 에 둔다.</summary>
+    static CardGroupBox NewGroup(string title, string description) =>
+        new()
+        {
+            Text = title,
+            Description = description,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            MinimumSize = new Size(GroupWidth, 0),
+            Padding = new Padding(CardInset, 0, CardInset, CardInset),
+            Margin = new Padding(0, 0, 0, CardGap),
+        };
+
+    static TableLayoutPanel NewTable(CardGroupBox card)
+    {
+        var t = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Location = card.ContentOrigin };
+        t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        return t;
+    }
+
+    static void AddRow(TableLayoutPanel t, string? label, Control c)
+    {
+        int row = t.RowCount++;
+        t.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        c.Margin = new Padding(0, 4, 0, 4);
+        if (label is null)
+        {
+            t.Controls.Add(c, 0, row);
+            t.SetColumnSpan(c, 2);
+        }
+        else
+        {
+            t.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 8, 12, 4), MinimumSize = new Size(88, 0) }, 0, row);
+            t.Controls.Add(c, 1, row);
+        }
+    }
+
+    /// <summary>타일 선택기처럼 폭이 넓은 항목의 이름표. 아래 컨트롤로 Alt 니모닉이 이어진다.</summary>
+    static Label FieldLabel(string text) => new() { Text = text, AutoSize = true, Margin = new Padding(0, 6, 0, 0) };
+
+    static Label Hint(string text) => new() { Text = text, ForeColor = SystemColors.GrayText, AutoSize = true, MaximumSize = new Size(InnerWidth - 4, 0) };
+
+    static ToggleSwitch Toggle(string text, Action<bool> onChange)
+    {
+        var t = new ToggleSwitch { Text = text, AutoSize = true };
+        t.CheckedChanged += (_, _) => onChange(t.Checked);
+        return t;
+    }
+
+    /// <summary>퍼센트 슬라이더 + 현재 값 라벨. 값은 <paramref name="step"/> 단위로 맞춰진다(예: 137% → 135%).</summary>
+    static Control Slider(out AccentSlider bar, int min, int max, int step, int page, Action<int> onChange)
+    {
+        var panel = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty };
+        var s = new AccentSlider { Minimum = min, Maximum = max, SmallChange = step, LargeChange = page, Width = 200, Margin = new Padding(0, 0, 8, 0) };
+        var value = new Label { AutoSize = true, Margin = new Padding(0, 6, 0, 0), Text = $"{s.Value}%", MinimumSize = new Size(40, 0) };
+        s.ValueChanged += (_, _) => { value.Text = $"{s.Value}%"; onChange(s.Value); };
+        panel.Controls.Add(s);
+        panel.Controls.Add(value);
+        bar = s;
+        return panel;
+    }
+
+    /// <summary>색 견본 팔레트 + 현재 색의 16진수 표시.</summary>
+    Control Swatches(out ColorSwatches swatches, out Label hex, Action<string> onChange)
+    {
+        var panel = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty };
+        var s = new ColorSwatches { Margin = new Padding(0, 0, 8, 0) };
+        var h = new Label { AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 7, 0, 0), Font = Theme.HintFont(Font) };
+        s.ColorChanged += (_, _) => { h.Text = s.Hex; onChange(s.Hex); Touch(); };
+        panel.Controls.Add(s);
+        panel.Controls.Add(h);
+        swatches = s; hex = h;
+        return panel;
     }
 
     void FillRunningApps()
@@ -319,100 +449,6 @@ sealed class SettingsForm : Form
         _excludedList.EndUpdate();
     }
 
-    // ── 도우미 ──
-    /// <summary>그룹박스 안에서 내용이 시작하는 위치(제목 줄 아래).</summary>
-    static readonly Point ContentOrigin = new(12, 26);
-
-    /// <summary>폭은 고정(GroupWidth), 높이는 내용에 맞춰 자란다. 자식은 Dock 없이 <see cref="ContentOrigin"/> 에 둔다.</summary>
-    static GroupBox NewGroup(string title) =>
-        new CardGroupBox
-        {
-            Text = title,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            MinimumSize = new Size(GroupWidth, 0),
-            Padding = new Padding(12, 4, 12, 12),
-            Margin = new Padding(0, 0, 0, 10),
-        };
-
-    static TableLayoutPanel NewTable()
-    {
-        var t = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Location = ContentOrigin };
-        t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        return t;
-    }
-
-    static void AddRow(TableLayoutPanel t, string? label, Control c)
-    {
-        int row = t.RowCount++;
-        t.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        c.Margin = new Padding(3, 4, 3, 4);
-        if (label is null)
-        {
-            t.Controls.Add(c, 0, row);
-            t.SetColumnSpan(c, 2);
-        }
-        else
-        {
-            t.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 7, 12, 4) }, 0, row);
-            t.Controls.Add(c, 1, row);
-        }
-    }
-
-    /// <summary>
-    /// 퍼센트 슬라이더 + 현재 값 라벨. 마우스로 끌면 <paramref name="step"/> 단위로 맞춰 준다(예: 137% → 135%).
-    /// 키보드 화살표는 step 씩, Page Up/Down 은 <paramref name="page"/> 씩 움직인다.
-    /// </summary>
-    static Control Slider(out TrackBar bar, int min, int max, int step, int page, Action<int> onChange)
-    {
-        var panel = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty };
-        var tb = new TrackBar
-        {
-            Minimum = min, Maximum = max, SmallChange = step, LargeChange = page, TickFrequency = page,
-            AutoSize = false, Width = 170, Height = 30, Margin = new Padding(0, 0, 4, 0),
-        };
-        var value = new Label { AutoSize = true, Margin = new Padding(0, 6, 0, 0), Text = $"{tb.Value}%" };   // 값이 최소값 그대로면 ValueChanged 가 안 오므로 미리 적는다
-        tb.ValueChanged += (_, _) =>
-        {
-            int v = (int)Math.Round(tb.Value / (double)step) * step;
-            v = Math.Clamp(v, min, max);
-            if (v != tb.Value) { tb.Value = v; return; }   // 되돌아와서 다시 처리된다
-            value.Text = $"{v}%";
-            onChange(v);
-        };
-        panel.Controls.Add(tb);
-        panel.Controls.Add(value);
-        bar = tb;
-        return panel;
-    }
-
-    Button ColorButton(Func<string> get, Action<string> set)
-    {
-        var b = new Button { Width = 120, Height = 26, TextAlign = ContentAlignment.MiddleCenter, FlatStyle = FlatStyle.Flat, Tag = "color" };
-        b.Click += (_, _) =>
-        {
-            using var dlg = new ColorDialog { Color = ToColor(get()), FullOpen = true };
-            if (dlg.ShowDialog(this) != DialogResult.OK) return;
-            set(ColorHex.ToHex(dlg.Color.ToArgb()));
-            PaintColorButton(b, get());
-            Touch();
-        };
-        return b;
-    }
-
-    /// <summary>버튼을 그 색으로 칠하고, 글자색은 배지와 같은 규칙(<see cref="BadgeRenderer.TextColorOn"/>)으로 고른다.</summary>
-    static void PaintColorButton(Button b, string hex)
-    {
-        var c = ToColor(hex);
-        b.BackColor = c;
-        b.ForeColor = BadgeRenderer.TextColorOn(c);
-        b.FlatAppearance.BorderColor = ControlPaint.Dark(c, 0.1f);
-        b.Text = hex.ToUpperInvariant();
-    }
-
-    static Color ToColor(string hex) => Color.FromArgb(ColorHex.TryParse(hex, out int a) ? a : unchecked((int)0xFF000000));
-
     /// <summary>초안을 컨트롤에 싣는다. 컨트롤마다 변경 이벤트가 오지만 끝에 한 번만 반영한다.</summary>
     void LoadDraftIntoControls()
     {
@@ -424,13 +460,13 @@ sealed class SettingsForm : Form
 
     void FillControls()
     {
-        _style.SelectedIndex = Array.FindIndex(Labels.Styles, s => s.value == _draft.Style);
-        _placement.SelectedIndex = Array.FindIndex(Labels.Placements, p => p.value == _draft.Placement);
-        _size.Value = Math.Clamp(_draft.SizePercent, _size.Minimum, _size.Maximum);
-        _opacity.Value = Math.Clamp(_draft.OpacityPercent, _opacity.Minimum, _opacity.Maximum);
+        _style.SelectedValue = _draft.Style;
+        _placement.SelectedValue = _draft.Placement;
+        _size.Value = _draft.SizePercent;
+        _opacity.Value = _draft.OpacityPercent;
         _poll.Value = Math.Clamp(_draft.PollIntervalMs, (int)_poll.Minimum, (int)_poll.Maximum);
-        PaintColorButton(_hangulColor, _draft.HangulColor);
-        PaintColorButton(_englishColor, _draft.EnglishColor);
+        _hangulColor.Hex = _draft.HangulColor; _hangulHex.Text = _hangulColor.Hex;
+        _englishColor.Hex = _draft.EnglishColor; _englishHex.Text = _englishColor.Hex;
         _animate.Checked = _draft.Animate;
         _capsLock.Checked = _draft.ShowCapsLock;
         _autostartBox.Checked = _autostart;
@@ -452,6 +488,8 @@ sealed class SettingsForm : Form
         _live.CopyFrom(_draft);
         _dirty = true;
         Changed?.Invoke();   // BadgeForm 이 여기서 Strings.Setting 을 새 언어로 맞춘다
+        _style?.Invalidate();       // 타일은 배지 색을 쓴다
+        _placement?.Invalidate();
         RefreshPreview();
         if (Strings.IsKorean != _builtKorean) LanguageChanged?.Invoke();
     }
@@ -471,7 +509,7 @@ sealed class SettingsForm : Form
     // 아래 값은 96 DPI 기준 픽셀이고 그릴 때 배율을 곱한다.
     const int PreviewHeight = 240;
     const int PreviewRowPitch = 28;      // 줄 간격. 100% 배지(약 26px)가 caret 줄과 옆줄 사이에 놓이며 옆줄 글자를 덮는다
-    const int PreviewTopMargin = 12, PreviewLeftMargin = 18;
+    const int PreviewTopMargin = 26, PreviewLeftMargin = 18;   // 위쪽은 캡션("밝은 배경") 자리
 
     /// <summary>
     /// 미리보기 줄. 상태가 있는 줄은 글자 끝에 caret 과 그 상태의 배지를 그리고, 나머지는 옅은 색 채움 글이다.
@@ -490,31 +528,45 @@ sealed class SettingsForm : Form
     };
 
     // 미리보기 배경. 왼쪽은 흰 종이(메모장), 오른쪽은 어두운 편집기(VS Code 기본 테마)와 비슷한 색.
-    static readonly Color LightBg = Color.White, LightText = Color.Black;
-    static readonly Color DarkBg = Color.FromArgb(0x1E, 0x1E, 0x1E), DarkText = Color.FromArgb(0xD4, 0xD4, 0xD4);
+    static readonly Color LightBg = Color.White, LightText = Color.FromArgb(0x1B, 0x1B, 0x1B), LightCaption = Color.FromArgb(0x8A, 0x8A, 0x8A);
+    static readonly Color DarkBg = Color.FromArgb(0x1E, 0x1E, 0x1E), DarkText = Color.FromArgb(0xD4, 0xD4, 0xD4), DarkCaption = Color.FromArgb(0x7A, 0x7A, 0x7A);
 
     /// <summary>미리보기에 그릴 모양. DotFlash 는 바뀐 직후엔 글자 배지, 1.5초 뒤엔 점(<see cref="_flashing"/>).</summary>
     BadgeStyle PreviewStyle => _draft.Style == BadgeStyle.DotFlash ? (_flashing ? BadgeStyle.Pill : BadgeStyle.Dot) : _draft.Style;
 
     /// <summary>
     /// 왼쪽 절반은 밝은 배경, 오른쪽 절반은 어두운 배경이라 어느 편집기에서 써도 어떻게 보일지 한 번에 확인할 수 있다.
-    /// 배지는 실제 렌더러·위치 계산을 그대로 써서 창 밖 배지와 똑같이 보인다.
+    /// 배지는 실제 렌더러·위치 계산을 그대로 써서 창 밖 배지와 똑같이 보인다. 전체는 둥근 모서리 안에 그린다.
     /// </summary>
     void PaintPreview(Graphics g)
     {
         float dpi = DeviceDpi / 96f;
         var client = _preview.ClientRectangle;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.Clear(_preview.Parent?.BackColor ?? Theme.Current.Card);
+
+        using var clip = RoundedPath(new RectangleF(0.5f, 0.5f, client.Width - 1, client.Height - 1), 6 * dpi);
+        var saved = g.Save();
+        g.SetClip(clip);
         int half = client.Width / 2;
-        PaintPreviewHalf(g, new Rectangle(client.Left, client.Top, half, client.Height), LightBg, LightText, dpi);
-        PaintPreviewHalf(g, new Rectangle(client.Left + half, client.Top, client.Width - half, client.Height), DarkBg, DarkText, dpi);
+        PaintPreviewHalf(g, new Rectangle(client.Left, client.Top, half, client.Height), LightBg, LightText, LightCaption, Strings.Get("preview.light"), dpi);
+        PaintPreviewHalf(g, new Rectangle(client.Left + half, client.Top, client.Width - half, client.Height), DarkBg, DarkText, DarkCaption, Strings.Get("preview.dark"), dpi);
+        g.Restore(saved);
+        using var border = new Pen(Theme.Current.Border);
+        g.DrawPath(border, clip);
     }
 
-    void PaintPreviewHalf(Graphics g, Rectangle area, Color bg, Color fg, float dpi)
+    void PaintPreviewHalf(Graphics g, Rectangle area, Color bg, Color fg, Color caption, string title, float dpi)
     {
-        g.SetClip(area);   // 큰 배지가 반대쪽 배경으로 넘어가지 않게
+        var saved = g.Save();
+        g.SetClip(area, CombineMode.Intersect);   // 큰 배지가 반대쪽 배경으로 넘어가지 않게
         try
         {
             using (var bgBrush = new SolidBrush(bg)) g.FillRectangle(bgBrush, area);
+            using (var capFont = Theme.HintFont(Font))
+                TextRenderer.DrawText(g, title, capFont, new Rectangle(area.Left, area.Top + (int)(6 * dpi), area.Width - (int)(10 * dpi), (int)(16 * dpi)), caption,
+                    TextFormatFlags.Right | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
+
             using var font = new Font(BadgeRenderer.FontFamily, 11f);
             // 기본 StringFormat 은 글자 양옆에 여백을 더해 caret 이 마지막 글자에서 떨어져 보인다(배지가 왼쪽인지 오른쪽인지 헷갈림).
             using var fmt = new StringFormat(StringFormat.GenericTypographic);
@@ -555,12 +607,24 @@ sealed class SettingsForm : Form
                 g.DrawImage(bmp, new Rectangle(pos, bmp.Size), new Rectangle(Point.Empty, bmp.Size), GraphicsUnit.Pixel);
             }
         }
-        finally { g.ResetClip(); }
+        finally { g.Restore(saved); }
     }
 
     /// <summary><paramref name="a"/> 에서 <paramref name="b"/> 쪽으로 <paramref name="t"/>(0~1)만큼 섞은 색.</summary>
     static Color Mix(Color a, Color b, float t) => Color.FromArgb(
         (int)Math.Round(a.R + (b.R - a.R) * t), (int)Math.Round(a.G + (b.G - a.G) * t), (int)Math.Round(a.B + (b.B - a.B) * t));
+
+    static GraphicsPath RoundedPath(RectangleF r, float radius)
+    {
+        var path = new GraphicsPath();
+        float d = Math.Min(radius * 2, Math.Min(r.Width, r.Height));
+        path.AddArc(r.Left, r.Top, d, d, 180, 90);
+        path.AddArc(r.Right - d, r.Top, d, d, 270, 90);
+        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+        path.AddArc(r.Left, r.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
 
     /// <summary>[확인]: 자동 시작을 반영하고 저장을 알린다. 배지 설정은 이미 실제 설정에 들어가 있다.</summary>
     void Apply()

@@ -8,7 +8,7 @@ using System.Windows.Forms;
 
 namespace ImeBadge;
 
-/// <summary>정보 대화상자: 아이콘·버전, 링크(저장소·릴리스·업데이트 확인·폴더), 진단 정보 복사.</summary>
+/// <summary>정보 대화상자: 큰 아이콘·이름·버전 칩, 한 줄 소개, 링크 목록, 진단 정보 복사.</summary>
 sealed class AboutForm : Form
 {
     readonly AppPaths _paths;
@@ -28,30 +28,29 @@ sealed class AboutForm : Form
         AutoScaleDimensions = new SizeF(96F, 96F);
         Font = Theme.DialogFont;
         AutoSize = true; AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        Padding = new Padding(16);
+        Padding = new Padding(24);
 
         // AutoSize 폼 안에서는 Dock 을 쓰지 않는다(SettingsForm 의 설명 참고). 왼쪽 위에 두면 폼이 내용 + Padding 만큼 자란다.
-        var root = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Location = new Point(16, 16) };
+        var root = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Location = new Point(24, 24) };
 
-        // 머리: 큰 아이콘 + 이름 + 버전
-        var header = new TableLayoutPanel { ColumnCount = 2, RowCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = new Padding(0, 0, 0, 12) };
-        var pic = new PictureBox { Size = new Size(48, 48), SizeMode = PictureBoxSizeMode.Zoom, Margin = new Padding(0, 0, 12, 0) };
+        // 머리: 큰 아이콘 + 이름 + 버전 칩
+        var header = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = new Padding(0, 0, 0, 12) };
+        var pic = new PictureBox { Size = new Size(56, 56), SizeMode = PictureBoxSizeMode.Zoom, Margin = new Padding(0, 0, 16, 0) };
         using (var big = new Icon(Icons.App, 128, 128)) pic.Image = big.ToBitmap();   // 큰 프레임을 줄여 그려 고DPI 에서도 또렷하게
-        header.Controls.Add(pic, 0, 0);
-        header.SetRowSpan(pic, 2);
-        header.Controls.Add(new Label { Text = Strings.Get("app.name"), Font = new Font(Font.FontFamily, 12f, FontStyle.Bold), AutoSize = true, Margin = new Padding(0, 4, 0, 2) }, 1, 0);
-        header.Controls.Add(new Label { Text = Strings.Format("about.version", AppVersion.Display), AutoSize = true, Margin = new Padding(0, 0, 0, 0) }, 1, 1);
+        var texts = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = new Padding(0, 4, 0, 0) };
+        texts.Controls.Add(new Label { Text = Strings.Get("app.name"), Font = Theme.TitleFont(Font), AutoSize = true, Margin = new Padding(0, 0, 0, 4) });
+        texts.Controls.Add(new VersionChip { Text = $"v{AppVersion.Display}", Margin = Padding.Empty });
+        header.Controls.Add(pic);
+        header.Controls.Add(texts);
         root.Controls.Add(header);
 
-        root.Controls.Add(new Label
-        {
-            Text = Strings.Get("app.tagline"),
-            AutoSize = true,
-            Margin = new Padding(0, 0, 0, 12),
-        });
+        root.Controls.Add(new Label { Text = Strings.Get("app.tagline"), AutoSize = true, Margin = new Padding(0, 0, 0, 16) });
+
+        // 링크 목록: 자주 쓰는 순서. 사이에 얇은 구분선.
         root.Controls.Add(Link(Strings.Get("about.checkUpdates"), checkUpdates));
-        root.Controls.Add(Link(Strings.Get("about.repo"), () => Open(AppInfo.RepoUrl)));
         root.Controls.Add(Link(Strings.Get("about.releases"), () => Open(AppInfo.ReleasesUrl)));
+        root.Controls.Add(Link(Strings.Get("about.repo"), () => Open(AppInfo.RepoUrl)));
+        root.Controls.Add(Divider());
         root.Controls.Add(Link(Strings.Get("about.settingsDir"), () => OpenFolder(paths.SettingsDir)));
         root.Controls.Add(Link(Strings.Get("about.logDir"), () => OpenFolder(paths.LogDir)));
 
@@ -72,9 +71,9 @@ sealed class AboutForm : Form
         });
         root.Controls.Add(diag);
 
-        root.Controls.Add(new Label { Text = "Apache License 2.0", ForeColor = SystemColors.GrayText, AutoSize = true, Margin = new Padding(0, 12, 0, 8) });
+        root.Controls.Add(new Label { Text = Strings.Get("about.license"), ForeColor = SystemColors.GrayText, AutoSize = true, Margin = new Padding(0, 16, 0, 12) });
 
-        var ok = new Button { Text = Strings.Get("about.close"), DialogResult = DialogResult.OK, AutoSize = true, Anchor = AnchorStyles.Right };
+        var ok = new AccentButton { Text = Strings.Get("about.close"), DialogResult = DialogResult.OK, AutoSize = true, Anchor = AnchorStyles.Right, Primary = true };
         ok.Click += (_, _) => Close();
         root.Controls.Add(ok);
         AcceptButton = ok; CancelButton = ok;
@@ -125,10 +124,13 @@ sealed class AboutForm : Form
 
     static LinkLabel Link(string text, Action onClick)
     {
-        var l = new LinkLabel { Text = text, AutoSize = true, Margin = new Padding(0, 2, 0, 2) };
+        var l = new LinkLabel { Text = text, AutoSize = true, Margin = new Padding(0, 3, 0, 3), LinkBehavior = LinkBehavior.HoverUnderline };
         l.LinkClicked += (_, _) => onClick();
         return l;
     }
+
+    /// <summary>얇은 구분선. 테마 적용 단계에서 배경색으로 덮이지 않도록 직접 색을 정한다.</summary>
+    static Control Divider() => new Panel { Height = 1, Width = 260, Margin = new Padding(0, 6, 0, 6), BackColor = Theme.Current.Border, Tag = "custom-paint" };
 
     public static void Open(string url)
     {
@@ -144,5 +146,34 @@ sealed class AboutForm : Form
             Process.Start(new ProcessStartInfo("explorer.exe", $"\"{dir}\"") { UseShellExecute = true });
         }
         catch (Exception ex) { Log.Error("open folder failed", ex); }
+    }
+}
+
+/// <summary>버전처럼 짧은 정보를 담는 둥근 칩. 강조색을 옅게 깐 배경에 강조색 글자.</summary>
+sealed class VersionChip : ThemedControl
+{
+    public VersionChip() { TabStop = false; AutoSize = true; }
+
+    public override Size GetPreferredSize(Size proposed)
+    {
+        var ts = TextRenderer.MeasureText(Text, Font, Size.Empty, TextFormatFlags.NoPadding);
+        return new Size(ts.Width + Px(16), ts.Height + Px(6));
+    }
+    protected override void OnTextChanged(EventArgs e) { base.OnTextChanged(e); Size = GetPreferredSize(Size.Empty); }
+    protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); Size = GetPreferredSize(Size.Empty); }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        Prepare(g);
+        g.Clear(BackColor);
+        var p = Palette;
+        using var path = Rounded(new RectangleF(0.5f, 0.5f, Width - 1, Height - 1), Height / 2f);
+        using var fill = new SolidBrush(Alpha(p.Accent, p.Dark ? 40 : 28));
+        using var pen = new Pen(Alpha(p.Accent, 90), 1f);
+        g.FillPath(fill, path);
+        g.DrawPath(pen, path);
+        TextRenderer.DrawText(g, Text, Font, new Rectangle(0, 0, Width, Height), p.Accent,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
     }
 }

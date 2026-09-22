@@ -108,6 +108,10 @@ static class Native
     public const int DWMWA_USE_IMMERSIVE_DARK_MODE_OLD = 19;
     public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;         // Windows 11
     public const int DWMWCP_ROUND = 2, DWMWCP_ROUNDSMALL = 3;
+    public const int DWMWA_BORDER_COLOR = 34, DWMWA_CAPTION_COLOR = 35, DWMWA_TEXT_COLOR = 36;   // Windows 11 22000+, COLORREF(0x00BBGGRR)
+
+    /// <summary>System.Drawing.Color → Win32 COLORREF(0x00BBGGRR).</summary>
+    public static int ColorRef(Color c) => c.R | (c.G << 8) | (c.B << 16);
 
     // ── 모니터 ──
     [DllImport("user32.dll")] public static extern IntPtr MonitorFromPoint(POINT pt, uint flags);
