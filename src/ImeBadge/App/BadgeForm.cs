@@ -603,7 +603,8 @@ sealed class BadgeForm : Form
         }
 
         // caret 이 없으면(모서리 배지) 포커스 창의 왼쪽 아래를 기준점으로 삼아 DPI·모니터를 정한다. 위치는 아래에서 따로 계산한다.
-        var caret = s.Caret ?? new Rectangle(s.Corner.Value.Left, s.Corner.Value.Bottom, 1, 0);
+        var corner = s.Caret is null ? s.Corner : null;
+        var caret = s.Caret ?? (corner is { } c ? new Rectangle(c.Left, c.Bottom, 1, 0) : default);
         _lastSnapshot = s;
         bool appearing = !Visible;
         bool changed = s.State != _lastState || s.CapsLock != _lastCaps;   // Caps Lock 토글도 "바뀜"으로 알린다
@@ -643,9 +644,9 @@ sealed class BadgeForm : Form
         }
 
         var area = Screen.FromPoint(caret.Location).WorkingArea;
-        var pos = s.Caret is not null
-            ? BadgeLayout.Compute(new LayoutInput(caret, bs, style, _settings.Placement, scale, area))
-            : BadgeLayout.Corner(s.Corner.Value, bs, scale, area);
+        var pos = corner is { } win
+            ? BadgeLayout.Corner(win, bs, scale, area)
+            : BadgeLayout.Compute(new LayoutInput(caret, bs, style, _settings.Placement, scale, area));
 
         // FlowLauncher처럼 자기도 최상위(TopMost)인 창은 나중에 뜬 쪽이 위에 온다. 배지가 처음 보일 때,
         // 활성 창이 바뀌었을 때, 위치가 바뀌었을 때마다 최상위 창들 중에서도 맨 위로 다시 올린다.
