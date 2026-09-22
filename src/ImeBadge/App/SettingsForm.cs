@@ -16,13 +16,14 @@ sealed class SettingsForm : Form
     readonly Settings _live;
     readonly Settings _draft;
     readonly Settings _original;   // 취소할 때 되돌릴 값
-    bool _autostart, _dirty, _loading;
+    readonly bool _builtKorean = Strings.IsKorean;   // 이 창을 만들 때의 언어. 바뀌면 새 창으로 갈아 끼운다
+    bool _autostart, _dirty, _loading, _detached;
 
-    ComboBox _style = null!, _placement = null!;
+    ComboBox _style = null!, _placement = null!, _language = null!;
     TrackBar _size = null!, _opacity = null!;
     NumericUpDown _poll = null!;
     Button _hangulColor = null!, _englishColor = null!;
-    CheckBox _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!;
+    CheckBox _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!;
     HotkeyBox _hotkeyBox = null!;
     ListBox _excludedList = null!;
     ComboBox _newProcess = null!;
@@ -33,15 +34,21 @@ sealed class SettingsForm : Form
     public event Action? Changed;
     /// <summary>[확인]으로 확정되었거나 [취소]로 되돌려졌을 때 발생. 저장한다.</summary>
     public event Action? Applied;
+    /// <summary>UI 언어가 이 창을 만들 때와 달라졌다. 받는 쪽(BadgeForm)이 <see cref="Reopen"/> 으로 새 창을 만들고 이 창을 <see cref="Detach"/> 한다.</summary>
+    public event Action? LanguageChanged;
 
-    public SettingsForm(Settings live)
+    public SettingsForm(Settings live) : this(live, live.Clone(), dirty: false) { }
+
+    /// <param name="original">취소할 때 되돌릴 값. 새 창이 이전 창의 기준을 이어받을 때 넘긴다.</param>
+    /// <param name="dirty">이미 편집이 있었는가(이어받은 창은 true).</param>
+    SettingsForm(Settings live, Settings original, bool dirty)
     {
         _live = live;
         _draft = live.Clone();
-        _original = live.Clone();
+        _original = original;
         _autostart = Autostart.IsEnabled();
 
-        Text = $"{AppInfo.ProductName} 설정";
+        Text = Strings.Format("settings.title", AppInfo.ProductName);
         Icon = Icons.App;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = true;
@@ -54,9 +61,21 @@ sealed class SettingsForm : Form
 
         Build();
         LoadDraftIntoControls();
-        _dirty = false;   // 컨트롤 초기화로 생긴 변경 알림은 실제 변경이 아니다
+        _dirty = dirty;   // 컨트롤 초기화로 생긴 변경 알림은 실제 변경이 아니다
         Theme.Apply(this);
     }
+
+    /// <summary>같은 편집 상태(기준값·자동 시작 체크)를 이어받는 새 창을 현재 언어로 만든다. 위치도 그대로.</summary>
+    public SettingsForm Reopen()
+    {
+        var next = new SettingsForm(_live, _original, dirty: true) { _autostart = _autostart };
+        next._autostartBox.Checked = _autostart;
+        if (IsHandleCreated) { next.StartPosition = FormStartPosition.Manual; next.Location = Location; }
+        return next;
+    }
+
+    /// <summary>닫을 때 되돌리기·저장 알림을 하지 않게 한다(새 창에 편집을 넘긴 뒤).</summary>
+    public void Detach() => _detached = true;
 
     protected override void OnHandleCreated(EventArgs e)
     {
@@ -91,9 +110,9 @@ sealed class SettingsForm : Form
 
         // 아래: 버튼
         var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Anchor = AnchorStyles.Right, Margin = new Padding(0, 8, 0, 0) };
-        var cancel = new Button { Text = "취소", DialogResult = DialogResult.Cancel, AutoSize = true };
-        var ok = new Button { Text = "확인", AutoSize = true };
-        var reset = new Button { Text = "기본값 복원(&R)", AutoSize = true, Margin = new Padding(24, 3, 3, 3) };
+        var cancel = new Button { Text = Strings.Get("settings.cancel"), DialogResult = DialogResult.Cancel, AutoSize = true };
+        var ok = new Button { Text = Strings.Get("settings.ok"), AutoSize = true };
+        var reset = new Button { Text = Strings.Get("settings.reset"), AutoSize = true, Margin = new Padding(24, 3, 3, 3) };
         // 모드리스(Show) 창은 DialogResult 만으로는 닫히지 않는다. 명시적으로 닫는다.
         ok.Click += (_, _) => { Apply(); DialogResult = DialogResult.OK; Close(); };
         cancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
@@ -108,37 +127,42 @@ sealed class SettingsForm : Form
 
     GroupBox BuildLookGroup()
     {
-        var g = NewGroup("모양");
+        var g = NewGroup(Strings.Get("group.look"));
         var t = NewTable();
 
         _style = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
         _style.Items.AddRange(Labels.Styles.Select(s => (object)s.label).ToArray());
         _style.SelectedIndexChanged += (_, _) => { _draft.Style = Labels.Styles[Math.Max(0, _style.SelectedIndex)].value; Touch(); };
-        AddRow(t, "배지 모양(&M)", _style);
+        AddRow(t, Strings.Get("look.style"), _style);
 
         _placement = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
         _placement.Items.AddRange(Labels.Placements.Select(p => (object)p.label).ToArray());
         _placement.SelectedIndexChanged += (_, _) => { _draft.Placement = Labels.Placements[Math.Max(0, _placement.SelectedIndex)].value; Touch(); };
-        AddRow(t, "위치(&L)", _placement);
-        _tips.SetToolTip(_placement, "위쪽은 다음 줄 글자를 덜 가립니다. 화면 가장자리라 자리가 없으면 반대쪽으로 옮깁니다.");
+        AddRow(t, Strings.Get("look.placement"), _placement);
+        _tips.SetToolTip(_placement, Strings.Get("look.placement.tip"));
 
         // 크기·불투명도는 눈으로 맞추는 값이라 숫자 입력보다 슬라이더가 자연스럽다(Windows 설정 앱과 같은 방식).
-        AddRow(t, "크기(&Z)", Slider(out _size, 50, 300, 5, 25, v => { _draft.SizePercent = v; Touch(); }));
-        AddRow(t, "불투명도(&O)", Slider(out _opacity, 30, 100, 5, 10, v => { _draft.OpacityPercent = v; Touch(); }));
-        _tips.SetToolTip(_size, "모니터 DPI 배율에 추가로 곱해집니다.");
-        _tips.SetToolTip(_opacity, "배지 배경만 비치고 글자는 또렷하게 유지됩니다.");
+        AddRow(t, Strings.Get("look.size"), Slider(out _size, 50, 300, 5, 25, v => { _draft.SizePercent = v; Touch(); }));
+        AddRow(t, Strings.Get("look.opacity"), Slider(out _opacity, 30, 100, 5, 10, v => { _draft.OpacityPercent = v; Touch(); }));
+        _tips.SetToolTip(_size, Strings.Get("look.size.tip"));
+        _tips.SetToolTip(_opacity, Strings.Get("look.opacity.tip"));
 
         _hangulColor = ColorButton(() => _draft.HangulColor, v => _draft.HangulColor = v);
-        AddRow(t, "한글 배지 색(&H)", _hangulColor);
+        AddRow(t, Strings.Get("look.hangulColor"), _hangulColor);
         _englishColor = ColorButton(() => _draft.EnglishColor, v => _draft.EnglishColor = v);
-        AddRow(t, "영문 배지 색(&E)", _englishColor);
-        _tips.SetToolTip(_hangulColor, "글자색(흰/검)은 고른 색의 밝기에 맞춰 자동으로 정해집니다.");
-        _tips.SetToolTip(_englishColor, "글자색(흰/검)은 고른 색의 밝기에 맞춰 자동으로 정해집니다.");
+        AddRow(t, Strings.Get("look.englishColor"), _englishColor);
+        _tips.SetToolTip(_hangulColor, Strings.Get("look.color.tip"));
+        _tips.SetToolTip(_englishColor, Strings.Get("look.color.tip"));
 
-        _animate = new CheckBox { Text = "나타날 때 서서히, 바뀔 때 살짝 커지는 효과(&N)", AutoSize = true };
+        _animate = new CheckBox { Text = Strings.Get("look.animate"), AutoSize = true };
         _animate.CheckedChanged += (_, _) => { _draft.Animate = _animate.Checked; Touch(); };
         AddRow(t, null, _animate);
-        _tips.SetToolTip(_animate, "Windows 설정 → 접근성 → 시각 효과 → 애니메이션 효과가 꺼져 있으면 여기와 상관없이 생략합니다.");
+        _tips.SetToolTip(_animate, Strings.Get("look.animate.tip"));
+
+        _capsLock = new CheckBox { Text = Strings.Get("look.capsLock"), AutoSize = true };
+        _capsLock.CheckedChanged += (_, _) => { _draft.ShowCapsLock = _capsLock.Checked; Touch(); };
+        AddRow(t, null, _capsLock);
+        _tips.SetToolTip(_capsLock, Strings.Get("look.capsLock.tip"));
 
         g.Controls.Add(t);
         return g;
@@ -146,42 +170,48 @@ sealed class SettingsForm : Form
 
     GroupBox BuildBehaviorGroup()
     {
-        var g = NewGroup("동작");
+        var g = NewGroup(Strings.Get("group.behavior"));
         var t = NewTable();
 
-        _autostartBox = new CheckBox { Text = "Windows 로그인 시 자동 시작(&A)", AutoSize = true };
+        _autostartBox = new CheckBox { Text = Strings.Get("behavior.autostart"), AutoSize = true };
         _autostartBox.CheckedChanged += (_, _) => _autostart = _autostartBox.Checked;   // 레지스트리는 [확인] 때만 만진다
         AddRow(t, null, _autostartBox);
 
-        _fullscreen = new CheckBox { Text = "전체 화면 앱(게임·동영상)에서는 숨김(&F)", AutoSize = true };
+        _fullscreen = new CheckBox { Text = Strings.Get("behavior.fullscreen"), AutoSize = true };
         _fullscreen.CheckedChanged += (_, _) => { _draft.HideOnFullscreen = _fullscreen.Checked; Touch(); };
         AddRow(t, null, _fullscreen);
 
-        _trayStateBox = new CheckBox { Text = "트레이 아이콘에도 한/영 상태 표시(&T)", AutoSize = true };
+        _trayStateBox = new CheckBox { Text = Strings.Get("behavior.trayState"), AutoSize = true };
         _trayStateBox.CheckedChanged += (_, _) => { _draft.TrayShowsState = _trayStateBox.Checked; Touch(); };
         AddRow(t, null, _trayStateBox);
 
         // 단축키: 체크박스 + 키 조합을 받는 입력칸을 한 줄에.
         var hotkeyRow = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty };
-        _hotkey = new CheckBox { Text = "단축키로 일시 중지 켜기/끄기(&K)", AutoSize = true, Margin = new Padding(0, 4, 8, 0) };
+        _hotkey = new CheckBox { Text = Strings.Get("behavior.hotkey"), AutoSize = true, Margin = new Padding(0, 4, 8, 0) };
         _hotkey.CheckedChanged += (_, _) => { _draft.HotkeyEnabled = _hotkey.Checked; _hotkeyBox.Enabled = _hotkey.Checked; Touch(); };
         _hotkeyBox = new HotkeyBox { Width = 130 };
         _hotkeyBox.HotkeyChanged += spec => { _draft.Hotkey = spec.ToString(); Touch(); };
-        _tips.SetToolTip(_hotkeyBox, "여기를 클릭한 뒤 원하는 키 조합을 누르세요. Ctrl, Alt, Win 중 하나가 들어가야 합니다.");
+        _tips.SetToolTip(_hotkeyBox, Strings.Get("behavior.hotkey.tip"));
         hotkeyRow.Controls.Add(_hotkey);
         hotkeyRow.Controls.Add(_hotkeyBox);
         AddRow(t, null, hotkeyRow);
 
-        _updates = new CheckBox { Text = "새 버전이 나오면 알림 (하루 한 번 확인)(&U)", AutoSize = true };
+        _updates = new CheckBox { Text = Strings.Get("behavior.updates"), AutoSize = true };
         _updates.CheckedChanged += (_, _) => { _draft.CheckForUpdates = _updates.Checked; Touch(); };
         AddRow(t, null, _updates);
-        _tips.SetToolTip(_updates, "GitHub Releases 에서 정식 버전만 확인합니다. 끄면 네트워크 접속이 전혀 없습니다.");
+        _tips.SetToolTip(_updates, Strings.Get("behavior.updates.tip"));
 
         _poll = new NumericUpDown { Minimum = 50, Maximum = 1000, Increment = 50, Width = 80 };
         _poll.ValueChanged += (_, _) => { _draft.PollIntervalMs = (int)_poll.Value; Touch(); };
-        AddRow(t, "확인 주기 (ms)(&I)", _poll);
-        AddRow(t, null, new Label { Text = "작을수록 빨리 반응하고 CPU 를 조금 더 씁니다. 기본 100.", ForeColor = SystemColors.GrayText, AutoSize = true });
-        _tips.SetToolTip(_poll, "한/영 상태를 다시 읽는 간격입니다. 배지가 한동안 안 보이면 자동으로 3배 느려집니다.");
+        AddRow(t, Strings.Get("behavior.poll"), _poll);
+        AddRow(t, null, new Label { Text = Strings.Get("behavior.poll.note"), ForeColor = SystemColors.GrayText, AutoSize = true });
+        _tips.SetToolTip(_poll, Strings.Get("behavior.poll.tip"));
+
+        _language = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
+        _language.Items.AddRange(Labels.Languages.Select(l => (object)l.label).ToArray());
+        _language.SelectedIndexChanged += (_, _) => { _draft.Language = Labels.Languages[Math.Max(0, _language.SelectedIndex)].value; Touch(); };
+        AddRow(t, Strings.Get("behavior.language"), _language);
+        _tips.SetToolTip(_language, Strings.Get("behavior.language.tip"));
 
         g.Controls.Add(t);
         return g;
@@ -189,17 +219,17 @@ sealed class SettingsForm : Form
 
     GroupBox BuildPreviewGroup()
     {
-        var g = NewGroup("미리보기");
+        var g = NewGroup(Strings.Get("group.preview"));
         _preview = new Panel { Location = ContentOrigin, Width = InnerWidth, Height = 120, BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Tag = "custom-paint" };
         _preview.Paint += (_, e) => PaintPreview(e.Graphics);
-        _tips.SetToolTip(_preview, "왼쪽은 밝은 배경(메모장), 오른쪽은 어두운 배경(VS Code 등)에서의 모습입니다.");
+        _tips.SetToolTip(_preview, Strings.Get("preview.tip"));
         g.Controls.Add(_preview);
         return g;
     }
 
     GroupBox BuildExcludeGroup()
     {
-        var g = NewGroup("배지를 띄우지 않을 앱");
+        var g = NewGroup(Strings.Get("group.exclude"));
         var t = NewTable();
 
         _excludedList = new ListBox { Width = InnerWidth - 6, Height = 72, IntegralHeight = false };
@@ -210,10 +240,10 @@ sealed class SettingsForm : Form
         _newProcess = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Width = 190, Margin = new Padding(0, 0, 4, 0) };
         _newProcess.DropDown += (_, _) => FillRunningApps();
         _newProcess.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) { AddExcluded(); e.SuppressKeyPress = true; } };
-        _tips.SetToolTip(_newProcess, "실행 중인 앱을 고르거나 실행 파일 이름을 직접 입력하세요. 끝에 * 를 붙이면 앞부분만 맞으면 됩니다.");
-        var add = new Button { Text = "추가(&D)", AutoSize = true, Margin = new Padding(0, 0, 4, 0) };
+        _tips.SetToolTip(_newProcess, Strings.Get("exclude.new.tip"));
+        var add = new Button { Text = Strings.Get("exclude.add"), AutoSize = true, Margin = new Padding(0, 0, 4, 0) };
         add.Click += (_, _) => AddExcluded();
-        var remove = new Button { Text = "삭제(&X)", AutoSize = true, Margin = Padding.Empty };
+        var remove = new Button { Text = Strings.Get("exclude.remove"), AutoSize = true, Margin = Padding.Empty };
         remove.Click += (_, _) => RemoveExcluded();
         _excludedList.KeyDown += (_, e) => { if (e.KeyCode == Keys.Delete) RemoveExcluded(); };
         row.Controls.Add(_newProcess); row.Controls.Add(add); row.Controls.Add(remove);
@@ -221,7 +251,7 @@ sealed class SettingsForm : Form
 
         AddRow(t, null, new Label
         {
-            Text = "실행 파일 이름(.exe 생략 가능). 끝에 * 를 붙이면 앞부분만 맞으면 됩니다.\n예)  mstsc  /  vmware-vmx  /  Unreal*",
+            Text = Strings.Get("exclude.note"),
             ForeColor = SystemColors.GrayText,
             AutoSize = true,
         });
@@ -396,6 +426,7 @@ sealed class SettingsForm : Form
         PaintColorButton(_hangulColor, _draft.HangulColor);
         PaintColorButton(_englishColor, _draft.EnglishColor);
         _animate.Checked = _draft.Animate;
+        _capsLock.Checked = _draft.ShowCapsLock;
         _autostartBox.Checked = _autostart;
         _fullscreen.Checked = _draft.HideOnFullscreen;
         _trayStateBox.Checked = _draft.TrayShowsState;
@@ -403,6 +434,7 @@ sealed class SettingsForm : Form
         _hotkeyBox.Enabled = _draft.HotkeyEnabled;
         _hotkeyBox.Text = _draft.Hotkey;
         _updates.Checked = _draft.CheckForUpdates;
+        _language.SelectedIndex = Math.Max(0, Array.FindIndex(Labels.Languages, l => l.value == _draft.Language));
         RefreshExcludedList();
     }
 
@@ -413,8 +445,9 @@ sealed class SettingsForm : Form
         _draft.Normalize();
         _live.CopyFrom(_draft);
         _dirty = true;
-        Changed?.Invoke();
+        Changed?.Invoke();   // BadgeForm 이 여기서 Strings.Setting 을 새 언어로 맞춘다
         RefreshPreview();
+        if (Strings.IsKorean != _builtKorean) LanguageChanged?.Invoke();
     }
 
     void RefreshPreview() => _preview?.Invalidate();
@@ -446,11 +479,14 @@ sealed class SettingsForm : Form
         using var textBrush = new SolidBrush(fg);
         using var caretPen = new Pen(fg);
 
-        var samples = new[] { (ImeState.Hangul, "안녕하세요"), (ImeState.English, "hello") };
+        // Caps Lock 표시를 켰으면 영문 줄을 대문자 예시로 바꿔 "ABC" 배지도 미리 보여 준다.
+        var samples = _draft.ShowCapsLock
+            ? new[] { (ImeState.Hangul, "안녕하세요", false), (ImeState.English, "HELLO", true) }
+            : new[] { (ImeState.Hangul, "안녕하세요", false), (ImeState.English, "hello", false) };
         int lineH = (int)(48 * dpi);
         for (int i = 0; i < samples.Length; i++)
         {
-            var (state, text) = samples[i];
+            var (state, text, caps) = samples[i];
             var textSize = g.MeasureString(text, font);
             float x = area.Left + 14 * dpi, y = area.Top + 20 * dpi + i * lineH;
             g.DrawString(text, font, textBrush, x, y);
@@ -458,7 +494,7 @@ sealed class SettingsForm : Form
             var caret = new Rectangle((int)(x + textSize.Width - 2 * dpi), (int)y, 1, (int)textSize.Height);
             g.DrawLine(caretPen, caret.Left, caret.Top, caret.Left, caret.Bottom);
 
-            using var bmp = BadgeRenderer.Render(state, style, scale, theme, _draft.OpacityPercent);
+            using var bmp = BadgeRenderer.Render(state, style, scale, theme, _draft.OpacityPercent, caps);
             var pos = BadgeLayout.Compute(new LayoutInput(caret, bmp.Size, style, _draft.Placement, scale, area));
             // 픽셀 크기를 명시한다. Point 만 주는 오버로드는 비트맵의 DPI(96)와 화면 DPI 차이만큼 확대해 버린다.
             g.DrawImage(bmp, new Rectangle(pos, bmp.Size), new Rectangle(Point.Empty, bmp.Size), GraphicsUnit.Pixel);
@@ -478,7 +514,7 @@ sealed class SettingsForm : Form
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         base.OnFormClosing(e);
-        if (e.Cancel || DialogResult == DialogResult.OK || !_dirty) return;
+        if (e.Cancel || _detached || DialogResult == DialogResult.OK || !_dirty) return;
         _live.CopyFrom(_original);
         _dirty = false;
         Applied?.Invoke();
@@ -508,7 +544,7 @@ sealed class HotkeyBox : TextBox
         ImeMode = ImeMode.Disable;
         Cursor = Cursors.Hand;
         TextAlign = HorizontalAlignment.Center;
-        PlaceholderText = "키 조합을 누르세요";
+        PlaceholderText = Strings.Get("behavior.hotkey.placeholder");
     }
 
     protected override void OnKeyDown(KeyEventArgs e)

@@ -19,20 +19,22 @@ namespace ImeBadge;
 /// </summary>
 sealed class TrayIcons : IDisposable
 {
-    readonly Dictionary<(ImeState state, bool paused, int size, int hangul, int english), (Icon icon, IntPtr handle)> _cache = new();
+    readonly Dictionary<(ImeState state, bool paused, bool caps, int size, int hangul, int english), (Icon icon, IntPtr handle)> _cache = new();
 
     /// <summary>
     /// 상태에 맞는 아이콘. <paramref name="size"/> 는 트레이가 쓰는 픽셀 크기(SmallIconSize: 100% 에서 16, 150% 에서 24).
+    /// <paramref name="capsLock"/> 이면 "A" 아래에 짧은 줄을 그어 Caps Lock 을 나타낸다("ABC" 는 16px 에서 읽히지 않는다).
     /// 돌려준 아이콘은 이 객체가 소유한다. 호출자가 Dispose 하면 안 된다.
     /// </summary>
-    public Icon Get(ImeState state, bool paused, int size, in BadgeTheme theme)
+    public Icon Get(ImeState state, bool paused, int size, in BadgeTheme theme, bool capsLock = false)
     {
         if (!paused && state == ImeState.Unknown) return Icons.App;
+        if (state != ImeState.English) capsLock = false;
 
-        var key = (state, paused, size, theme.Hangul.ToArgb(), theme.English.ToArgb());
+        var key = (state, paused, capsLock, size, theme.Hangul.ToArgb(), theme.English.ToArgb());
         if (_cache.TryGetValue(key, out var hit)) return hit.icon;
 
-        using var bmp = paused ? RenderPaused(size) : RenderState(state, size, theme);
+        using var bmp = paused ? RenderPaused(size) : RenderState(state, size, theme, capsLock);
         IntPtr h = bmp.GetHicon();
         var icon = Icon.FromHandle(h);
         _cache[key] = (icon, h);
@@ -64,9 +66,9 @@ sealed class TrayIcons : IDisposable
     }
 
     /// <summary>배지와 같은 색의 둥근 사각형에 "한"/"A"/"?". 글자색은 배지와 같은 규칙으로 고른다.</summary>
-    static Bitmap RenderState(ImeState state, int size, in BadgeTheme theme)
+    static Bitmap RenderState(ImeState state, int size, in BadgeTheme theme, bool capsLock)
     {
-        var (text, color) = BadgeRenderer.Look(state, theme);
+        var (text, color) = BadgeRenderer.Look(state, theme);   // 트레이는 "ABC" 대신 "A" + 밑줄
         var bmp = NewCanvas(size, out var g);
         using (g)
         {
@@ -77,10 +79,19 @@ sealed class TrayIcons : IDisposable
 
             // 글자는 상자의 약 70%. "한"은 획이 많아 "A"보다 조금 작게 그려야 16px 에서 뭉개지지 않는다.
             float px = size * (text == "A" ? 0.78f : 0.68f);
-            using var font = new Font(BadgeRenderer.FontFamily, px, FontStyle.Bold, GraphicsUnit.Pixel);
+            var textArea = new RectangleF(0, 0, size, size);
             using var textBrush = new SolidBrush(BadgeRenderer.TextColorOn(color));
+            if (capsLock)
+            {
+                // Caps Lock: 글자를 조금 줄여 위로 올리고, 그 아래에 짧은 줄(키보드의 Caps Lock 표시등을 닮은 모양).
+                px = size * 0.64f;
+                float barH = Math.Max(1.5f, size * 0.10f), barW = size * 0.5f;
+                textArea = new RectangleF(0, -size * 0.04f, size, size - barH - size * 0.14f);
+                g.FillRectangle(textBrush, (size - barW) / 2, size - barH - size * 0.14f, barW, barH);
+            }
+            using var font = new Font(BadgeRenderer.FontFamily, px, FontStyle.Bold, GraphicsUnit.Pixel);
             using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-            g.DrawString(text, font, textBrush, new RectangleF(0, 0, size, size), sf);
+            g.DrawString(text, font, textBrush, textArea, sf);
         }
         return bmp;
     }

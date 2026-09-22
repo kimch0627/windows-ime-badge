@@ -26,6 +26,8 @@ public sealed class Settings
     public string EnglishColor { get; set; } = DefaultEnglishColor;
     /// <summary>나타날 때 페이드인, 한/영이 바뀔 때 잠깐 커졌다 작아지는 효과. Windows 의 "애니메이션 효과" 가 꺼져 있으면 무시된다.</summary>
     public bool Animate { get; set; } = true;
+    /// <summary>영문 모드에서 Caps Lock 이 켜져 있으면 배지 글자를 "A" 대신 "ABC" 로 보여 준다(트레이 아이콘은 "A" 밑에 줄).</summary>
+    public bool ShowCapsLock { get; set; } = true;
 
     // ── 동작 ──
     /// <summary>활성 창이 모니터 전체를 덮는(게임·전체 화면 동영상) 경우 배지를 숨긴다.</summary>
@@ -40,6 +42,8 @@ public sealed class Settings
     public int PollIntervalMs { get; set; } = 100;
     /// <summary>트레이 아이콘에 현재 한/영 상태를 보여 준다("한"/"A"). 끄면 항상 기본 아이콘.</summary>
     public bool TrayShowsState { get; set; } = true;
+    /// <summary>설정 창·트레이 메뉴·알림의 언어. Auto 면 Windows 표시 언어를 따른다(<see cref="Strings"/>).</summary>
+    public UiLanguage Language { get; set; } = UiLanguage.Auto;
 
     // ── 업데이트 ──
     public bool CheckForUpdates { get; set; } = true;
@@ -59,6 +63,7 @@ public sealed class Settings
         PollIntervalMs = Math.Clamp(PollIntervalMs, 50, 1000);
         if (!Enum.IsDefined(Style)) Style = BadgeStyle.Pill;
         if (!Enum.IsDefined(Placement)) Placement = BadgePlacement.AboveRight;
+        if (!Enum.IsDefined(Language)) Language = UiLanguage.Auto;
         if (!ColorHex.TryParse(HangulColor, out _)) HangulColor = DefaultHangulColor;
         if (!ColorHex.TryParse(EnglishColor, out _)) EnglishColor = DefaultEnglishColor;
         Hotkey = HotkeySpec.TryParse(Hotkey, out var hk) ? hk.ToString() : HotkeySpec.Default.ToString();
@@ -77,10 +82,11 @@ public sealed class Settings
     {
         Style = other.Style; Placement = other.Placement;
         SizePercent = other.SizePercent; OpacityPercent = other.OpacityPercent;
-        HangulColor = other.HangulColor; EnglishColor = other.EnglishColor; Animate = other.Animate;
+        HangulColor = other.HangulColor; EnglishColor = other.EnglishColor; Animate = other.Animate; ShowCapsLock = other.ShowCapsLock;
         HideOnFullscreen = other.HideOnFullscreen;
         ExcludedProcesses = new List<string>(other.ExcludedProcesses);
         HotkeyEnabled = other.HotkeyEnabled; Hotkey = other.Hotkey; PollIntervalMs = other.PollIntervalMs; TrayShowsState = other.TrayShowsState;
+        Language = other.Language;
         CheckForUpdates = other.CheckForUpdates; LastUpdateCheckUtc = other.LastUpdateCheckUtc;
         SkippedUpdateTag = other.SkippedUpdateTag;
     }
