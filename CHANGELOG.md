@@ -4,14 +4,11 @@
 
 ## [Unreleased]
 
-### 변경
-- 설정·정보 창을 Windows 11 설정 앱 모양으로 다시 그렸다. 제목·설명이 붙은 카드, 토글 스위치, 강조색 슬라이더,
-  실제 배지를 그린 모양·위치 타일 선택, 원형 색 견본 팔레트(Windows 강조색 11개 + 사용자 지정), 기본/보조 버튼.
-  모두 직접 그려 밝게/어둡게 모두 같은 모양이고 키보드(Tab·화살표·Space·Alt 니모닉)로 다룰 수 있다. 영어 UI 도 같은 모양.
-- Windows 11 에서 제목 표시줄을 창 바탕색과 같게 칠해 이음새를 없앴다(DWM caption color).
-- 트레이 메뉴에 Segoe Fluent Icons 글리프 아이콘과 둥근 선택 강조. 상태 줄 앞에 지금 트레이 아이콘과 같은 작은 그림.
-- 정보 창: 큰 아이콘 + 이름 + 버전 칩 머리, 링크 사이 구분선.
-- 미리보기에 "밝은 배경 / 어두운 배경" 캡션과 둥근 모서리.
+## [1.2.0] - 2026-09-22
+
+Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을 즉시 따라오는 배지, 영어 UI 를 더하고,
+설정·정보 창을 Windows 11 설정 앱 모양으로 다시 그린 릴리스입니다.
+예전 설정 파일은 그대로 읽히며 새 항목(Caps Lock 표시 = 켜짐, 언어 = 시스템 언어)은 기본값으로 채워집니다.
 
 ### 추가
 - Xshell 처럼 자체 커서를 그리는 앱(Win32 caret 도 UI Automation 텍스트 정보도 없음)에서도 배지가 뜬다.
@@ -31,6 +28,15 @@
 - 영어 UI. 설정 → 동작 → 언어에서 시스템 언어(자동)/한국어/English 를 고른다. 기본은 Windows 표시 언어를 따르므로 한국어 Windows 는 그대로다.
   설정 창·트레이 메뉴·툴팁·정보 창·알림·오류 대화상자가 바뀌고, 배지 글자(`한`/`A`)는 바뀌지 않는다. 문구는 `Core/Strings.cs` 의 코드 사전이며
   두 언어의 키·자리표시자·니모닉 겹침을 단위 테스트가 검사한다.
+
+### 변경
+- 설정·정보 창을 Windows 11 설정 앱 모양으로 다시 그렸다. 제목·설명이 붙은 카드, 토글 스위치, 강조색 슬라이더,
+  실제 배지를 그린 모양·위치 타일 선택, 원형 색 견본 팔레트(Windows 강조색 11개 + 사용자 지정), 기본/보조 버튼.
+  모두 직접 그려 밝게/어둡게 모두 같은 모양이고 키보드(Tab·화살표·Space·Alt 니모닉)로 다룰 수 있다. 영어 UI 도 같은 모양.
+- Windows 11 에서 제목 표시줄을 창 바탕색과 같게 칠해 이음새를 없앴다(DWM caption color).
+- 트레이 메뉴에 Segoe Fluent Icons 글리프 아이콘과 둥근 선택 강조. 상태 줄 앞에 지금 트레이 아이콘과 같은 작은 그림.
+- 정보 창: 큰 아이콘 + 이름 + 버전 칩 머리, 링크 사이 구분선.
+- 미리보기에 "밝은 배경 / 어두운 배경" 캡션과 둥근 모서리.
 
 ### 수정
 - 설정 창 미리보기에서 모양·위치·크기·불투명도를 바꿔도 차이를 알아보기 어렵던 문제.
@@ -136,7 +142,8 @@
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/kimch0627/windows-ime-badge/compare/v0.7.2...v1.0.0
