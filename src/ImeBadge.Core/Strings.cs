@@ -147,6 +147,8 @@ public static class Strings
         ["corner.add"] = "추가",
         ["corner.remove"] = "삭제",
         ["corner.note"] = "자체 커서를 그리는 앱(Xshell 같은 터미널)은 커서 위치를 알 수 없을 때가 있습니다. 이 목록의 앱은\n그럴 때 배지를 입력 창의 왼쪽 아래 모서리에 고정해 띄웁니다(위치 설정 무시). 예)  Xshell*",
+        ["corner.trackImage"] = "화면을 분석해 커서를 따라가기 (실험적)",
+        ["corner.trackImage.tip"] = "위 목록의 앱에서 창을 캡처해 깜빡이는 커서를 찾아 배지를 그 옆에 둡니다. 찾으면 커서를 따라가고, 화면 출력이 많아 못 찾으면 모서리에 고정합니다. CPU 를 조금 더 씁니다.",
 
         // ── 설정 창: 머리·카드 설명·타일 이름 ──
         ["settings.heading"] = "ImeBadge 설정",
@@ -324,6 +326,8 @@ public static class Strings
         ["corner.add"] = "Add",
         ["corner.remove"] = "Remove",
         ["corner.note"] = "Apps that draw their own cursor (terminals such as Xshell) may expose no caret position. For apps in this list\nthe badge is then pinned to the bottom-left corner of the focused window (placement setting ignored). e.g.  Xshell*",
+        ["corner.trackImage"] = "Follow the cursor by analyzing the screen (experimental)",
+        ["corner.trackImage.tip"] = "For the apps above, capture the window to locate the blinking cursor and place the badge beside it. When found the badge follows the cursor; when heavy output hides it, the badge falls back to the corner. Uses a little more CPU.",
 
         // ── Settings window: header, card descriptions, tile labels ──
         ["settings.heading"] = "ImeBadge Settings",

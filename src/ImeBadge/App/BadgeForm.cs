@@ -821,7 +821,7 @@ sealed class BadgeForm : Form
             _trayIcons.Dispose();
             foreach (var bmp in _glyphImages.Values) bmp.Dispose();
             _statusImage?.Dispose();
-            ImmCaret.Release();   // 다른 프로세스에 빌린 버퍼를 돌려준다
+            ImageCaret.Clear();
         }
         base.Dispose(disposing);
     }

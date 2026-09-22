@@ -39,6 +39,7 @@ public sealed class SettingsStoreTests : IDisposable
             HangulColor = "#FF0000",
             ExcludedProcesses = new List<string> { "mstsc", "Unreal*" },
             CornerBadgeProcesses = new List<string> { "Xshell*", "SecureCRT" },
+            TrackCursorByImage = true,
             HideOnFullscreen = false,
             TrayShowsState = false,
             Animate = false,
@@ -58,6 +59,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal("#FF0000", back.HangulColor);
         Assert.Equal(new[] { "mstsc", "Unreal*" }, back.ExcludedProcesses);
         Assert.Equal(new[] { "Xshell*", "SecureCRT" }, back.CornerBadgeProcesses);
+        Assert.True(back.TrackCursorByImage);
         Assert.False(back.HideOnFullscreen);
         Assert.False(back.TrayShowsState);
         Assert.False(back.Animate);
