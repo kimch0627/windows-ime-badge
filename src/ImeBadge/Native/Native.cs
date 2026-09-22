@@ -50,6 +50,7 @@ static class Native
     [DllImport("user32.dll")] public static extern bool GetGUIThreadInfo(uint tid, ref GUITHREADINFO info);
     [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr hWnd, ref POINT pt);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+    [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
     [DllImport("user32.dll")] public static extern IntPtr GetKeyboardLayout(uint tid);
     [DllImport("user32.dll")] public static extern short GetKeyState(int vKey);
     [DllImport("user32.dll")] public static extern bool IsHungAppWindow(IntPtr hWnd);
@@ -77,7 +78,10 @@ static class Native
     [DllImport("user32.dll")] public static extern IntPtr GetDC(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
     [DllImport("gdi32.dll")] public static extern IntPtr CreateCompatibleDC(IntPtr hDC);
+    [DllImport("gdi32.dll")] public static extern IntPtr CreateCompatibleBitmap(IntPtr hDC, int w, int h);
     [DllImport("gdi32.dll")] public static extern bool DeleteDC(IntPtr hDC);
+    // 이미지 기반 커서 추적용. 대상 창을 직접 렌더링하므로(PW_RENDERFULLCONTENT) 위에 겹친 우리 배지·다른 창이 섞이지 않는다.
+    [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint flags);
     [DllImport("gdi32.dll")] public static extern IntPtr SelectObject(IntPtr hDC, IntPtr hObj);
     [DllImport("gdi32.dll")] public static extern bool DeleteObject(IntPtr hObj);
     [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr hIcon);

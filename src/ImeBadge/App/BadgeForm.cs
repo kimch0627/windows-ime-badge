@@ -821,6 +821,7 @@ sealed class BadgeForm : Form
             _trayIcons.Dispose();
             foreach (var bmp in _glyphImages.Values) bmp.Dispose();
             _statusImage?.Dispose();
+            ImageCaret.Clear();
         }
         base.Dispose(disposing);
     }

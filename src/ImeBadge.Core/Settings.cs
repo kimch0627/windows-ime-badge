@@ -42,6 +42,11 @@ public sealed class Settings
 
     /// <summary>Xshell 은 MFC 뷰에 커서를 직접 그려 Win32 caret 도 UI Automation 텍스트 정보도 없다.</summary>
     public static readonly string[] DefaultCornerBadgeProcesses = { "Xshell*" };
+    /// <summary>
+    /// "커서를 못 찾는 앱"에서 배지를 모서리에 고정하는 대신, 창을 두 번 캡처해 깜빡이는 커서를 이미지로 찾아 따라간다(실험적).
+    /// CPU 를 조금 더 쓰고, 화면 출력이 많으면 못 찾아 모서리로 되돌아간다. 기본은 꺼짐.
+    /// </summary>
+    public bool TrackCursorByImage { get; set; } = false;
     /// <summary>단축키로 일시 중지를 켜고 끈다.</summary>
     public bool HotkeyEnabled { get; set; } = true;
     /// <summary>일시 중지 단축키. "Ctrl+Alt+H" 형식(<see cref="HotkeySpec"/>). 읽을 수 없으면 기본값으로 돌아간다.</summary>
@@ -97,6 +102,7 @@ public sealed class Settings
         HideOnFullscreen = other.HideOnFullscreen;
         ExcludedProcesses = new List<string>(other.ExcludedProcesses);
         CornerBadgeProcesses = new List<string>(other.CornerBadgeProcesses);
+        TrackCursorByImage = other.TrackCursorByImage;
         HotkeyEnabled = other.HotkeyEnabled; Hotkey = other.Hotkey; PollIntervalMs = other.PollIntervalMs; TrayShowsState = other.TrayShowsState;
         Language = other.Language;
         CheckForUpdates = other.CheckForUpdates; LastUpdateCheckUtc = other.LastUpdateCheckUtc;

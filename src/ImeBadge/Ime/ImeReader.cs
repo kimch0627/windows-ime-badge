@@ -70,16 +70,22 @@ static class ImeReader
             caret = UiaCaret.Find(dump);
         }
 
-        // caret 을 못 찾았고 "모서리에 표시할 앱"(자체 커서를 그리는 Xshell 등)이면 포커스 창의 사각형을 넘겨 왼쪽 아래 모서리에 띄운다.
-        // Xshell 은 Win32 caret 도 UI Automation 텍스트도 IMM 조합 창 위치도 노출하지 않아 커서를 따라갈 수 없다. 창 안 표시가 최선이다.
+        // caret 을 못 찾았고 "모서리에 표시할 앱"(자체 커서를 그리는 Xshell 등)이면: 이미지 추적이 켜져 있으면 화면을 캡처해 커서를
+        // 찾아 따라가고(실험적), 못 찾으면 포커스 창의 왼쪽 아래 모서리에 고정한다. Xshell 은 Win32 caret 도 UI Automation 텍스트도
+        // IMM 조합 창 위치도 노출하지 않아 API 로는 커서를 알 수 없다.
         Rectangle? corner = null;
         if (caret is null && settings.CornerBadgeProcesses.Count > 0 && ProcessFilter.IsExcluded(settings.CornerBadgeProcesses, process))
         {
             var host = gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target;
             if (Native.GetWindowRect(host, out var wr) && wr.Right > wr.Left && wr.Bottom > wr.Top)
             {
-                corner = wr.ToRectangle();
-                dump?.Append(" corner");
+                if (settings.TrackCursorByImage)
+                    caret = ImageCaret.Find(host, Native.DpiScaleAt(new Point(wr.Left, wr.Top)), dump);
+                if (caret is null)
+                {
+                    corner = wr.ToRectangle();
+                    dump?.Append(" corner");
+                }
             }
         }
 
