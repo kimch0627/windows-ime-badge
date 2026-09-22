@@ -143,6 +143,10 @@ public static class Strings
         ["exclude.add"] = "추가(&D)",
         ["exclude.remove"] = "삭제(&X)",
         ["exclude.note"] = "실행 파일 이름(.exe 생략 가능). 끝에 * 를 붙이면 앞부분만 맞으면 됩니다.\n예)  mstsc  /  vmware-vmx  /  Unreal*",
+        ["group.corner"] = "커서를 못 찾는 앱 (창 모서리에 표시)",
+        ["corner.add"] = "추가",
+        ["corner.remove"] = "삭제",
+        ["corner.note"] = "자체 커서를 그리는 앱(Xshell 같은 터미널)은 커서 위치를 알 수 없을 때가 있습니다. 이 목록의 앱은\n그럴 때 배지를 입력 창의 왼쪽 아래 모서리에 고정해 띄웁니다(위치 설정 무시). 예)  Xshell*",
 
         // ── 설정 창: 머리·카드 설명·타일 이름 ──
         ["settings.heading"] = "ImeBadge 설정",
@@ -151,6 +155,7 @@ public static class Strings
         ["group.behavior.desc"] = "언제 보여 주고 어떻게 다룰지.",
         ["group.preview.desc"] = "실제 렌더러가 그린 결과. 왼쪽은 밝은 편집기, 오른쪽은 어두운 편집기.",
         ["group.exclude.desc"] = "원격 데스크톱·가상 머신처럼 안에서 따로 배지를 쓰는 앱을 빼 둡니다.",
+        ["group.corner.desc"] = "커서 위치를 알 수 없는 앱에서는 배지를 입력 창 왼쪽 아래 모서리에 고정합니다.",
         ["style.short.box"] = "사각",
         ["style.short.pill"] = "둥근",
         ["style.short.dot"] = "점",
@@ -315,6 +320,10 @@ public static class Strings
         ["exclude.add"] = "A&dd",
         ["exclude.remove"] = "Re&move",
         ["exclude.note"] = "Executable name (.exe optional). A trailing * matches by prefix.\ne.g.  mstsc  /  vmware-vmx  /  Unreal*",
+        ["group.corner"] = "Apps without a findable caret (corner badge)",
+        ["corner.add"] = "Add",
+        ["corner.remove"] = "Remove",
+        ["corner.note"] = "Apps that draw their own cursor (terminals such as Xshell) may expose no caret position. For apps in this list\nthe badge is then pinned to the bottom-left corner of the focused window (placement setting ignored). e.g.  Xshell*",
 
         // ── Settings window: header, card descriptions, tile labels ──
         ["settings.heading"] = "ImeBadge Settings",
@@ -323,6 +332,7 @@ public static class Strings
         ["group.behavior.desc"] = "When to show it and how to control it.",
         ["group.preview.desc"] = "Drawn by the real renderer. Left: a light editor, right: a dark editor.",
         ["group.exclude.desc"] = "Leave out apps that show their own badge inside, such as Remote Desktop or virtual machines.",
+        ["group.corner.desc"] = "When the caret position is unknown, pin the badge to the bottom-left corner of the focused window.",
         ["style.short.box"] = "Square",
         ["style.short.pill"] = "Rounded",
         ["style.short.dot"] = "Dot",

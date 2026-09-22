@@ -640,14 +640,16 @@ sealed class BadgeForm : Form
 
     void Apply(Snapshot s)
     {
-        if (s.Caret is null || s.State == ImeState.Unknown)
+        if ((s.Caret is null && s.Corner is null) || s.State == ImeState.Unknown)
         {
             if (s.Suppressed is not null) Log.WriteIfChanged($"suppressed: {s.Suppressed} fg='{Native.ClassName(s.Foreground)}'");
             HideBadge();
             return;
         }
 
-        var caret = s.Caret.Value;
+        // caret 이 없으면(모서리 배지) 포커스 창의 왼쪽 아래를 기준점으로 삼아 DPI·모니터를 정한다. 위치는 아래에서 따로 계산한다.
+        var corner = s.Caret is null ? s.Corner : null;
+        var caret = s.Caret ?? (corner is { } c ? new Rectangle(c.Left, c.Bottom, 1, 0) : default);
         _lastSnapshot = s;
         bool appearing = !Visible;
         bool changed = s.State != _lastState || s.CapsLock != _lastCaps;   // Caps Lock 토글도 "바뀜"으로 알린다
@@ -687,7 +689,9 @@ sealed class BadgeForm : Form
         }
 
         var area = Screen.FromPoint(caret.Location).WorkingArea;
-        var pos = BadgeLayout.Compute(new LayoutInput(caret, bs, style, _settings.Placement, scale, area));
+        var pos = corner is { } win
+            ? BadgeLayout.Corner(win, bs, scale, area)
+            : BadgeLayout.Compute(new LayoutInput(caret, bs, style, _settings.Placement, scale, area));
 
         // FlowLauncher처럼 자기도 최상위(TopMost)인 창은 나중에 뜬 쪽이 위에 온다. 배지가 처음 보일 때,
         // 활성 창이 바뀌었을 때, 위치가 바뀌었을 때마다 최상위 창들 중에서도 맨 위로 다시 올린다.
@@ -817,6 +821,7 @@ sealed class BadgeForm : Form
             _trayIcons.Dispose();
             foreach (var bmp in _glyphImages.Values) bmp.Dispose();
             _statusImage?.Dispose();
+            ImmCaret.Release();   // 다른 프로세스에 빌린 버퍼를 돌려준다
         }
         base.Dispose(disposing);
     }
