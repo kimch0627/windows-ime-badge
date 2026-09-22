@@ -15,7 +15,7 @@ sealed class BadgeForm : Form
 {
     const int HotkeyId = 1;
     const int IdleAfterMs = 2000;      // 배지가 이만큼 숨겨져 있으면 폴링을 느리게
-    const int FlashMs = 1500;          // DotFlash: 변경 직후 글자를 보여 주는 시간
+    internal const int FlashMs = 1500; // DotFlash: 변경 직후 글자를 보여 주는 시간 (설정 창 미리보기도 같은 시간을 쓴다)
     const int FadeMs = 150;            // 나타날 때 페이드인
     const int PulseMs = 260;           // 한/영이 바뀔 때 살짝 커졌다 돌아오는 시간
     const float PulseGrow = 0.18f;     // 펄스 최대 확대 비율
