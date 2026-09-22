@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Threading;
 using System.Windows.Forms;
@@ -62,7 +63,8 @@ sealed class BadgeForm : Form
     SettingsForm? _settingsForm;
     AboutForm? _aboutForm;
 
-    ToolStripMenuItem _pauseItem = null!, _autostartItem = null!, _statusItem = null!;
+    ToolStripMenuItem _pauseItem = null!, _autostartItem = null!;
+    ToolStripLabel _statusItem = null!;   // 누를 수 없는 상태 줄. 비활성 메뉴 항목과 달리 아이콘이 회색으로 바래지 않는다
 
     public BadgeForm(Settings settings, SettingsStore store, AppPaths paths, bool firstRun)
     {
@@ -184,31 +186,40 @@ sealed class BadgeForm : Form
     {
         var menu = new ContextMenuStrip();
 
-        // 맨 위 한 줄은 현재 상태. 누를 수 없는 안내 항목이라 비활성으로 둔다.
-        _statusItem = new ToolStripMenuItem { Enabled = false };
+        // 맨 위 한 줄은 현재 상태. 누를 수 없는 안내 줄(ToolStripLabel)이라 마우스를 올려도 반응하지 않는다.
+        _statusItem = new ToolStripLabel { Margin = new Padding(0, 2, 0, 2), ImageAlign = ContentAlignment.MiddleLeft, TextAlign = ContentAlignment.MiddleLeft };
         menu.Items.Add(_statusItem);
         menu.Items.Add(new ToolStripSeparator());
 
+        _glyphs.Clear();   // 언어가 바뀌어 메뉴를 다시 만들 때 옛 항목을 버린다
         _pauseItem = new ToolStripMenuItem(Strings.Get("menu.pause"), null, (_, _) => TogglePause()) { ShortcutKeyDisplayString = _settings.HotkeyEnabled ? _settings.Hotkey : null };
+        _glyphs[_pauseItem] = MenuIcons.Pause;
         menu.Items.Add(_pauseItem);
         // 더블클릭과 같은 동작인 "설정"을 굵게: Windows 관행에서 굵은 항목이 기본 동작이다.
         var settingsItem = new ToolStripMenuItem(Strings.Get("menu.settings"), null, (_, _) => OpenSettings());
         settingsItem.Font = new Font(settingsItem.Font, FontStyle.Bold);
+        _glyphs[settingsItem] = MenuIcons.Settings;
         menu.Items.Add(settingsItem);
         menu.Items.Add(new ToolStripSeparator());
 
         var shape = new ToolStripMenuItem(Strings.Get("menu.style"));
         foreach (var (label, value) in Labels.Styles)
             AddRadio(shape, label, () => _settings.Style == value, () => _settings.Style = value);
+        _glyphs[shape] = MenuIcons.Shape;
         menu.Items.Add(shape);
 
         var place = new ToolStripMenuItem(Strings.Get("menu.placement"));
         foreach (var (label, value) in Labels.Placements)
             AddRadio(place, label, () => _settings.Placement == value, () => _settings.Placement = value);
+        _glyphs[place] = MenuIcons.Place;
         menu.Items.Add(place);
 
-        menu.Items.Add(PresetMenu(Strings.Get("menu.size"), Labels.SizePresets, () => _settings.SizePercent, v => _settings.SizePercent = v));
-        menu.Items.Add(PresetMenu(Strings.Get("menu.opacity"), Labels.OpacityPresets, () => _settings.OpacityPercent, v => _settings.OpacityPercent = v));
+        var size = PresetMenu(Strings.Get("menu.size"), Labels.SizePresets, () => _settings.SizePercent, v => _settings.SizePercent = v);
+        _glyphs[size] = MenuIcons.Size;
+        menu.Items.Add(size);
+        var opacity = PresetMenu(Strings.Get("menu.opacity"), Labels.OpacityPresets, () => _settings.OpacityPercent, v => _settings.OpacityPercent = v);
+        _glyphs[opacity] = MenuIcons.Opacity;
+        menu.Items.Add(opacity);
 
         menu.Items.Add(new ToolStripSeparator());
         _autostartItem = new ToolStripMenuItem(Strings.Get("menu.autostart"), null, (_, _) =>
@@ -218,16 +229,23 @@ sealed class BadgeForm : Form
                 Dialogs.Warning(Strings.Get("autostart.failed"), Strings.Get("autostart.failed.text"));
         });
         menu.Items.Add(_autostartItem);
-        menu.Items.Add(new ToolStripMenuItem(Strings.Get("menu.checkUpdates"), null, (_, _) => CheckForUpdates(manual: true)));
-        menu.Items.Add(new ToolStripMenuItem(Strings.Get("menu.about"), null, (_, _) => OpenAbout()));
+        var update = new ToolStripMenuItem(Strings.Get("menu.checkUpdates"), null, (_, _) => CheckForUpdates(manual: true));
+        _glyphs[update] = MenuIcons.Update;
+        menu.Items.Add(update);
+        var about = new ToolStripMenuItem(Strings.Get("menu.about"), null, (_, _) => OpenAbout());
+        _glyphs[about] = MenuIcons.Info;
+        menu.Items.Add(about);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(new ToolStripMenuItem(Strings.Get("menu.exit"), null, (_, _) => Application.Exit()));
+        var exit = new ToolStripMenuItem(Strings.Get("menu.exit"), null, (_, _) => Application.Exit());
+        _glyphs[exit] = MenuIcons.Exit;
+        menu.Items.Add(exit);
 
-        // 메뉴를 열 때마다 체크 표시를 현재 상태에 맞춘다.
+        // 메뉴를 열 때마다 체크 표시·상태 줄을 현재 상태에 맞춘다.
         menu.Opening += (_, _) =>
         {
             RefreshChecks(menu.Items);
             _statusItem.Text = Strings.Format("menu.current", StateText(_trayState, _trayCaps));
+            RefreshStatusImage();
             _pauseItem.Checked = _paused;
             _autostartItem.Checked = Autostart.IsEnabled();
         };
@@ -235,10 +253,26 @@ sealed class BadgeForm : Form
         return menu;
     }
 
-    /// <summary>메뉴와 모든 하위 메뉴에 테마 렌더러를 적용하고, 열릴 때 Windows 11 식 둥근 모서리를 요청한다.</summary>
-    static void ApplyMenuTheme(ToolStripDropDown menu)
+    // 메뉴 항목 ↔ 아이콘 글리프. 테마가 바뀌면 글자색으로 다시 그린다.
+    readonly Dictionary<ToolStripItem, string> _glyphs = new();
+    readonly Dictionary<ToolStripItem, Bitmap> _glyphImages = new();
+    Bitmap? _statusImage;
+
+    /// <summary>상태 줄 앞에 지금 트레이에 보이는 것과 같은 작은 아이콘을 둔다.</summary>
+    void RefreshStatusImage()
+    {
+        var icon = _trayIcons.Get(_trayState, _paused, 16, BadgeTheme.From(_settings), _trayCaps);
+        var old = _statusImage;
+        _statusImage = icon.ToBitmap();
+        _statusItem.Image = _statusImage;
+        old?.Dispose();
+    }
+
+    /// <summary>메뉴와 모든 하위 메뉴에 테마 렌더러와 글리프 아이콘을 적용하고, 열릴 때 Windows 11 식 둥근 모서리를 요청한다.</summary>
+    void ApplyMenuTheme(ToolStripDropDown menu)
     {
         var renderer = Theme.CreateMenuRenderer();
+        var palette = Theme.Current;
         void Walk(ToolStripDropDown dd)
         {
             dd.Renderer = renderer;
@@ -247,6 +281,17 @@ sealed class BadgeForm : Form
                 if (it is ToolStripMenuItem mi && mi.HasDropDownItems) Walk(mi.DropDown);
         }
         Walk(menu);
+
+        // 옛 메뉴(언어 전환 전)의 그림은 모두 버리고 현재 항목에만 새로 그린다.
+        foreach (var (item, old) in _glyphImages) { item.Image = null; old.Dispose(); }
+        _glyphImages.Clear();
+        foreach (var (item, glyph) in _glyphs)
+        {
+            var bmp = MenuIcons.Glyph(glyph, item.Enabled ? palette.Text : palette.SubtleText, menu.ImageScalingSize);
+            if (bmp is null) continue;
+            _glyphImages[item] = bmp;
+            item.Image = bmp;
+        }
     }
 
     static void RoundOnOpened(object? sender, EventArgs e)
@@ -774,6 +819,8 @@ sealed class BadgeForm : Form
             _tray.Icon = Icons.App;   // 캐시한 아이콘을 해제하기 전에 참조를 끊는다
             _tray.Dispose();
             _trayIcons.Dispose();
+            foreach (var bmp in _glyphImages.Values) bmp.Dispose();
+            _statusImage?.Dispose();
             ImmCaret.Release();   // 다른 프로세스에 빌린 버퍼를 돌려준다
         }
         base.Dispose(disposing);
