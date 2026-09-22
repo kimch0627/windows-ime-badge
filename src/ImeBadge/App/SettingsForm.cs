@@ -26,8 +26,7 @@ sealed class SettingsForm : Form
     Button _hangulColor = null!, _englishColor = null!;
     CheckBox _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!;
     HotkeyBox _hotkeyBox = null!;
-    ListBox _excludedList = null!;
-    ComboBox _newProcess = null!;
+    ProcessListEditor _excluded = null!, _corner = null!;
     PreviewPanel _preview = null!;
     readonly ToolTip _tips = new() { AutoPopDelay = 12000 };
     // "점, 바뀔 때 1.5초 글자" 미리보기용. 실제 배지처럼 설정이 바뀐 직후 1.5초는 글자 배지를, 그 뒤엔 점을 보여 준다.
@@ -108,10 +107,11 @@ sealed class SettingsForm : Form
         left.Controls.Add(BuildBehaviorGroup());
         root.Controls.Add(left, 0, 0);
 
-        // 오른쪽: 미리보기 + 제외 앱
+        // 오른쪽: 미리보기 + 제외 앱 + 모서리 배지 앱
         var right = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false };
         right.Controls.Add(BuildPreviewGroup());
         right.Controls.Add(BuildExcludeGroup());
+        right.Controls.Add(BuildCornerGroup());
         root.Controls.Add(right, 1, 0);
 
         // 아래: 버튼
@@ -236,87 +236,25 @@ sealed class SettingsForm : Form
     GroupBox BuildExcludeGroup()
     {
         var g = NewGroup(Strings.Get("group.exclude"));
-        var t = NewTable();
-
-        _excludedList = new ListBox { Width = InnerWidth - 6, Height = 72, IntegralHeight = false };
-        AddRow(t, null, _excludedList);
-
-        // 실행 중인 앱에서 고르거나 이름을 직접 쓴다. 목록은 펼칠 때마다 새로 읽는다.
-        var row = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty };
-        _newProcess = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Width = 190, Margin = new Padding(0, 0, 4, 0) };
-        _newProcess.DropDown += (_, _) => FillRunningApps();
-        _newProcess.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) { AddExcluded(); e.SuppressKeyPress = true; } };
-        _tips.SetToolTip(_newProcess, Strings.Get("exclude.new.tip"));
-        var add = new Button { Text = Strings.Get("exclude.add"), AutoSize = true, Margin = new Padding(0, 0, 4, 0) };
-        add.Click += (_, _) => AddExcluded();
-        var remove = new Button { Text = Strings.Get("exclude.remove"), AutoSize = true, Margin = Padding.Empty };
-        remove.Click += (_, _) => RemoveExcluded();
-        _excludedList.KeyDown += (_, e) => { if (e.KeyCode == Keys.Delete) RemoveExcluded(); };
-        row.Controls.Add(_newProcess); row.Controls.Add(add); row.Controls.Add(remove);
-        AddRow(t, null, row);
-
-        AddRow(t, null, new Label
-        {
-            Text = Strings.Get("exclude.note"),
-            ForeColor = SystemColors.GrayText,
-            AutoSize = true,
-        });
-        g.Controls.Add(t);
+        // 목록은 초안(_draft)의 List 를 매번 가리킨다. "기본값 복원" 이 List 인스턴스를 바꾸므로 붙잡아 두면 안 된다.
+        _excluded = new ProcessListEditor(() => _draft.ExcludedProcesses, InnerWidth, _tips,
+            Strings.Get("exclude.add"), Strings.Get("exclude.remove"), Strings.Get("exclude.new.tip"), Strings.Get("exclude.note"))
+        { Location = ContentOrigin };
+        _excluded.Changed += Touch;
+        g.Controls.Add(_excluded);
         return g;
     }
 
-    void FillRunningApps()
+    /// <summary>caret 을 못 찾는 앱(Xshell 등)에서 배지를 창 모서리에 띄울 앱 목록. 제외 목록과 같은 편집기를 쓴다.</summary>
+    GroupBox BuildCornerGroup()
     {
-        System.Diagnostics.Process[]? procs = null;
-        try
-        {
-            procs = System.Diagnostics.Process.GetProcesses();
-            var names = procs
-                .Where(p => { try { return p.MainWindowHandle != IntPtr.Zero; } catch { return false; } })   // 창이 있는 앱만
-                .Select(p => p.ProcessName)
-                .Where(n => !string.Equals(n, AppInfo.ProductName, StringComparison.OrdinalIgnoreCase))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            string typed = _newProcess.Text;
-            _newProcess.Items.Clear();
-            _newProcess.Items.AddRange(names);
-            _newProcess.Text = typed;
-        }
-        catch (Exception ex) { Log.Error("list running apps failed", ex); }
-        finally { if (procs is not null) foreach (var p in procs) p.Dispose(); }
-    }
-
-    void AddExcluded()
-    {
-        string name = _newProcess.Text.Trim();
-        if (name.Length == 0) return;
-        if (!_draft.ExcludedProcesses.Any(x => string.Equals(ProcessFilter.Normalize(x), ProcessFilter.Normalize(name), StringComparison.OrdinalIgnoreCase)))
-        {
-            _draft.ExcludedProcesses.Add(name);
-            RefreshExcludedList();
-            Touch();
-        }
-        _newProcess.Text = "";
-        _newProcess.Focus();
-    }
-
-    void RemoveExcluded()
-    {
-        int i = _excludedList.SelectedIndex;
-        if (i < 0 || i >= _draft.ExcludedProcesses.Count) return;
-        _draft.ExcludedProcesses.RemoveAt(i);
-        RefreshExcludedList();
-        if (_excludedList.Items.Count > 0) _excludedList.SelectedIndex = Math.Min(i, _excludedList.Items.Count - 1);
-        Touch();
-    }
-
-    void RefreshExcludedList()
-    {
-        _excludedList.BeginUpdate();
-        _excludedList.Items.Clear();
-        foreach (var p in _draft.ExcludedProcesses) _excludedList.Items.Add(p);
-        _excludedList.EndUpdate();
+        var g = NewGroup(Strings.Get("group.corner"));
+        _corner = new ProcessListEditor(() => _draft.CornerBadgeProcesses, InnerWidth, _tips,
+            Strings.Get("corner.add"), Strings.Get("corner.remove"), Strings.Get("exclude.new.tip"), Strings.Get("corner.note"))
+        { Location = ContentOrigin };
+        _corner.Changed += Touch;
+        g.Controls.Add(_corner);
+        return g;
     }
 
     // ── 도우미 ──
@@ -441,7 +379,8 @@ sealed class SettingsForm : Form
         _hotkeyBox.Text = _draft.Hotkey;
         _updates.Checked = _draft.CheckForUpdates;
         _language.SelectedIndex = Math.Max(0, Array.FindIndex(Labels.Languages, l => l.value == _draft.Language));
-        RefreshExcludedList();
+        _excluded.Reload();
+        _corner.Reload();
     }
 
     /// <summary>편집 내용을 실제 설정에 복사하고 알린다. 창 밖 배지가 바로 바뀐다.</summary>
@@ -594,6 +533,112 @@ sealed class SettingsForm : Form
 sealed class PreviewPanel : Panel
 {
     public PreviewPanel() { DoubleBuffered = true; }
+}
+
+/// <summary>
+/// 프로세스 이름 목록 편집기: 목록 + (실행 중인 앱 콤보박스, 추가, 삭제) + 안내문.
+/// "배지를 띄우지 않을 앱" 과 "모서리에 표시할 앱" 이 함께 쓴다. 목록은 <see cref="_items"/> 로 매번 가져오고(설정 초안의 List),
+/// 추가·삭제하면 <see cref="Changed"/> 로 알린다. Enter 로 추가, Delete 로 삭제.
+/// </summary>
+sealed class ProcessListEditor : TableLayoutPanel
+{
+    readonly Func<List<string>> _items;
+    readonly ListBox _list;
+    readonly ComboBox _input;
+
+    /// <summary>목록이 바뀌었다(추가·삭제).</summary>
+    public event Action? Changed;
+
+    public ProcessListEditor(Func<List<string>> items, int width, ToolTip tips, string addText, string removeText, string inputTip, string note)
+    {
+        _items = items;
+        ColumnCount = 1; AutoSize = true; AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+        _list = new ListBox { Width = width - 6, Height = 60, IntegralHeight = false };
+        _list.KeyDown += (_, e) => { if (e.KeyCode == Keys.Delete) RemoveItem(); };
+        AddRow(_list);
+
+        // 실행 중인 앱에서 고르거나 이름을 직접 쓴다. 목록은 펼칠 때마다 새로 읽는다.
+        var row = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false };
+        _input = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Width = 190, Margin = new Padding(0, 0, 4, 0) };
+        _input.DropDown += (_, _) => FillRunningApps();
+        _input.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) { AddItem(); e.SuppressKeyPress = true; } };
+        tips.SetToolTip(_input, inputTip);
+        var add = new Button { Text = addText, AutoSize = true, Margin = new Padding(0, 0, 4, 0) };
+        add.Click += (_, _) => AddItem();
+        var remove = new Button { Text = removeText, AutoSize = true, Margin = Padding.Empty };
+        remove.Click += (_, _) => RemoveItem();
+        row.Controls.Add(_input); row.Controls.Add(add); row.Controls.Add(remove);
+        AddRow(row);
+
+        AddRow(new Label { Text = note, ForeColor = SystemColors.GrayText, AutoSize = true });
+    }
+
+    void AddRow(Control c)
+    {
+        int row = RowCount++;
+        RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        c.Margin = new Padding(3, 4, 3, 4);
+        Controls.Add(c, 0, row);
+    }
+
+    /// <summary>설정 초안의 목록을 다시 싣는다(창을 열 때, 기본값 복원 때).</summary>
+    public void Reload()
+    {
+        _list.BeginUpdate();
+        _list.Items.Clear();
+        foreach (var p in _items()) _list.Items.Add(p);
+        _list.EndUpdate();
+    }
+
+    void FillRunningApps()
+    {
+        System.Diagnostics.Process[]? procs = null;
+        try
+        {
+            procs = System.Diagnostics.Process.GetProcesses();
+            var names = procs
+                .Where(p => { try { return p.MainWindowHandle != IntPtr.Zero; } catch { return false; } })   // 창이 있는 앱만
+                .Select(p => p.ProcessName)
+                .Where(n => !string.Equals(n, AppInfo.ProductName, StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            string typed = _input.Text;
+            _input.Items.Clear();
+            _input.Items.AddRange(names);
+            _input.Text = typed;
+        }
+        catch (Exception ex) { Log.Error("list running apps failed", ex); }
+        finally { if (procs is not null) foreach (var p in procs) p.Dispose(); }
+    }
+
+    void AddItem()
+    {
+        string name = _input.Text.Trim();
+        if (name.Length == 0) return;
+        var items = _items();
+        if (!items.Any(x => string.Equals(ProcessFilter.Normalize(x), ProcessFilter.Normalize(name), StringComparison.OrdinalIgnoreCase)))
+        {
+            items.Add(name);
+            Reload();
+            Changed?.Invoke();
+        }
+        _input.Text = "";
+        _input.Focus();
+    }
+
+    void RemoveItem()
+    {
+        int i = _list.SelectedIndex;
+        var items = _items();
+        if (i < 0 || i >= items.Count) return;
+        items.RemoveAt(i);
+        Reload();
+        if (_list.Items.Count > 0) _list.SelectedIndex = Math.Min(i, _list.Items.Count - 1);
+        Changed?.Invoke();
+    }
 }
 
 /// <summary>

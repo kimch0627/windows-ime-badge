@@ -10,7 +10,9 @@ enum ImeState { Unknown, Hangul, English, OtherLang }
 
 /// <summary>한 번 읽은 결과. 배지를 띄우지 않을 이유가 있으면 <see cref="Suppressed"/> 에 적힌다.</summary>
 /// <param name="CapsLock">영문 모드이고 Caps Lock 이 켜져 있는가(설정에서 표시를 껐으면 항상 false).</param>
-readonly record struct Snapshot(ImeState State, Rectangle? Caret, IntPtr Foreground = default, string? Suppressed = null, bool CapsLock = false);
+/// <param name="Corner">caret 을 못 찾았지만 모서리 배지 대상 앱이면 포커스 창의 화면 사각형. 배지를 그 왼쪽 아래 모서리에 둔다.</param>
+readonly record struct Snapshot(ImeState State, Rectangle? Caret, IntPtr Foreground = default, string? Suppressed = null, bool CapsLock = false,
+                                Rectangle? Corner = null);
 
 /// <summary>활성 창의 caret 위치와 한/영 상태를 한 번 읽어 <see cref="Snapshot"/> 으로 돌려준다.</summary>
 static class ImeReader
@@ -65,7 +67,21 @@ static class ImeReader
         else
         {
             if (gti.hwndCaret != IntPtr.Zero) dump?.Append(" caret:win32-empty");   // caret 창은 있지만 높이 0
-            caret = UiaCaret.Find(dump);
+            caret = UiaCaret.Find(dump, out bool readOnly);
+            // 자체 커서를 그리는 앱(Xshell 등)은 IME 에 알려 준 조합 창 위치가 곧 커서 자리다. 읽기 전용 컨트롤은 그대로 숨긴다.
+            if (caret is null && !readOnly) caret = ImmCaret.Find(gti.hwndFocus, pid, dump);
+        }
+
+        // 그래도 못 찾았고 "모서리에 표시할 앱" 이면 포커스 창의 사각형을 넘겨 왼쪽 아래 모서리에 띄우게 한다.
+        Rectangle? corner = null;
+        if (caret is null && settings.CornerBadgeProcesses.Count > 0 && ProcessFilter.IsExcluded(settings.CornerBadgeProcesses, process))
+        {
+            var host = gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target;
+            if (Native.GetWindowRect(host, out var wr) && wr.Right > wr.Left && wr.Bottom > wr.Top)
+            {
+                corner = wr.ToRectangle();
+                dump?.Append(" corner");
+            }
         }
 
         bool preferTsf = core != IntPtr.Zero || Array.IndexOf(TsfPreferredProcesses, process) >= 0;
@@ -82,7 +98,7 @@ static class ImeReader
             Log.WriteIfChanged($"fg='{Native.ClassName(fg)}' focus='{Native.ClassName(gti.hwndFocus)}' tid={tid} pid={pid} => {state}{dump}");
         }
 
-        return new(state, caret, fg, CapsLock: caps);
+        return new(state, caret, fg, CapsLock: caps, Corner: corner);
     }
 
     /// <summary>

@@ -89,6 +89,30 @@ public sealed class BadgeLayoutTests
     }
 
     [Fact]
+    public void Corner_PutsBadgeInsideBottomLeftOfWindow()
+    {
+        var window = new Rectangle(100, 100, 800, 600);   // Bottom=700
+        var p = BadgeLayout.Corner(window, Badge, 1f, Work);
+        Assert.Equal(new Point(100 + 6, 700 - 6 - 20), p);
+    }
+
+    [Fact]
+    public void Corner_InsetScalesWithDpi()
+    {
+        var window = new Rectangle(100, 100, 800, 600);
+        var p = BadgeLayout.Corner(window, Badge, 2f, Work);
+        Assert.Equal(new Point(100 + 12, 700 - 12 - 20), p);
+    }
+
+    [Fact]
+    public void Corner_ClampedToWorkArea_WhenWindowHangsOffScreen()
+    {
+        var window = new Rectangle(-50, 900, 800, 600);   // 왼쪽·아래로 화면 밖
+        var p = BadgeLayout.Corner(window, Badge, 1f, Work);
+        Assert.Equal(new Point(Work.Left, Work.Bottom - 20), p);
+    }
+
+    [Fact]
     public void ClampedToWorkArea_LeftAndTop_OnSecondaryMonitorWithNegativeOrigin()
     {
         var work = new Rectangle(-1920, -100, 1920, 1000);

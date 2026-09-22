@@ -50,6 +50,7 @@ static class Native
     [DllImport("user32.dll")] public static extern bool GetGUIThreadInfo(uint tid, ref GUITHREADINFO info);
     [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr hWnd, ref POINT pt);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+    [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
     [DllImport("user32.dll")] public static extern IntPtr GetKeyboardLayout(uint tid);
     [DllImport("user32.dll")] public static extern short GetKeyState(int vKey);
     [DllImport("user32.dll")] public static extern bool IsHungAppWindow(IntPtr hWnd);
@@ -127,10 +128,25 @@ static class Native
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     public static extern bool QueryFullProcessImageName(IntPtr hProcess, uint flags, StringBuilder name, ref int size);
 
+    // ── 다른 프로세스 메모리 ──
+    // IME 창에 WM_IME_CONTROL 로 구조체를 받아 오려면 결과 버퍼가 그 프로세스 주소 공간에 있어야 한다(SendMessage 는 포인터를 옮겨 주지 않는다).
+    // 그래서 상대 프로세스에 작은 버퍼를 빌려(VirtualAllocEx) IME 창이 채우게 하고 읽어 온 뒤(ReadProcessMemory) 돌려준다. 쓰기는 하지 않는다.
+    [DllImport("kernel32.dll")] public static extern IntPtr VirtualAllocEx(IntPtr hProcess, IntPtr address, UIntPtr size, uint allocType, uint protect);
+    [DllImport("kernel32.dll")] public static extern bool VirtualFreeEx(IntPtr hProcess, IntPtr address, UIntPtr size, uint freeType);
+    [DllImport("kernel32.dll")] public static extern bool ReadProcessMemory(IntPtr hProcess, IntPtr address, byte[] buffer, UIntPtr size, out UIntPtr read);
+    [DllImport("kernel32.dll")] public static extern uint WaitForSingleObject(IntPtr handle, uint timeoutMs);
+    public const uint PROCESS_VM_OPERATION = 0x0008, PROCESS_VM_READ = 0x0010;
+    public const uint MEM_COMMIT = 0x1000, MEM_RESERVE = 0x2000, MEM_RELEASE = 0x8000, PAGE_READWRITE = 0x04;
+    public const uint WAIT_TIMEOUT = 0x102;
+
     public const uint WM_IME_CONTROL = 0x0283;
     public const uint WM_HOTKEY = 0x0312;
     public const int IMC_GETCONVERSIONMODE = 0x0001;
     public const int IMC_GETOPENSTATUS = 0x0005;
+    public const int IMC_GETCOMPOSITIONFONT = 0x0009;
+    public const int IMC_GETCOMPOSITIONWINDOW = 0x000B;
+    /// <summary>COMPOSITIONFORM.dwStyle. DEFAULT 는 앱이 위치를 정해 주지 않은 것이라 쓸 수 없다.</summary>
+    public const uint CFS_DEFAULT = 0x0000, CFS_RECT = 0x0001, CFS_POINT = 0x0002, CFS_FORCE_POSITION = 0x0020;
     public const uint IME_CMODE_HANGUL = 0x0001;   // == IME_CMODE_NATIVE
     public const uint SMTO_ABORTIFHUNG = 0x0002;
     public const ushort LANG_KOREAN = 0x0412;

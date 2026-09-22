@@ -143,6 +143,10 @@ public static class Strings
         ["exclude.add"] = "추가(&D)",
         ["exclude.remove"] = "삭제(&X)",
         ["exclude.note"] = "실행 파일 이름(.exe 생략 가능). 끝에 * 를 붙이면 앞부분만 맞으면 됩니다.\n예)  mstsc  /  vmware-vmx  /  Unreal*",
+        ["group.corner"] = "커서를 못 찾는 앱 (창 모서리에 표시)",
+        ["corner.add"] = "추가",
+        ["corner.remove"] = "삭제",
+        ["corner.note"] = "자체 커서를 그리는 앱(Xshell 같은 터미널)은 커서 위치를 알 수 없을 때가 있습니다. 이 목록의 앱은\n그럴 때 배지를 입력 창의 왼쪽 아래 모서리에 고정해 띄웁니다(위치 설정 무시). 예)  Xshell*",
 
         // ── 정보 창 ──
         ["about.title"] = "{0} 정보",
@@ -294,6 +298,10 @@ public static class Strings
         ["exclude.add"] = "A&dd",
         ["exclude.remove"] = "Re&move",
         ["exclude.note"] = "Executable name (.exe optional). A trailing * matches by prefix.\ne.g.  mstsc  /  vmware-vmx  /  Unreal*",
+        ["group.corner"] = "Apps without a findable caret (corner badge)",
+        ["corner.add"] = "Add",
+        ["corner.remove"] = "Remove",
+        ["corner.note"] = "Apps that draw their own cursor (terminals such as Xshell) may expose no caret position. For apps in this list\nthe badge is then pinned to the bottom-left corner of the focused window (placement setting ignored). e.g.  Xshell*",
 
         // ── About window ──
         ["about.title"] = "About {0}",

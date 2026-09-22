@@ -41,4 +41,21 @@ public static class BadgeLayout
         pos.Y = Math.Max(area.Top, Math.Min(pos.Y, area.Bottom - bs.Height));
         return pos;
     }
+
+    /// <summary>모서리 배지가 창 가장자리에서 떨어지는 거리(px, 배율 1 기준).</summary>
+    public const int CornerInset = 6;
+
+    /// <summary>
+    /// caret 을 못 찾는 앱(Xshell 같은 터미널)용. 포커스 창 <paramref name="window"/> 의 왼쪽 아래 모서리 안쪽에 배지를 둔다.
+    /// 터미널은 프롬프트가 보통 아래쪽에 있어 그 근처가 눈에 잘 띈다. 위치 설정(위/아래·왼쪽/오른쪽)은 적용하지 않고,
+    /// 작업 영역 밖으로 나가면 안쪽으로 밀어 넣는다.
+    /// </summary>
+    public static Point Corner(Rectangle window, Size badge, float scale, Rectangle workArea)
+    {
+        int inset = (int)Math.Round(CornerInset * scale);
+        var pos = new Point(window.Left + inset, window.Bottom - inset - badge.Height);
+        pos.X = Math.Max(workArea.Left, Math.Min(pos.X, workArea.Right - badge.Width));
+        pos.Y = Math.Max(workArea.Top, Math.Min(pos.Y, workArea.Bottom - badge.Height));
+        return pos;
+    }
 }
