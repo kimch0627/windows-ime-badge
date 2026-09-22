@@ -50,7 +50,6 @@ static class Native
     [DllImport("user32.dll")] public static extern bool GetGUIThreadInfo(uint tid, ref GUITHREADINFO info);
     [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr hWnd, ref POINT pt);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
-    [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
     [DllImport("user32.dll")] public static extern IntPtr GetKeyboardLayout(uint tid);
     [DllImport("user32.dll")] public static extern short GetKeyState(int vKey);
     [DllImport("user32.dll")] public static extern bool IsHungAppWindow(IntPtr hWnd);
@@ -136,11 +135,6 @@ static class Native
     public const uint WM_HOTKEY = 0x0312;
     public const int IMC_GETCONVERSIONMODE = 0x0001;
     public const int IMC_GETOPENSTATUS = 0x0005;
-    // 이 두 하위 명령의 결과 구조체(LOGFONTW, COMPOSITIONFORM)는 user32 가 프로세스 사이로 옮겨 준다. 로컬 버퍼를 넘기면 된다.
-    public const int IMC_GETCOMPOSITIONFONT = 0x0009;
-    public const int IMC_GETCOMPOSITIONWINDOW = 0x000B;
-    /// <summary>COMPOSITIONFORM.dwStyle. DEFAULT 는 앱이 위치를 정해 주지 않은 것이라 쓸 수 없다.</summary>
-    public const uint CFS_DEFAULT = 0x0000, CFS_RECT = 0x0001, CFS_POINT = 0x0002, CFS_FORCE_POSITION = 0x0020;
     public const uint IME_CMODE_HANGUL = 0x0001;   // == IME_CMODE_NATIVE
     public const uint SMTO_ABORTIFHUNG = 0x0002;
     public const ushort LANG_KOREAN = 0x0412;
