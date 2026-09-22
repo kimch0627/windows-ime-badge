@@ -4,12 +4,6 @@
 
 ## [Unreleased]
 
-## [1.2.0] - 2026-09-22
-
-Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을 즉시 따라오는 배지, 영어 UI 를 더하고,
-설정·정보 창을 Windows 11 설정 앱 모양으로 다시 그린 릴리스입니다.
-예전 설정 파일은 그대로 읽히며 새 항목(Caps Lock 표시 = 켜짐, 언어 = 시스템 언어)은 기본값으로 채워집니다.
-
 ### 추가
 - Xshell 처럼 자체 커서를 그리는 앱(Win32 caret 도 UI Automation 텍스트 정보도 없음)에서도 배지가 뜬다.
   - caret 을 찾는 세 번째 경로: 앱이 IME 에 알려 준 조합(composition) 창 위치(`IMC_GETCOMPOSITIONWINDOW`)와 조합 글꼴 높이를 읽는다.
@@ -17,6 +11,14 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
   - 그래도 못 찾으면 "커서를 못 찾는 앱" 목록(설정 창, 기본 `Xshell*`)에 있는 앱은 입력 창의 왼쪽 아래 모서리에 배지를 고정한다.
     목록으로 고르는 이유는 작업 표시줄처럼 글자를 입력하지 않는 곳에는 뜨지 않게 하기 위해서다.
   - `--debug` 로그에 `caret:imm(x,y,h=…)`, `imm:comp(style=…)`, `imm:noaccess`, `corner` 가 남는다.
+
+## [1.2.0] - 2026-09-22
+
+Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을 즉시 따라오는 배지, 영어 UI 를 더하고,
+설정·정보 창을 Windows 11 설정 앱 모양으로 다시 그린 릴리스입니다.
+예전 설정 파일은 그대로 읽히며 새 항목(Caps Lock 표시 = 켜짐, 언어 = 시스템 언어)은 기본값으로 채워집니다.
+
+### 추가
 - Caps Lock 표시. 영문 모드에서 Caps Lock 이 켜져 있으면 배지 글자가 `A` 대신 `ABC` 로, 트레이 아이콘은 `A` 아래에 줄이 생긴다.
   전환 시 펄스 애니메이션과 "점, 바뀔 때 글자" 모양의 글자 표시도 같이 동작한다. 설정 → 모양에서 끌 수 있다(기본 켜짐).
 - TSF 전역 compartment 로 한/영 상태를 읽는 두 번째 경로(`Native/Tsf.cs`). IMM32 가 답하지 못하는 앱(IME 창 없음·응답 없음)에서 대체로 쓰고,
