@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-22
+
+Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을 즉시 따라오는 배지, 영어 UI 를 더한 릴리스입니다.
+예전 설정 파일은 그대로 읽히며 새 항목(Caps Lock 표시 = 켜짐, 언어 = 시스템 언어)은 기본값으로 채워집니다.
+
 ### 추가
 - Caps Lock 표시. 영문 모드에서 Caps Lock 이 켜져 있으면 배지 글자가 `A` 대신 `ABC` 로, 트레이 아이콘은 `A` 아래에 줄이 생긴다.
   전환 시 펄스 애니메이션과 "점, 바뀔 때 글자" 모양의 글자 표시도 같이 동작한다. 설정 → 모양에서 끌 수 있다(기본 켜짐).
@@ -121,7 +126,8 @@
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/kimch0627/windows-ime-badge/compare/v0.7.2...v1.0.0
