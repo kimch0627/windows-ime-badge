@@ -51,6 +51,7 @@ static class Native
     [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr hWnd, ref POINT pt);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
     [DllImport("user32.dll")] public static extern IntPtr GetKeyboardLayout(uint tid);
+    [DllImport("user32.dll")] public static extern short GetKeyState(int vKey);
     [DllImport("user32.dll")] public static extern bool IsHungAppWindow(IntPtr hWnd);
     [DllImport("imm32.dll")] public static extern IntPtr ImmGetDefaultIMEWnd(IntPtr hWnd);
     [DllImport("user32.dll")]
@@ -58,6 +59,8 @@ static class Native
         IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, uint flags, uint timeoutMs, out IntPtr result);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern int GetClassName(IntPtr hWnd, StringBuilder sb, int max);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string? className, string? windowName);
     [DllImport("user32.dll")]
     public static extern IntPtr SetWinEventHook(
         uint eventMin, uint eventMax, IntPtr hmodWinEventProc, WinEventProc proc,
@@ -131,11 +134,20 @@ static class Native
     public const uint IME_CMODE_HANGUL = 0x0001;   // == IME_CMODE_NATIVE
     public const uint SMTO_ABORTIFHUNG = 0x0002;
     public const ushort LANG_KOREAN = 0x0412;
+    public const int VK_CAPITAL = 0x14;
+
+    /// <summary>Caps Lock 이 켜져 있는가. 토글 키는 GetKeyState 의 최하위 비트가 켜짐 상태다(스레드에 상관없이 전역 값).</summary>
+    public static bool IsCapsLockOn() => (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
 
     public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
     public const uint EVENT_OBJECT_FOCUS = 0x8005;
+    public const uint EVENT_OBJECT_LOCATIONCHANGE = 0x800B;      // 창·caret·마우스 포인터 등의 위치 변경. idObject 로 걸러 써야 한다
+    public const uint EVENT_OBJECT_TEXTSELECTIONCHANGED = 0x8014; // UIA 텍스트 컨트롤(Chrome/Electron)의 caret·선택 이동
     public const uint EVENT_OBJECT_IME_CHANGE = 0x8029;
     public const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+    public const int OBJID_WINDOW = 0;
+    public const int OBJID_CARET = -8;
+    public const int OBJID_CURSOR = -9;
 
     public const uint GW_HWNDPREV = 3;           // z-order에서 바로 위(더 앞) 창
     public const int GWL_EXSTYLE = -20;
@@ -163,6 +175,17 @@ static class Native
         var sb = new StringBuilder(128);
         GetClassName(hwnd, sb, sb.Capacity);
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// UWP 앱(설정, 스토어 앱 등)의 활성 창은 껍데기 프로세스(ApplicationFrameHost)의 ApplicationFrameWindow 이고,
+    /// 실제 앱과 IME 상태는 그 안의 Windows.UI.Core.CoreWindow(앱 프로세스 소유)에 있다. 그 자식 창을 돌려준다. UWP 가 아니면 0.
+    /// 비유하면 액자(FrameWindow)가 아니라 그 안의 그림(CoreWindow)에게 물어봐야 한다.
+    /// </summary>
+    public static IntPtr UwpCoreWindow(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero || ClassName(hwnd) != "ApplicationFrameWindow") return IntPtr.Zero;
+        return FindWindowEx(hwnd, IntPtr.Zero, "Windows.UI.Core.CoreWindow", null);
     }
 
     public static bool IsTopmost(IntPtr hwnd) =>

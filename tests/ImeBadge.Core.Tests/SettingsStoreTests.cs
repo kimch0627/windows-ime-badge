@@ -40,6 +40,8 @@ public sealed class SettingsStoreTests : IDisposable
             HideOnFullscreen = false,
             TrayShowsState = false,
             Animate = false,
+            ShowCapsLock = false,
+            Language = UiLanguage.English,
             Hotkey = "Ctrl+Shift+F9",
             LastUpdateCheckUtc = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc),
             SkippedUpdateTag = "v9.9.9",
@@ -56,6 +58,8 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.False(back.HideOnFullscreen);
         Assert.False(back.TrayShowsState);
         Assert.False(back.Animate);
+        Assert.False(back.ShowCapsLock);
+        Assert.Equal(UiLanguage.English, back.Language);
         Assert.Equal("Ctrl+Shift+F9", back.Hotkey);
         Assert.Equal(s.LastUpdateCheckUtc, back.LastUpdateCheckUtc);
         Assert.Equal("v9.9.9", back.SkippedUpdateTag);
@@ -66,8 +70,18 @@ public sealed class SettingsStoreTests : IDisposable
     public void Save_WritesEnumsAsNames()
     {
         var store = new SettingsStore(P("settings.json"));
-        store.Save(new Settings { Style = BadgeStyle.Underline });
-        Assert.Contains("\"Underline\"", File.ReadAllText(P("settings.json")));
+        store.Save(new Settings { Style = BadgeStyle.Underline, Language = UiLanguage.Korean });
+        string json = File.ReadAllText(P("settings.json"));
+        Assert.Contains("\"Underline\"", json);
+        Assert.Contains("\"Korean\"", json);
+    }
+
+    [Fact]
+    public void Normalize_ResetsUndefinedLanguage()
+    {
+        var s = new Settings { Language = (UiLanguage)99 };
+        s.Normalize();
+        Assert.Equal(UiLanguage.Auto, s.Language);
     }
 
     [Fact]
@@ -81,6 +95,8 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(BadgeStyle.Box, s.Style);
         Assert.Equal(160, s.SizePercent);
         Assert.True(s.HideOnFullscreen);                 // 새 항목은 기본값
+        Assert.True(s.ShowCapsLock);
+        Assert.Equal(UiLanguage.Auto, s.Language);
         Assert.True(File.Exists(P("new/settings.json"))); // 새 위치에 복사됨
         Assert.True(File.Exists(P("imebadge.settings.json")));
     }

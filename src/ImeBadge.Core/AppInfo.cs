@@ -7,7 +7,8 @@ namespace ImeBadge;
 public static class AppInfo
 {
     public const string ProductName = "ImeBadge";
-    public const string DisplayName = "ImeBadge (한/영 배지)";
+    /// <summary>사용자에게 보이는 이름. 언어를 따르므로 <see cref="Strings"/> 의 "app.name" 을 쓴다.</summary>
+    public static string DisplayName => Strings.Get("app.name");
     public const string RepoOwner = "kimch0627";
     public const string RepoName = "windows-ime-badge";
     public const string RepoUrl = "https://github.com/" + RepoOwner + "/" + RepoName;
