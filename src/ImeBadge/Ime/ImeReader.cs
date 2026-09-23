@@ -99,8 +99,8 @@ static class ImeReader
 
         bool preferTsf = core != IntPtr.Zero || Array.IndexOf(TsfPreferredProcesses, process) >= 0;
         var state = ReadImeState(target, gti.hwndFocus, tid, preferTsf, dump);
-        // Caps Lock 은 한글 입력에 영향이 없으므로 영문 모드에서만 본다.
-        bool caps = settings.ShowCapsLock && state == ImeState.English && Native.IsCapsLockOn();
+        // Caps Lock 은 배지 글자로 보여 준다(한 → 꺆, a → A). 한글 모드에서도 켜져 있으면 영문 대문자가 입력되므로 함께 본다.
+        bool caps = settings.ShowCapsLock && state is (ImeState.English or ImeState.Hangul) && Native.IsCapsLockOn();
         if (caps) dump?.Append(" caps");
 
         if (dump is not null)

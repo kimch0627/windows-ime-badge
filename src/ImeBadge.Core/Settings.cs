@@ -26,8 +26,15 @@ public sealed class Settings
     public string EnglishColor { get; set; } = DefaultEnglishColor;
     /// <summary>나타날 때 페이드인, 한/영이 바뀔 때 잠깐 커졌다 작아지는 효과. Windows 의 "애니메이션 효과" 가 꺼져 있으면 무시된다.</summary>
     public bool Animate { get; set; } = true;
-    /// <summary>영문 모드에서 Caps Lock 이 켜져 있으면 배지 글자를 "A" 대신 "ABC" 로 보여 준다(트레이 아이콘은 "A" 밑에 줄).</summary>
+    /// <summary>
+    /// Caps Lock 상태를 배지 글자로 구별한다: 한글 "한"/"꺆", 영문 "a"/"A", 켜져 있으면 글자 아래 밑줄(<see cref="BadgeText"/>).
+    /// 끄면 항상 "한"/"A". 트레이 아이콘은 이 설정과 상관없이 항상 "한"/"A".
+    /// </summary>
     public bool ShowCapsLock { get; set; } = true;
+    /// <summary>디자인 테마 id(<see cref="DesignThemes"/>). 문자열이라 구버전이 읽어도 무시될 뿐 설정이 초기화되지 않는다.</summary>
+    public string Theme { get; set; } = DesignThemes.ClassicId;
+    /// <summary>캐릭터 배지 모양(<see cref="BadgeCharacters"/>). 빈 문자열이면 <see cref="Style"/> 를 따른다. 고르면 Style 은 Pill 로 둔다(구버전 호환).</summary>
+    public string Character { get; set; } = BadgeCharacters.None;
 
     // ── 동작 ──
     /// <summary>활성 창이 모니터 전체를 덮는(게임·전체 화면 동영상) 경우 배지를 숨긴다.</summary>
@@ -79,6 +86,8 @@ public sealed class Settings
         if (!Enum.IsDefined(Language)) Language = UiLanguage.Auto;
         if (!ColorHex.TryParse(HangulColor, out _)) HangulColor = DefaultHangulColor;
         if (!ColorHex.TryParse(EnglishColor, out _)) EnglishColor = DefaultEnglishColor;
+        Theme = DesignThemes.Get(Theme).Id;
+        Character = BadgeCharacters.Normalize(Character);
         Hotkey = HotkeySpec.TryParse(Hotkey, out var hk) ? hk.ToString() : HotkeySpec.Default.ToString();
         ExcludedProcesses ??= new();
         ExcludedProcesses.RemoveAll(string.IsNullOrWhiteSpace);
@@ -99,6 +108,7 @@ public sealed class Settings
         Style = other.Style; Placement = other.Placement;
         SizePercent = other.SizePercent; OpacityPercent = other.OpacityPercent;
         HangulColor = other.HangulColor; EnglishColor = other.EnglishColor; Animate = other.Animate; ShowCapsLock = other.ShowCapsLock;
+        Theme = other.Theme; Character = other.Character;
         HideOnFullscreen = other.HideOnFullscreen;
         ExcludedProcesses = new List<string>(other.ExcludedProcesses);
         CornerBadgeProcesses = new List<string>(other.CornerBadgeProcesses);
@@ -228,4 +238,31 @@ public static class ColorHex
     /// 그래서 휘도 임계값을 쓴다. 0.36 은 Windows 강조색 규칙과 맞는 값이다(파랑·빨강·청록 → 흰 글자, 노랑·금색 → 검은 글자).
     /// </summary>
     public static bool PrefersWhiteText(int argb) => RelativeLuminance(argb) < 0.36;
+
+    /// <summary>두 색을 섞는다. t=0 이면 a, t=1 이면 b. 알파는 a 의 것을 쓴다.</summary>
+    public static int Mix(int a, int b, double t)
+    {
+        static int Ch(int c, int shift) => (c >> shift) & 0xFF;
+        int M(int shift) => (int)Math.Round(Ch(a, shift) + (Ch(b, shift) - Ch(a, shift)) * t);
+        return unchecked((int)((uint)a & 0xFF000000)) | (M(16) << 16) | (M(8) << 8) | M(0);
+    }
+
+    /// <summary>RGB 를 f 배 한다(0~1: 어둡게). 색상(hue)은 그대로 두고 명도만 낮춘다.</summary>
+    public static int Darken(int argb, double f) => Mix(unchecked((int)((uint)argb & 0xFF000000)), argb, Math.Clamp(f, 0, 1));
+
+    /// <summary>
+    /// 부드러운 테마의 글자색. 흰 글자가 4.5:1(WCAG AA) 이상이면 흰색, 아니면 배지 색을 진하게 만든 색 중에서
+    /// 4.5:1 을 넘는 가장 밝은 것(색감이 가장 많이 남는 것). 파스텔 핑크 위 검정 대신 딥 플럼 글자가 된다.
+    /// </summary>
+    public static int SoftTextOn(int argb)
+    {
+        const int White = unchecked((int)0xFFFFFFFF);
+        if (ContrastRatio(argb, White) >= 4.5) return White;
+        for (int step = 31; step >= 0; step--)   // f = 0.62, 0.60, ... 0
+        {
+            int c = Darken(argb, step * 0.02);
+            if (ContrastRatio(argb, c) >= 4.5) return unchecked((int)0xFF000000) | (c & 0xFFFFFF);
+        }
+        return unchecked((int)0xFF000000);
+    }
 }

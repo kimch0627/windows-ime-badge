@@ -22,7 +22,7 @@ sealed class SettingsForm : Form
     readonly bool _builtKorean = Strings.IsKorean;   // 이 창을 만들 때의 언어. 바뀌면 새 창으로 갈아 끼운다
     bool _autostart, _dirty, _loading, _detached;
 
-    TilePicker _style = null!, _placement = null!;
+    TilePicker _theme = null!, _style = null!, _character = null!, _placement = null!;
     AccentSlider _size = null!, _opacity = null!;
     NumericUpDown _poll = null!;
     ComboBox _language = null!;
@@ -71,7 +71,19 @@ sealed class SettingsForm : Form
         Build();
         LoadDraftIntoControls();
         _dirty = dirty;   // 컨트롤 초기화로 생긴 변경 알림은 실제 변경이 아니다
+        _painted = Theme.Design = DesignThemes.Get(_draft.Theme);
         Theme.Apply(this);
+    }
+
+    /// <summary>이 창을 마지막으로 칠한 테마. 편집 중 테마가 바뀌면 창 전체를 새 색으로 다시 칠한다(<see cref="Recolor"/>).</summary>
+    DesignTheme _painted;
+
+    /// <summary>창과 모든 컨트롤을 현재 테마 색으로 다시 칠한다. 컨트롤을 새로 만들지 않으므로 편집 중인 값·포커스가 그대로다.</summary>
+    void Recolor()
+    {
+        Theme.Apply(this);
+        Theme.ApplyTitleBar(this);
+        Invalidate(true);
     }
 
     /// <summary>같은 편집 상태(기준값·자동 시작 체크)를 이어받는 새 창을 현재 언어로 만든다. 위치도 그대로.</summary>
@@ -132,7 +144,13 @@ sealed class SettingsForm : Form
         // 모드리스(Show) 창은 DialogResult 만으로는 닫히지 않는다. 명시적으로 닫는다.
         ok.Click += (_, _) => { Apply(); DialogResult = DialogResult.OK; Close(); };
         cancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
-        reset.Click += (_, _) => { _draft.CopyFrom(new Settings()); LoadDraftIntoControls(); };
+        reset.Click += (_, _) =>
+        {
+            // 고른 테마는 그대로 두고, 나머지와 배지 색을 그 테마의 기본값으로.
+            var design = DesignThemes.Get(_draft.Theme);
+            _draft.CopyFrom(new Settings { Theme = design.Id, HangulColor = design.HangulColor, EnglishColor = design.EnglishColor });
+            LoadDraftIntoControls();
+        };
         buttons.Controls.Add(cancel); buttons.Controls.Add(ok); buttons.Controls.Add(reset);
         root.Controls.Add(buttons, 0, 2);
         root.SetColumnSpan(buttons, 2);
@@ -159,12 +177,38 @@ sealed class SettingsForm : Form
         var g = NewGroup(Strings.Get("group.look"), Strings.Get("group.look.desc"));
         var t = NewTable(g);
 
-        // 배지 모양: 실제 렌더러로 그린 타일에서 고른다.
+        // 테마: 배지 색·질감과 이 창의 색을 한 벌로 바꾼다. 타일에는 그 테마의 한/영 배지를 실제 렌더러로 그린다.
+        AddRow(t, null, FieldLabel(Strings.Get("look.theme")));
+        _theme = new TilePicker { TileSize = new Size(68, 58) };
+        _theme.SetTiles(DesignThemes.All.Select(d => new TilePicker.Tile(d.Id, Strings.Get("theme." + d.Id), (gr, r, p) => DrawThemeTile(gr, r, d))));
+        _theme.SelectedChanged += (_, _) => { if (_theme.SelectedValue is string id && id != _draft.Theme) ChooseTheme(DesignThemes.Get(id)); };
+        AddRow(t, null, _theme);
+        _tips.SetToolTip(_theme, Strings.Get("look.theme.tip"));
+
+        // 배지 모양: 실제 렌더러로 그린 타일에서 고른다. 윗줄은 기본 모양, 아랫줄은 캐릭터. 둘 중 한 줄에서만 선택된다.
         AddRow(t, null, FieldLabel(Strings.Get("look.style")));
         _style = new TilePicker { TileSize = new Size(68, 58) };
         _style.SetTiles(Labels.Styles.Select(s => new TilePicker.Tile(s.value, ShortStyle(s.value), (gr, r, p) => DrawStyleTile(gr, r, p, s.value))));
-        _style.SelectedChanged += (_, _) => { if (_style.SelectedValue is BadgeStyle v) { _draft.Style = v; Touch(); } };
+        _style.SelectedChanged += (_, _) =>
+        {
+            if (_style.SelectedValue is not BadgeStyle v) return;
+            _draft.Style = v;
+            _draft.Character = BadgeCharacters.None;
+            _character.SelectedValue = null;
+            Touch();
+        };
         AddRow(t, null, _style);
+        _character = new TilePicker { TileSize = new Size(68, 58) };
+        _character.SetTiles(Labels.Characters.Select(c => new TilePicker.Tile(c.id, c.label, (gr, r, p) => DrawCharacterTile(gr, r, p, c.id))));
+        _character.SelectedChanged += (_, _) =>
+        {
+            if (_character.SelectedValue is not string id) return;
+            _draft.Character = id;
+            _draft.Style = BadgeStyle.Pill;   // 구버전으로 되돌려도 둥근 배지로 보이게
+            _style.SelectedValue = null;
+            Touch();
+        };
+        AddRow(t, null, _character);
 
         AddRow(t, null, FieldLabel(Strings.Get("look.placement")));
         _placement = new TilePicker { TileSize = new Size(68, 58) };
@@ -300,11 +344,39 @@ sealed class SettingsForm : Form
         BadgePlacement.AboveLeft => "place.short.aboveLeft", _ => "place.short.belowLeft",
     });
 
+    /// <summary>테마 타일: 그 테마의 창 바탕 위에 한글·영문 배지를 나란히(테마 기본색, 실제 렌더러).</summary>
+    void DrawThemeTile(Graphics g, RectangleF r, DesignTheme design)
+    {
+        float dpi = DeviceDpi / 96f;
+        var bg = Color.FromArgb(Theme.IsDark ? design.Dark.Window : design.Light.Window);
+        using (var path = RoundedPath(r, 4 * dpi))
+        using (var brush = new SolidBrush(bg))
+            g.FillPath(brush, path);
+        var theme = BadgeTheme.Of(design);
+        using var ko = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Pill, 0.72f * dpi, theme);
+        using var en = BadgeRenderer.Render(ImeState.English, BadgeStyle.Pill, 0.72f * dpi, theme);
+        float gap = 1 * dpi, total = ko.Width + gap + en.Width;
+        float x = r.Left + (r.Width - total) / 2, y = r.Top + (r.Height - ko.Height) / 2;
+        g.DrawImage(ko, new RectangleF(x, y, ko.Width, ko.Height), new Rectangle(Point.Empty, ko.Size), GraphicsUnit.Pixel);
+        g.DrawImage(en, new RectangleF(x + ko.Width + gap, y, en.Width, en.Height), new Rectangle(Point.Empty, en.Size), GraphicsUnit.Pixel);
+    }
+
+    /// <summary>캐릭터 타일: 짧은 caret 오른쪽에 그 캐릭터의 한글 배지. 귀가 있어 둥근 배지보다 조금 작게 그린다.</summary>
+    void DrawCharacterTile(Graphics g, RectangleF r, Theme.Palette p, string character)
+    {
+        float dpi = DeviceDpi / 96f;
+        using var bmp = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Pill, 0.78f * dpi, BadgeTheme.From(_draft) with { Character = character }, 100);
+        var caret = new Rectangle((int)(r.Left + 6 * dpi), (int)(r.Top + r.Height / 2 - 8 * dpi), 1, (int)(16 * dpi));
+        using (var pen = new Pen(p.Text, Math.Max(1f, dpi))) g.DrawLine(pen, caret.Left, caret.Top, caret.Left, caret.Bottom);
+        var pos = new Point(caret.Right + (int)(3 * dpi), (int)(r.Top + r.Height / 2 - bmp.Height / 2f));
+        g.DrawImage(bmp, new Rectangle(pos, bmp.Size), new Rectangle(Point.Empty, bmp.Size), GraphicsUnit.Pixel);
+    }
+
     /// <summary>모양 타일: 짧은 caret 오른쪽에 그 모양의 한글 배지를 실제 렌더러로 그린다.</summary>
     void DrawStyleTile(Graphics g, RectangleF r, Theme.Palette p, BadgeStyle style)
     {
         float dpi = DeviceDpi / 96f;
-        var theme = BadgeTheme.From(_draft);
+        var theme = BadgeTheme.From(_draft) with { Character = BadgeCharacters.None };
         var draw = style == BadgeStyle.DotFlash ? BadgeStyle.Pill : style;
         using var bmp = BadgeRenderer.Render(ImeState.Hangul, draw, 0.85f * dpi, theme, 100);
         var caret = new Rectangle((int)(r.Left + 6 * dpi), (int)(r.Top + r.Height / 2 - 8 * dpi), 1, (int)(16 * dpi));
@@ -322,7 +394,7 @@ sealed class SettingsForm : Form
         float dpi = DeviceDpi / 96f;
         var caret = new Rectangle((int)(r.Left + r.Width / 2), (int)(r.Top + r.Height / 2 - 8 * dpi), 1, (int)(16 * dpi));
         using (var pen = new Pen(p.Text, Math.Max(1f, dpi))) g.DrawLine(pen, caret.Left, caret.Top, caret.Left, caret.Bottom);
-        using var bmp = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Dot, dpi, BadgeTheme.From(_draft), 100);
+        using var bmp = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Dot, dpi, BadgeTheme.From(_draft) with { Character = BadgeCharacters.None }, 100);
         var pos = BadgeLayout.Compute(new LayoutInput(caret, bmp.Size, BadgeStyle.Dot, placement, dpi, Rectangle.Round(r)));
         g.DrawImage(bmp, new Rectangle(pos, bmp.Size), new Rectangle(Point.Empty, bmp.Size), GraphicsUnit.Pixel);
     }
@@ -415,7 +487,13 @@ sealed class SettingsForm : Form
 
     void FillControls()
     {
-        _style.SelectedValue = _draft.Style;
+        var design = DesignThemes.Get(_draft.Theme);
+        _theme.SelectedValue = design.Id;
+        _hangulColor.Presets = design.Swatches;
+        _englishColor.Presets = design.Swatches;
+        bool character = _draft.Character.Length > 0;
+        _style.SelectedValue = character ? null : _draft.Style;
+        _character.SelectedValue = character ? _draft.Character : null;
         _placement.SelectedValue = _draft.Placement;
         _size.Value = _draft.SizePercent;
         _opacity.Value = _draft.OpacityPercent;
@@ -437,6 +515,15 @@ sealed class SettingsForm : Form
         _corner.Reload();
     }
 
+    /// <summary>테마를 고르면 배지 색도 그 테마의 기본색으로, 견본도 그 테마의 것으로 바꾼다. 창은 <see cref="Touch"/> 에서 다시 칠한다.</summary>
+    void ChooseTheme(DesignTheme design)
+    {
+        _draft.Theme = design.Id;
+        _draft.HangulColor = design.HangulColor;
+        _draft.EnglishColor = design.EnglishColor;
+        LoadDraftIntoControls();
+    }
+
     /// <summary>편집 내용을 실제 설정에 복사하고 알린다. 창 밖 배지가 바로 바뀐다.</summary>
     void Touch()
     {
@@ -445,7 +532,10 @@ sealed class SettingsForm : Form
         _live.CopyFrom(_draft);
         _dirty = true;
         Changed?.Invoke();   // BadgeForm 이 여기서 Strings.Setting 을 새 언어로 맞춘다
+        var design = DesignThemes.Get(_draft.Theme);
+        if (!ReferenceEquals(design, _painted)) { _painted = Theme.Design = design; Recolor(); }
         _style?.Invalidate();       // 타일은 배지 색을 쓴다
+        _character?.Invalidate();
         _placement?.Invalidate();
         RefreshPreview();
         if (Strings.IsKorean != _builtKorean) LanguageChanged?.Invoke();
@@ -533,7 +623,7 @@ sealed class SettingsForm : Form
             int lineH = (int)Math.Ceiling(font.GetHeight(g));
 
             // 1) 글과 caret 을 먼저 모두 그린다. 배지는 그 위에 얹혀야 하므로(실제로도 배지는 최상위 창이다) 나중에 그린다.
-            //    Caps Lock 표시를 켰으면 영문 줄을 대문자 예시로 바꿔 "ABC" 배지도 미리 보여 준다.
+            //    Caps Lock 표시를 켰으면 영문 줄을 대문자 예시로 바꿔 "A + 밑줄" 배지도 미리 보여 준다(한글 줄은 평소 모습).
             var carets = new List<(ImeState state, bool caps, Rectangle caret)>();
             for (int r = 0; r < PreviewRows.Length; r++)
             {

@@ -17,6 +17,16 @@ static class Labels
         (Strings.Get("style.dotFlash"), BadgeStyle.DotFlash),
     };
 
+    /// <summary>캐릭터 모양(<see cref="BadgeCharacters"/>). 트레이 메뉴와 설정 창이 같은 순서로 보여 준다.</summary>
+    public static (string label, string id)[] Characters => new[]
+    {
+        (Strings.Get("style.cat"), BadgeCharacters.Cat),
+        (Strings.Get("style.dog"), BadgeCharacters.Dog),
+        (Strings.Get("style.heart"), BadgeCharacters.Heart),
+        (Strings.Get("style.cloud"), BadgeCharacters.Cloud),
+        (Strings.Get("style.star"), BadgeCharacters.Star),
+    };
+
     public static (string label, BadgePlacement value)[] Placements => new[]
     {
         (Strings.Get("place.aboveRight"), BadgePlacement.AboveRight),

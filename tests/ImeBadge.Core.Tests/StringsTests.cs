@@ -48,7 +48,7 @@ public sealed class StringsTests
     [InlineData(UiLanguage.English)]
     public void TrayMenu_MnemonicsAreUnique(UiLanguage lang)
     {
-        AssertUniqueMnemonics(Strings.Table(lang), "menu.pause", "menu.settings", "menu.style", "menu.placement", "menu.size",
+        AssertUniqueMnemonics(Strings.Table(lang), "menu.pause", "menu.settings", "menu.theme", "menu.style", "menu.placement", "menu.size",
             "menu.opacity", "menu.autostart", "menu.checkUpdates", "menu.about", "menu.exit");
     }
 
@@ -58,7 +58,7 @@ public sealed class StringsTests
     [InlineData(UiLanguage.English)]
     public void SettingsWindow_MnemonicsAreUnique(UiLanguage lang)
     {
-        AssertUniqueMnemonics(Strings.Table(lang), "settings.reset", "look.style", "look.placement", "look.size", "look.opacity",
+        AssertUniqueMnemonics(Strings.Table(lang), "settings.reset", "look.theme", "look.style", "look.placement", "look.size", "look.opacity",
             "look.hangulColor", "look.englishColor", "look.animate", "look.capsLock", "behavior.autostart", "behavior.fullscreen",
             "behavior.trayState", "behavior.hotkey", "behavior.updates", "behavior.poll", "behavior.language", "exclude.add", "exclude.remove");
     }
