@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace ImeBadge;
@@ -316,7 +317,7 @@ sealed class AccentButton : ThemedControl, IButtonControl
         var p = Palette;
         int alpha = Enabled ? 255 : 90;
         var r = new RectangleF(0.5f, 0.5f, Width - 1, Height - 1);
-        using var path = Rounded(r, Px(4));
+        using var path = Rounded(r, Px(Palette.Radius / 2));
 
         Color fill, text, border;
         if (Primary)
@@ -339,7 +340,7 @@ sealed class AccentButton : ThemedControl, IButtonControl
                 g.DrawLine(bottom, r.Left + Px(4), r.Bottom, r.Right - Px(4), r.Bottom);
 
         TextRenderer.DrawText(g, Text, Font, new Rectangle(0, 0, Width, Height), Alpha(text, alpha), TextFlags(TextFormatFlags.HorizontalCenter));
-        DrawFocusRing(g, r, Px(4));
+        DrawFocusRing(g, r, Px(Palette.Radius / 2));
     }
 }
 
@@ -437,7 +438,7 @@ sealed class TilePicker : ThemedControl
         {
             var r = TileRect(i);
             bool sel = i == _selected, hot = i == _hot;
-            using var path = Rounded(new RectangleF(r.X + 0.5f, r.Y + 0.5f, r.Width - 1, r.Height - 1), Px(6));
+            using var path = Rounded(new RectangleF(r.X + 0.5f, r.Y + 0.5f, r.Width - 1, r.Height - 1), Px(Palette.Radius - 2));
             using (var fill = new SolidBrush(hot && !sel ? p.Hover : p.Input)) g.FillPath(fill, path);
             using (var pen = new Pen(sel ? p.Accent : p.Border, Px(sel ? 2 : 1))) g.DrawPath(pen, path);
 
@@ -450,24 +451,33 @@ sealed class TilePicker : ThemedControl
             var labelRect = new Rectangle((int)r.X, (int)(r.Bottom - Px(LabelH) - Px(4)), (int)r.Width, Px(LabelH));
             TextRenderer.DrawText(g, _tiles[i].Label, labelFont, labelRect, sel ? p.Text : p.SubtleText,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
-            if (sel) DrawFocusRing(g, r, Px(6));
+            if (sel) DrawFocusRing(g, r, Px(Palette.Radius - 2));
         }
     }
 }
 
 /// <summary>
-/// 색 견본 팔레트. Windows 강조색 계열 11개와 "사용자 지정"(색 대화상자) 하나. 선택된 견본은 글자색 고리로 표시한다.
-/// 선택된 색이 견본에 없으면 사용자 지정 견본이 그 색으로 칠해진다.
+/// 색 견본 팔레트. 고른 디자인 테마의 견본 11개(클래식은 Windows 강조색 계열)와 "사용자 지정"(색 대화상자) 하나.
+/// 선택된 견본은 글자색 고리로 표시한다. 선택된 색이 견본에 없으면 사용자 지정 견본이 그 색으로 칠해진다.
 /// </summary>
 sealed class ColorSwatches : ThemedControl
 {
-    static readonly string[] Presets =
-    {
-        "#0067C0", "#0099BC", "#00B294", "#10893E", "#8E8CD8", "#744DA9",
-        "#E3008C", "#E74856", "#CA5010", "#FFB900", "#3C3C3C",
-    };
+    string[] _presets = DesignThemes.Classic.Swatches.ToArray();
     const int Swatch = 22, Gap = 6;
-    string _hex = Presets[0];
+    string _hex = DesignThemes.Classic.Swatches[0];
+
+    /// <summary>견본 색 목록. 테마를 바꾸면 그 테마의 견본으로 갈아 끼운다. 개수가 바뀌면 크기도 다시 잡는다.</summary>
+    public IReadOnlyList<string> Presets
+    {
+        get => _presets;
+        set
+        {
+            if (value.Count == 0 || value.SequenceEqual(_presets)) return;
+            _presets = value.ToArray();
+            Size = GetPreferredSize(Size.Empty);
+            Invalidate();
+        }
+    }
     int _hot = -1;
 
     public event EventHandler? ColorChanged;
@@ -477,7 +487,7 @@ sealed class ColorSwatches : ThemedControl
         get => _hex;
         set
         {
-            string v = ColorHex.TryParse(value, out int argb) ? ColorHex.ToHex(argb) : Presets[0];
+            string v = ColorHex.TryParse(value, out int argb) ? ColorHex.ToHex(argb) : _presets[0];
             if (string.Equals(v, _hex, StringComparison.OrdinalIgnoreCase)) return;
             _hex = v;
             Invalidate();
@@ -487,12 +497,12 @@ sealed class ColorSwatches : ThemedControl
 
     public ColorSwatches() { Cursor = Cursors.Hand; AutoSize = true; Size = GetPreferredSize(Size.Empty); }   // 크기는 레이아웃이 GetPreferredSize 로 다시 정한다
 
-    int Count => Presets.Length + 1;
+    int Count => _presets.Length + 1;
     public override Size GetPreferredSize(Size proposed) => new(Count * Px(Swatch) + (Count - 1) * Px(Gap) + Px(6), Px(Swatch) + Px(6));
 
     RectangleF Rect(int i) => new(Px(3) + i * (Px(Swatch) + Px(Gap)), Px(3), Px(Swatch), Px(Swatch));
-    int PresetIndex => Array.FindIndex(Presets, x => string.Equals(x, _hex, StringComparison.OrdinalIgnoreCase));
-    int SelectedIndex => PresetIndex >= 0 ? PresetIndex : Presets.Length;
+    int PresetIndex => Array.FindIndex(_presets, x => string.Equals(x, _hex, StringComparison.OrdinalIgnoreCase));
+    int SelectedIndex => PresetIndex >= 0 ? PresetIndex : _presets.Length;
 
     int HitTest(Point pt)
     {
@@ -503,7 +513,7 @@ sealed class ColorSwatches : ThemedControl
     void Pick(int i)
     {
         if (i < 0) return;
-        if (i < Presets.Length) { Hex = Presets[i]; return; }
+        if (i < _presets.Length) { Hex = _presets[i]; return; }
         using var dlg = new ColorDialog { Color = Color.FromArgb(ColorHex.TryParse(_hex, out int a) ? a : unchecked((int)0xFF000000)), FullOpen = true };
         if (dlg.ShowDialog(FindForm()) == DialogResult.OK) Hex = ColorHex.ToHex(dlg.Color.ToArgb());
     }
@@ -523,9 +533,9 @@ sealed class ColorSwatches : ThemedControl
         int i = SelectedIndex;
         switch (e.KeyCode)
         {
-            case Keys.Left: Pick(Math.Max(0, Math.Min(i, Presets.Length - 1) - 1)); e.Handled = true; break;
-            case Keys.Right: Pick(Math.Min(Presets.Length - 1, i + 1)); e.Handled = true; break;
-            case Keys.Space or Keys.Enter: Pick(Presets.Length); e.Handled = true; break;
+            case Keys.Left: Pick(Math.Max(0, Math.Min(i, _presets.Length - 1) - 1)); e.Handled = true; break;
+            case Keys.Right: Pick(Math.Min(_presets.Length - 1, i + 1)); e.Handled = true; break;
+            case Keys.Space or Keys.Enter: Pick(_presets.Length); e.Handled = true; break;
         }
         base.OnKeyDown(e);
     }
@@ -541,9 +551,9 @@ sealed class ColorSwatches : ThemedControl
         {
             var r = Rect(i);
             if (i == _hot && i != sel) r.Inflate(Px(1), Px(1));
-            if (i < Presets.Length)
+            if (i < _presets.Length)
             {
-                ColorHex.TryParse(Presets[i], out int argb);
+                ColorHex.TryParse(_presets[i], out int argb);
                 using var b = new SolidBrush(Color.FromArgb(argb));
                 g.FillEllipse(b, r);
             }

@@ -48,7 +48,7 @@ sealed class BadgeForm : Form
     ImeState _lastState = ImeState.Unknown;
     bool _lastCaps;
     DateTime _flashUntil = DateTime.MinValue;
-    (ImeState state, bool caps, BadgeStyle style, float scale, int opacity, string hangul, string english) _renderKey;
+    (ImeState state, bool caps, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character) _renderKey;
     Size _bitmapSize;
     Point _lastPos = new(int.MinValue, int.MinValue);
     IntPtr _lastFg;
@@ -82,6 +82,7 @@ sealed class BadgeForm : Form
         Size = new Size(1, 1);
         Text = AppInfo.ProductName;
         ResetRenderKey();
+        _appliedDesign = Theme.Design = DesignThemes.Get(_settings.Theme);   // 메뉴·창을 만들기 전에 테마 색을 정한다
 
         _tray = new NotifyIcon
         {
@@ -194,6 +195,8 @@ sealed class BadgeForm : Form
         menu.Items.Add(new ToolStripSeparator());
 
         _glyphs.Clear();   // 언어가 바뀌어 메뉴를 다시 만들 때 옛 항목을 버린다
+        foreach (var item in _previews.Keys) { item.Image?.Dispose(); item.Image = null; }
+        _previews.Clear();
         _pauseItem = new ToolStripMenuItem(Strings.Get("menu.pause"), null, (_, _) => TogglePause()) { ShortcutKeyDisplayString = _settings.HotkeyEnabled ? _settings.Hotkey : null };
         _glyphs[_pauseItem] = MenuIcons.Pause;
         menu.Items.Add(_pauseItem);
@@ -204,9 +207,36 @@ sealed class BadgeForm : Form
         menu.Items.Add(settingsItem);
         menu.Items.Add(new ToolStripSeparator());
 
+        // 테마·모양 목록은 글자 대신 실제 배지 그림으로 보여 준다(메뉴를 열 때마다 지금 색으로 다시 그림, RefreshPreviews).
+        var theme = new ToolStripMenuItem(Strings.Get("menu.theme"));
+        theme.DropDown.ImageScalingSize = PreviewSize(menu);
+        foreach (var d in DesignThemes.All)
+        {
+            var design = d;
+            var item = AddRadio(theme, Strings.Get("theme." + design.Id), () => _settings.Theme == design.Id, () => ApplyDesignTheme(design));
+            _previews[item] = size => MenuPreview(BadgeTheme.Of(design), BadgeStyle.Pill, size);
+        }
+        _glyphs[theme] = MenuIcons.Theme;
+        menu.Items.Add(theme);
+
         var shape = new ToolStripMenuItem(Strings.Get("menu.style"));
+        shape.DropDown.ImageScalingSize = PreviewSize(menu);
+        shape.DropDownItems.Add(MenuHeader("menu.style.basic"));
         foreach (var (label, value) in Labels.Styles)
-            AddRadio(shape, label, () => _settings.Style == value, () => _settings.Style = value);
+        {
+            var item = AddRadio(shape, label, () => _settings.Character.Length == 0 && _settings.Style == value,
+                () => { _settings.Style = value; _settings.Character = BadgeCharacters.None; });
+            _previews[item] = size => MenuPreview(BadgeTheme.From(_settings) with { Character = BadgeCharacters.None }, value, size);
+        }
+        shape.DropDownItems.Add(new ToolStripSeparator());
+        shape.DropDownItems.Add(MenuHeader("menu.style.characters"));
+        foreach (var (label, id) in Labels.Characters)
+        {
+            // 캐릭터를 고르면 Style 은 둥근 배지로 둔다. 구버전으로 되돌려도 둥근 배지로 보인다.
+            var item = AddRadio(shape, label, () => _settings.Character == id,
+                () => { _settings.Character = id; _settings.Style = BadgeStyle.Pill; });
+            _previews[item] = size => MenuPreview(BadgeTheme.From(_settings) with { Character = id }, BadgeStyle.Pill, size);
+        }
         _glyphs[shape] = MenuIcons.Shape;
         menu.Items.Add(shape);
 
@@ -248,6 +278,7 @@ sealed class BadgeForm : Form
             RefreshChecks(menu.Items);
             _statusItem.Text = Strings.Format("menu.current", StateText(_trayState, _trayCaps));
             RefreshStatusImage();
+            RefreshPreviews();
             _pauseItem.Checked = _paused;
             _autostartItem.Checked = Autostart.IsEnabled();
         };
@@ -257,13 +288,62 @@ sealed class BadgeForm : Form
 
     // 메뉴 항목 ↔ 아이콘 글리프. 테마가 바뀌면 글자색으로 다시 그린다.
     readonly Dictionary<ToolStripItem, string> _glyphs = new();
+    // 메뉴 항목 ↔ 배지 미리보기 그림(테마·모양 목록). 색·테마가 바뀔 수 있으므로 메뉴를 열 때마다 다시 그린다.
+    readonly Dictionary<ToolStripItem, Func<Size, Bitmap>> _previews = new();
+
+    /// <summary>미리보기 그림 칸의 크기. 기본 16px 칸은 배지를 알아보기에 너무 작다.</summary>
+    static Size PreviewSize(Control menu)
+    {
+        float dpi = menu.DeviceDpi / 96f;
+        return new Size((int)Math.Round(34 * dpi), (int)Math.Round(24 * dpi));
+    }
+
+    void RefreshPreviews()
+    {
+        foreach (var (item, make) in _previews)
+        {
+            var old = item.Image;
+            item.Image = make(item.Owner?.ImageScalingSize ?? new Size(34, 24));
+            old?.Dispose();
+        }
+    }
+
+    /// <summary>실제 렌더러로 그린 한글 배지를 칸 가운데에 맞춰 넣는다. 칸보다 크면(캐릭터 귀 등) 줄인다.</summary>
+    static Bitmap MenuPreview(in BadgeTheme theme, BadgeStyle style, Size cell)
+    {
+        if (style == BadgeStyle.DotFlash) style = BadgeStyle.Pill;
+        using var badge = BadgeRenderer.Render(ImeState.Hangul, style, cell.Height / 26f, theme);
+        var bmp = new Bitmap(cell.Width, cell.Height);
+        using var g = Graphics.FromImage(bmp);
+        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+        float k = Math.Min(1f, Math.Min(cell.Width / (float)badge.Width, cell.Height / (float)badge.Height));
+        float w = badge.Width * k, h = badge.Height * k;
+        g.DrawImage(badge, (cell.Width - w) / 2, (cell.Height - h) / 2, w, h);
+        return bmp;
+    }
+
+    /// <summary>하위 메뉴 안의 작은 묶음 제목(기본 / 캐릭터). 누를 수 없고 보조 글자색으로 그린다(<see cref="FlatMenuRenderer"/>).</summary>
+    static ToolStripLabel MenuHeader(string key) => new(Strings.Get(key))
+    {
+        Tag = FlatMenuRenderer.HeaderTag,
+        Margin = new Padding(0, 4, 0, 0),
+        Font = new Font(SystemFonts.MenuFont ?? Control.DefaultFont, FontStyle.Bold),
+    };
+
+    /// <summary>테마를 고르면 배지 색도 그 테마의 기본색으로 바꾼다(고른 뒤 설정 창에서 따로 바꿀 수 있다).</summary>
+    void ApplyDesignTheme(DesignTheme design)
+    {
+        _settings.Theme = design.Id;
+        _settings.HangulColor = design.HangulColor;
+        _settings.EnglishColor = design.EnglishColor;
+    }
     readonly Dictionary<ToolStripItem, Bitmap> _glyphImages = new();
     Bitmap? _statusImage;
 
     /// <summary>상태 줄 앞에 지금 트레이에 보이는 것과 같은 작은 아이콘을 둔다.</summary>
     void RefreshStatusImage()
     {
-        var icon = _trayIcons.Get(_trayState, _paused, 16, BadgeTheme.From(_settings), _trayCaps);
+        var icon = _trayIcons.Get(_trayState, _paused, 16, BadgeTheme.From(_settings));
         var old = _statusImage;
         _statusImage = icon.ToBitmap();
         _statusItem.Image = _statusImage;
@@ -351,7 +431,7 @@ sealed class BadgeForm : Form
     // ── 트레이 아이콘·툴팁 ──
     string StateText(ImeState state, bool caps = false) => Strings.Get(_paused ? "state.paused" : state switch
     {
-        ImeState.Hangul => "state.hangul",
+        ImeState.Hangul => caps ? "state.hangulCaps" : "state.hangul",
         ImeState.English => caps ? "state.englishCaps" : "state.english",
         ImeState.OtherLang => "state.other",
         _ => "state.none",
@@ -373,7 +453,7 @@ sealed class BadgeForm : Form
         if (!_settings.TrayShowsState) { state = ImeState.Unknown; caps = false; }
         if (!force && state == _trayState && _paused == _trayPaused && caps == _trayCaps) return;
         _trayState = state; _trayPaused = _paused; _trayCaps = caps;
-        _tray.Icon = _trayIcons.Get(state, _paused, SystemInformation.SmallIconSize.Width, BadgeTheme.From(_settings), caps);
+        _tray.Icon = _trayIcons.Get(state, _paused, SystemInformation.SmallIconSize.Width, BadgeTheme.From(_settings));
         _tray.Text = TrayText(state, caps);
     }
 
@@ -395,11 +475,12 @@ sealed class BadgeForm : Form
         }
     }
 
-    void AddRadio(ToolStripMenuItem parent, string text, Func<bool> isOn, Action apply)
+    ToolStripMenuItem AddRadio(ToolStripMenuItem parent, string text, Func<bool> isOn, Action apply)
     {
         var item = new ToolStripMenuItem(text) { Tag = isOn };
         item.Click += (_, _) => { apply(); OnSettingsChanged(); };
         parent.DropDownItems.Add(item);
+        return item;
     }
 
     /// <summary>
@@ -424,8 +505,9 @@ sealed class BadgeForm : Form
 
     // 마지막으로 반영한 단축키·트레이·언어 설정. 설정 창에서 슬라이더를 끌 때마다 불리므로, 실제로 바뀐 것만 다시 적용한다.
     (bool enabled, string hotkey) _appliedHotkey;
-    (string hangul, string english, bool showState) _appliedTray;
+    (string hangul, string english, bool showState, string theme) _appliedTray;
     bool _appliedKorean = Strings.IsKorean;
+    DesignTheme _appliedDesign = DesignThemes.Classic;   // 생성자에서 실제 값으로 맞춘다
 
     /// <summary>설정이 바뀐 뒤 공통 처리: 저장(편집 중 미리 반영일 때는 생략), 다시 그리기, 단축키·주기·트레이·언어 반영.</summary>
     void OnSettingsChanged(bool save = true)
@@ -436,13 +518,21 @@ sealed class BadgeForm : Form
         _flashUntil = DateTime.Now.AddMilliseconds(FlashMs); // DotFlash면 바로 글자를 한 번 보여 준다
         _timer.Interval = _settings.PollIntervalMs;
 
+        // 테마가 바뀌면 메뉴 색도 바꾼다. 설정 창은 자기 창을 스스로 다시 칠한다(SettingsForm).
+        var design = DesignThemes.Get(_settings.Theme);
+        if (!ReferenceEquals(design, _appliedDesign))
+        {
+            _appliedDesign = Theme.Design = design;
+            if (_tray.ContextMenuStrip is { } menu) ApplyMenuTheme(menu);
+        }
+
         Strings.Setting = _settings.Language;
         if (Strings.IsKorean != _appliedKorean) { _appliedKorean = Strings.IsKorean; ApplyLanguage(); }
 
         var hk = (_settings.HotkeyEnabled, _settings.Hotkey);
         if (hk != _appliedHotkey || save) { _appliedHotkey = hk; ApplyHotkey(warnOnFailure: save); }
 
-        var tray = (_settings.HangulColor, _settings.EnglishColor, _settings.TrayShowsState);
+        var tray = (_settings.HangulColor, _settings.EnglishColor, _settings.TrayShowsState, _settings.Theme);
         if (tray != _appliedTray) { _appliedTray = tray; RefreshTray(); }
 
         Poll();
@@ -459,7 +549,7 @@ sealed class BadgeForm : Form
         if (_aboutForm is { IsDisposed: false }) _aboutForm.Close();
     }
 
-    void ResetRenderKey() => _renderKey = (ImeState.Unknown, false, (BadgeStyle)(-1), 0, -1, "", "");
+    void ResetRenderKey() => _renderKey = (ImeState.Unknown, false, (BadgeStyle)(-1), 0, -1, "", "", "", "");
 
     // ── 일시 중지 / 설정 / 정보 ──
     void TogglePause()
@@ -791,7 +881,7 @@ sealed class BadgeForm : Form
 
         float scale = Native.DpiScaleAt(caret.Location) * _settings.SizePercent / 100f * pulse;
 
-        var key = (s.State, s.CapsLock, style, scale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor);
+        var key = (s.State, s.CapsLock, style, scale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor, _settings.Theme, _settings.Character);
         bool needRender = key != _renderKey || _lastBmp is null;
 
         Size bs = needRender ? Size.Empty : _bitmapSize;

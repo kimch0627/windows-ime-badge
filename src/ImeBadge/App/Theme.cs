@@ -16,31 +16,32 @@ namespace ImeBadge;
 static class Theme
 {
     /// <summary>
-    /// 테마 색 한 벌(디자인 토큰). Windows 11 설정 앱의 색과 맞췄다.
+    /// 테마 색 한 벌(디자인 토큰). 값은 Core 의 <see cref="DesignThemes"/> 에 있고(테스트 가능), 여기서는 Color 로 옮겨 쓴다.
     /// Window: 창 바탕 · Card: 카드 표면 · Input: 입력칸 · Elevated: 보조 버튼처럼 살짝 떠 있는 표면 · Border: 테두리 ·
-    /// Track: 슬라이더 트랙·꺼진 토글 테두리 · Text/SubtleText: 글자 · Accent 계열: 강조색과 그 위의 글자색.
+    /// Track: 슬라이더 트랙·꺼진 토글 테두리 · Text/SubtleText: 글자 · Accent 계열: 강조색과 그 위의 글자색 · Radius: 카드 모서리.
     /// </summary>
     public sealed record Palette(
         bool Dark, Color Window, Color Card, Color Input, Color Elevated, Color Border, Color Track,
         Color Text, Color SubtleText, Color Link, Color Hover,
-        Color Accent, Color AccentHover, Color AccentPressed, Color OnAccent)
+        Color Accent, Color AccentHover, Color AccentPressed, Color OnAccent, int Radius = 8)
     {
-        public static readonly Palette Light = new(false,
-            Window: Color.FromArgb(0xF3, 0xF3, 0xF3), Card: Color.White, Input: Color.FromArgb(0xFB, 0xFB, 0xFB), Elevated: Color.FromArgb(0xFB, 0xFB, 0xFB),
-            Border: Color.FromArgb(0xE0, 0xE0, 0xE0), Track: Color.FromArgb(0x8A, 0x8A, 0x8A),
-            Text: Color.FromArgb(0x1B, 0x1B, 0x1B), SubtleText: Color.FromArgb(0x5F, 0x5F, 0x5F),
-            Link: Color.FromArgb(0x00, 0x5F, 0xB8), Hover: Color.FromArgb(0xEC, 0xEC, 0xEC),
-            Accent: Color.FromArgb(0x00, 0x67, 0xC0), AccentHover: Color.FromArgb(0x19, 0x75, 0xC5), AccentPressed: Color.FromArgb(0x32, 0x83, 0xCA),
-            OnAccent: Color.White);
+        public static Palette From(ThemePalette t, int radius) => new(t.Dark,
+            C(t.Window), C(t.Card), C(t.Input), C(t.Elevated), C(t.Border), C(t.Track),
+            C(t.Text), C(t.SubtleText), C(t.Link), C(t.Hover),
+            C(t.Accent), C(t.AccentHover), C(t.AccentPressed), C(t.OnAccent), radius);
 
-        public static readonly Palette DarkTheme = new(true,
-            Window: Color.FromArgb(0x20, 0x20, 0x20), Card: Color.FromArgb(0x2B, 0x2B, 0x2B), Input: Color.FromArgb(0x1F, 0x1F, 0x1F), Elevated: Color.FromArgb(0x37, 0x37, 0x37),
-            Border: Color.FromArgb(0x3F, 0x3F, 0x3F), Track: Color.FromArgb(0x9E, 0x9E, 0x9E),
-            Text: Color.White, SubtleText: Color.FromArgb(0xB0, 0xB0, 0xB0),
-            Link: Color.FromArgb(0x4C, 0xC2, 0xFF), Hover: Color.FromArgb(0x3A, 0x3A, 0x3A),
-            Accent: Color.FromArgb(0x4C, 0xC2, 0xFF), AccentHover: Color.FromArgb(0x47, 0xB1, 0xE8), AccentPressed: Color.FromArgb(0x42, 0xA1, 0xD2),
-            OnAccent: Color.FromArgb(0x00, 0x00, 0x00));
+        static Color C(int argb) => Color.FromArgb(argb);
+
+        /// <summary>클래식 테마의 밝게/어둡게. Windows 11 설정 앱의 색과 같다.</summary>
+        public static readonly Palette Light = From(DesignThemes.Classic.Light, DesignThemes.Classic.CornerRadius);
+        public static readonly Palette DarkTheme = From(DesignThemes.Classic.Dark, DesignThemes.Classic.CornerRadius);
     }
+
+    /// <summary>
+    /// 지금 쓰는 디자인 테마. 트레이 프로그램(BadgeForm)이 설정을 반영할 때, 설정 창이 편집 중인 테마를 바꿀 때 정한다.
+    /// 창·메뉴는 만들 때 이 값으로 칠하므로, 바꾼 뒤에는 열린 창에 <see cref="Apply"/> 를 다시 불러야 한다.
+    /// </summary>
+    public static DesignTheme Design { get; set; } = DesignThemes.Classic;
 
     /// <summary>Windows 설정 → 개인 설정 → 색 → "앱 모드" 가 어둡게인가. 고대비 모드면 false.</summary>
     public static bool IsDark
@@ -57,7 +58,7 @@ static class Theme
         }
     }
 
-    public static Palette Current => IsDark ? Palette.DarkTheme : Palette.Light;
+    public static Palette Current => Palette.From(IsDark ? Design.Dark : Design.Light, Design.CornerRadius);
 
     /// <summary>대화상자 글꼴. 시스템 설정(한국어 Windows 는 맑은 고딕 9pt, 영어는 Segoe UI 9pt)을 따른다.</summary>
     public static Font DialogFont => SystemFonts.MessageBoxFont ?? new Font(BadgeRenderer.FontFamily, 9f);
@@ -76,6 +77,8 @@ static class Theme
         form.ForeColor = p.Text;
         foreach (Control c in form.Controls) Walk(c, p, p.Window);
     }
+
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Label, Label> SubtleLabels = new();
 
     static void Walk(Control c, Palette p, Color bg)
     {
@@ -96,7 +99,9 @@ static class Theme
                 break;
             case Label label:
                 label.BackColor = bg;
-                label.ForeColor = label.ForeColor == SystemColors.GrayText ? p.SubtleText : p.Text;
+                // 보조 글자(힌트·16진수)는 만들 때 GrayText 로 표시해 둔다. 테마를 바꿔 다시 칠할 때도 알아보도록 기억한다.
+                if (label.ForeColor == SystemColors.GrayText) SubtleLabels.AddOrUpdate(label, label);
+                label.ForeColor = SubtleLabels.TryGetValue(label, out _) ? p.SubtleText : p.Text;
                 break;
             case CheckBox check:
                 check.BackColor = bg; check.ForeColor = p.Text;
@@ -179,7 +184,6 @@ sealed class CardGroupBox : GroupBox
     public Theme.Palette Palette { get; set; } = Theme.Palette.Light;
     public string Description { get; set; } = "";
 
-    const int Radius = 8;
     const int Inset = 16;
 
     /// <summary>제목(과 설명)이 차지하는 높이. 테두리 상자는 이 아래에서 시작한다.</summary>
@@ -214,7 +218,7 @@ sealed class CardGroupBox : GroupBox
         var box = new Rectangle(0, HeaderHeight, Width - 1, Height - HeaderHeight - 1);
         if (box.Width <= 0 || box.Height <= 0) return;
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        using var path = Rounded(box, Radius);
+        using var path = Rounded(box, p.Radius);
         using var fill = new SolidBrush(BackColor);
         // 고대비 모드에서는 테마 색을 입히지 않으므로 테두리도 시스템 색으로.
         using var pen = new Pen(SystemInformation.HighContrast ? SystemColors.ControlDark : p.Border);
@@ -246,9 +250,12 @@ sealed class FlatMenuRenderer : ToolStripProfessionalRenderer
         RoundedEdges = false;
     }
 
+    /// <summary>하위 메뉴 안 묶음 제목(누를 수 없는 라벨)의 Tag. 보조 글자색으로 그린다.</summary>
+    public const string HeaderTag = "menu-header";
+
     protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
     {
-        e.TextColor = e.Item.Enabled ? _p.Text : _p.SubtleText;
+        e.TextColor = e.Item.Enabled && e.Item.Tag is not HeaderTag ? _p.Text : _p.SubtleText;
         base.OnRenderItemText(e);
     }
 
@@ -342,6 +349,8 @@ sealed class FlatColorTable : ProfessionalColorTable
 /// </summary>
 static class MenuIcons
 {
+    /// <summary>테마(팔레트) 아이콘. 두 글꼴 모두 같은 코드 포인트(E790, Color).</summary>
+    public const string Theme = "\uE790";
     public const string Pause = "", Play = "", Settings = "", Shape = "", Place = "", Size = "",
         Opacity = "", Autostart = "", Update = "", Info = "", Exit = "";
 

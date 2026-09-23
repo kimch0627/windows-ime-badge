@@ -146,6 +146,49 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public void Load_OldFileWithoutThemeOrCharacter_KeepsClassicLook()
+    {
+        // 1.4.0 까지의 파일: 테마·캐릭터 항목이 없다. 기존 사용자는 지금까지와 똑같이 보여야 한다.
+        File.WriteAllText(P("settings.json"), """{ "Style": "Box", "HangulColor": "#E74856" }""");
+        var s = new SettingsStore(P("settings.json")).Load();
+        Assert.Equal(DesignThemes.ClassicId, s.Theme);
+        Assert.Equal(BadgeCharacters.None, s.Character);
+        Assert.Equal(BadgeStyle.Box, s.Style);
+        Assert.Equal("#E74856", s.HangulColor);
+    }
+
+    [Fact]
+    public void Save_ThenLoad_RoundTripsThemeAndCharacter()
+    {
+        var store = new SettingsStore(P("settings.json"));
+        Assert.True(store.Save(new Settings { Theme = "blossom", Character = BadgeCharacters.Cat }));
+        var back = store.Load();
+        Assert.Equal("blossom", back.Theme);
+        Assert.Equal(BadgeCharacters.Cat, back.Character);
+        Assert.Contains("\"Theme\": \"blossom\"", File.ReadAllText(P("settings.json")));
+    }
+
+    [Fact]
+    public void Load_UnknownThemeAndCharacter_FallBackWithoutLosingOtherSettings()
+    {
+        // 나중 버전이 만든 테마·캐릭터를 이 버전이 읽는 경우. 문자열 항목이라 파일 전체가 버려지지 않는다.
+        File.WriteAllText(P("settings.json"), """{ "Theme": "galaxy", "Character": "dragon", "SizePercent": 150 }""");
+        var s = new SettingsStore(P("settings.json")).Load();
+        Assert.Equal(DesignThemes.ClassicId, s.Theme);
+        Assert.Equal(BadgeCharacters.None, s.Character);
+        Assert.Equal(150, s.SizePercent);
+    }
+
+    [Fact]
+    public void Normalize_CanonicalizesCase()
+    {
+        var s = new Settings { Theme = "BLOSSOM", Character = "Heart" };
+        s.Normalize();
+        Assert.Equal("blossom", s.Theme);
+        Assert.Equal(BadgeCharacters.Heart, s.Character);
+    }
+
+    [Fact]
     public void Clone_And_CopyFrom_AreIndependent()
     {
         var a = new Settings { ExcludedProcesses = new List<string> { "x" }, CornerBadgeProcesses = new List<string> { "c" } };
@@ -157,7 +200,10 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Single(a.CornerBadgeProcesses);
         Assert.Equal(100, a.SizePercent);
 
+        b.Theme = "mint"; b.Character = BadgeCharacters.Star;
         a.CopyFrom(b);
+        Assert.Equal("mint", a.Theme);
+        Assert.Equal(BadgeCharacters.Star, a.Character);
         Assert.Equal(2, a.ExcludedProcesses.Count);
         Assert.Equal(2, a.CornerBadgeProcesses.Count);
         Assert.Equal(50, a.SizePercent);
