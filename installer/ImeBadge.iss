@@ -12,6 +12,10 @@
 ;    "모든 사용자용" 설치를 원하면 설치 시작 화면에서 고를 수 있다(PrivilegesRequiredOverridesAllowed).
 ;  - 실행 중이면 먼저 종료시키고 설치한다(AppMutex 는 프로그램의 SingleInstance 뮤텍스 이름과 같다).
 ;  - "로그인 시 자동 시작" 작업(task)은 프로그램이 쓰는 것과 같은 HKCU\...\Run 값을 만든다.
+;  - 프로그램의 자동 업그레이드(App/Updater.cs)가 이 설치 프로그램을 이렇게 돌린다:
+;      ImeBadge-Setup-1.2.3-x64.exe /SILENT /SUPPRESSMSGBOXES /NOCANCEL /NORESTART /RESTARTAPP /CURRENTUSER /DIR="<기존 위치>"
+;    /RESTARTAPP 는 이 스크립트가 알아보는 우리 옵션으로, 조용한 설치가 끝난 뒤 프로그램을 다시 띄운다.
+;    /CURRENTUSER·/ALLUSERS 로 기존 설치 범위를 그대로 유지하려면 PrivilegesRequiredOverridesAllowed 에 commandline 이 있어야 한다.
 ;  - 제거 시 Run 값은 지우고, 설정(%APPDATA%\ImeBadge)과 로그는 남긴다. (다시 설치하면 그대로 이어 쓴다.)
 
 #ifndef MyAppVersion
@@ -51,7 +55,9 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
-PrivilegesRequiredOverridesAllowed=dialog
+; dialog: 설치 시작 화면에서 "모든 사용자용"을 고를 수 있다. commandline: 자동 업그레이드가 /CURRENTUSER·/ALLUSERS 로
+; 기존 설치 범위를 그대로 이어 갈 수 있다(그 옵션 없이 조용히 설치하면 모든 사용자용 설치가 사용자별로 옮겨 가 버린다).
+PrivilegesRequiredOverridesAllowed=dialog commandline
 OutputDir=Output
 OutputBaseFilename={#MyAppName}-Setup-{#MyAppVersion}-{#MyArch}
 SetupIconFile=..\src\ImeBadge\Assets\app.ico
@@ -101,8 +107,31 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{#MyAppName} 지금 실행"; Flags: nowait postinstall skipifsilent
+; 자동 업그레이드(조용한 설치 + /RESTARTAPP)의 마지막 단계: 새 버전을 다시 띄운다.
+; runasoriginaluser 는 설치가 권한 상승된 경우에도 프로그램이 로그인한 사용자 계정으로 돌게 한다(트레이 아이콘·HKCU 설정 때문).
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait runasoriginaluser; Check: RestartAfterSilentInstall
 
 [Code]
+// 명령줄에 이 옵션이 있는가. Inno Setup 은 자기가 아는 옵션만 다루므로 우리 옵션(/RESTARTAPP)은 직접 찾는다.
+function HasCmdParam(const Param: String): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), Param) = 0 then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
+// 프로그램이 스스로 업그레이드하는 중인가(조용한 설치 + /RESTARTAPP). 그러면 설치 후 프로그램을 다시 띄운다.
+function RestartAfterSilentInstall(): Boolean;
+begin
+  Result := WizardSilent and HasCmdParam('/RESTARTAPP');
+end;
+
 // 실행 중인 프로그램을 끝낸다. 먼저 WM_CLOSE(트레이 아이콘을 스스로 정리할 기회)를 보내고, 1.5초 뒤에도 남아 있으면 강제 종료.
 procedure StopRunningApp();
 var

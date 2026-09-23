@@ -62,7 +62,7 @@ winget install kimch0627.ImeBadge
 | 설정... | 아래 설정 창 |
 | 모양 / 위치 / 크기 / 불투명도 | 자주 쓰는 항목을 메뉴에서 바로. 설정 창에서 프리셋에 없는 값을 골랐으면 "사용자 지정 (90%)" 로 표시 |
 | 로그인 시 자동 시작 | 체크하면 Windows 에 로그인할 때 같이 실행됩니다 |
-| 업데이트 확인 | 새 정식 버전이 있으면 다운로드 페이지 열기 / 나중에 / 이 버전 건너뛰기 중에서 고릅니다 |
+| 업데이트 확인 | 새 정식 버전이 있으면 **지금 업그레이드**(자동 다운로드 → 적용 → 재실행) / 다운로드 페이지 열기 / 나중에 / 이 버전 건너뛰기 중에서 고릅니다 |
 | 정보... | 버전, 설정·로그 폴더 열기 |
 
 ### 설정 창
@@ -127,6 +127,7 @@ src/ImeBadge.Core/      순수 로직. WinForms·Win32 의존 없음 → Linux �
   ProcessFilter.cs      제외 앱 목록 매칭
   Hotkey.cs             "Ctrl+Alt+H" ↔ (보조키, 가상 키) 변환·검증
   VersionInfo.cs        "v1.2.3" 비교 (업데이트 확인)
+  UpdatePackage.cs      릴리스 첨부 파일 중 내 설치 형태에 맞는 것 고르기 + SHA256SUMS.txt 해석 (자동 업그레이드)
   Strings.cs            UI 문구 테이블(한국어·영어)과 언어 선택. resx 대신 코드 사전이라 트리밍·단일 파일에 영향이 없고 키 일치를 테스트로 검사
   Log.cs                디버그 로그·오류 로그, 1 MB 회전
 src/ImeBadge/           Windows 앱
@@ -142,7 +143,9 @@ src/ImeBadge/           Windows 앱
   App/Autostart.cs      HKCU Run 키
   App/SingleInstance.cs 뮤텍스 + 창 메시지로 중복 실행 방지
   App/CrashHandler.cs   잡히지 않은 예외 → errors.log, 반복되면 안내 후 종료
-  App/UpdateChecker.cs  GitHub Releases latest 조회
+  App/UpdateChecker.cs  GitHub Releases latest 조회 + 릴리스 파일 내려받기(SHA-256 동시 계산)
+  App/Updater.cs        자동 업그레이드 적용: 설치본은 /SILENT 재설치, 무설치 exe 는 제자리 교체(--apply-update)
+  App/UpdateProgressForm.cs  내려받기·적용 진행 창(진행 막대)
   App/Icons.cs          포함 아이콘 로드
   App/TrayIcons.cs      상태별 트레이 아이콘("한"/"A"/일시 중지)을 GDI+ 로 그려 캐시
   App/Dialogs.cs        TaskDialog 래퍼 (실패하면 MessageBox 로 대체)
@@ -289,8 +292,38 @@ caret 좌표와 배지 위치가 어긋납니다.
 |---|---|
 | 시작 | `--debug` 확인 → 로그 폴더 준비 → **뮤텍스**로 중복 실행 확인(두 번째면 기존 인스턴스에 `ImeBadge.ShowSettings` 창 메시지를 broadcast 하고 종료) → 예외 처리기 설치 → 설정 로드(예전 위치 이관) → 자동 시작 경로 갱신 |
 | 3초 후 | 첫 실행이면 풍선 알림. 마지막 확인이 24시간 전이면 업데이트 확인(개발 빌드 0.0.0 은 건너뜀) |
+| 업그레이드 | 업데이트 창에서 "지금 업그레이드" → 파일 내려받기 → SHA-256 검증 → 적용 → 프로그램 종료(설치 프로그램/새 exe 가 다시 띄움) |
 | 예외 | UI 스레드 예외는 `errors.log` 에 남기고 계속. 20회 넘으면 안내 후 종료. Poll 안의 예외는 처음 5회만 자세히 기록 |
 | 종료 | 훅 해제, 단축키 해제, 트레이 아이콘 제거 |
+
+### 자동 업그레이드
+
+**한 줄 설명**: 업데이트 창에서 **지금 업그레이드**를 누르면 새 버전을 알아서 받아 설치하고 프로그램을 다시 띄웁니다.
+브라우저를 열거나 설치 프로그램을 직접 실행할 일이 없습니다.
+
+비유하면 두 가지 방법이 있습니다. 설치해서 쓰는 경우는 **같은 집에 새 가구를 들이는 것**(설치 프로그램이 조용히 다시 돌아
+옛 파일을 새 파일로 바꿉니다)이고, 무설치 exe 는 **교대 근무**입니다. 실행 중인 exe 는 자기 자신을 덮어쓸 수 없으니,
+새로 받은 exe 가 문 앞에서 기다렸다가 내가 나간 뒤 들어와 명패를 바꿔 달고 근무를 시작합니다.
+
+어느 단계에서 실패하더라도 **쓰던 버전은 그대로** 남습니다(교체 직전에 옛 exe 를 `.old` 로 밀어 두고, 복사가 실패하면 되돌립니다).
+
+| 단계 | 하는 일 | 코드 |
+|---|---|---|
+| 1. 형태 판별 | Inno Setup 의 제거 정보 키(`...\Uninstall\{AppId}_is1`)의 `InstallLocation` 이 지금 exe 폴더와 같으면 **설치본**, 아니면 **무설치 exe**. 무설치는 빌드 상수 `SELF_CONTAINED` 로 self-contained / framework-dependent 를 구분 | `App/Updater.cs` |
+| 2. 파일 고르기 | 릴리스 첨부 파일에서 형태에 맞는 이름을 고름 (`ImeBadge-Setup-*.exe` / `ImeBadge-win-x64-selfcontained.exe` / `ImeBadge-win-x64.exe`) | `UpdatePackage.Pick` |
+| 3. 내려받기 | `%LOCALAPPDATA%\ImeBadge\update` 에 받으면서 SHA-256 을 같이 계산. 받는 중에는 `.part` 이름이라 중간에 끊겨도 반쪽 파일이 남지 않음. 200 MB 상한 | `UpdateChecker.DownloadAsync` |
+| 4. 검증 | 릴리스의 `SHA256SUMS.txt` 와 대조. 목록에 없거나 해시가 다르면 적용하지 않고 받은 파일을 지움 | `UpdatePackage.ExpectedHash` |
+| 5. 적용(설치본) | `/SILENT /SUPPRESSMSGBOXES /NOCANCEL /NORESTART /RESTARTAPP /CURRENTUSER(또는 /ALLUSERS) /DIR="<기존 위치>" /TASKS="<현재 상태>"` 로 실행. 모든 사용자용 설치면 UAC 로 권한 상승 | `Updater.RunInstaller` |
+| 5'. 적용(무설치) | 새 exe 를 `--apply-update --target <옛 exe> --pid <내 PID> --restart` 로 띄우고 종료. 새 exe 가 옛 프로세스를 기다렸다가 제 몸을 그 자리에 복사하고 실행. exe 폴더에 쓸 수 없으면 UAC 로 권한 상승하되, 다시 띄울 때는 explorer 에 부탁해 보통 권한으로 실행 | `Updater.RunApply` |
+| 6. 뒤처리 | 다음 정상 실행 때 `update` 폴더를 비움 | `Updater.CleanStaging` |
+
+`/RESTARTAPP` 은 Inno Setup 의 기본 옵션이 아니라 `installer/ImeBadge.iss` 가 알아보는 우리 옵션입니다(조용한 설치가
+끝난 뒤 `[Run]` 항목으로 프로그램을 다시 띄웁니다. 권한 상승된 설치에서도 `runasoriginaluser` 로 로그인 사용자 계정으로 실행).
+`/TASKS` 를 넘기는 이유는 조용한 설치가 "추가 작업"을 기본값으로 되돌리기 때문입니다 — 꺼 둔 자동 시작이 업그레이드로
+되살아나지 않게 지금 상태를 그대로 전달합니다.
+
+주소는 `SafeUrl` 로 한 번 더 걸러 **https + github.com** 인 주소에서만 받습니다. 사전 릴리스(`latest`, `dev-*`)는
+GitHub API 의 `releases/latest` 가 돌려주지 않으므로 자동 업그레이드 대상이 아닙니다(개발 빌드 `0.0.0` 은 확인 자체를 건너뜀).
 
 ### 트리밍(self-contained 약 19 MB)
 
