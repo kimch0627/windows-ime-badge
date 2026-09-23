@@ -16,10 +16,15 @@ CI(`.github/workflows/build.yml`)가 하는 일:
 
 1. Linux 에서 단위 테스트와 서식 검사.
 2. Windows 에서 전체 솔루션 빌드(경고 = 오류), 테스트.
-3. exe 두 개 publish (`-p:Version=1.0.0` 으로 버전을 새김).
+3. 아키텍처(x64, arm64)마다 exe 두 개 publish (`-p:Version=1.0.0` 으로 버전을 새김). arm64 는 x64 러너에서 교차 컴파일.
 4. 서명 시크릿이 있으면 exe 서명.
-5. Inno Setup 으로 설치 프로그램 생성, 있으면 서명.
+5. Inno Setup 으로 아키텍처별 설치 프로그램 생성(`/DMyArch=x64`, `/DMyArch=arm64`), 있으면 서명.
 6. `SHA256SUMS.txt` 와 함께 Release 에 첨부. 릴리스 노트는 PR 제목으로 자동 생성.
+
+첨부 파일 이름(아키텍처마다 세 개): `ImeBadge-Setup-<버전>-<arch>.exe`, `ImeBadge-win-<arch>-selfcontained.exe`, `ImeBadge-win-<arch>.exe`.
+x86(32-bit) 빌드는 만들지 않습니다. Windows 11 에는 32-bit 판이 없고 Windows 10 은 지원이 끝났습니다.
+ARM64 PC 에서는 x64 빌드도 에뮬레이션으로 돌아가므로 x64 설치 프로그램은 `ArchitecturesAllowed=x64compatible` 로 ARM64 를 막지 않습니다.
+같은 `AppId` 라서 x64 → arm64 로 덮어 설치하면 한 항목으로 이어집니다.
 
 프로그램의 "업데이트 확인"은 이 정식 Release(`prerelease=false`)만 봅니다. 롤링 사전 릴리스(`latest`, `dev-*`)는 무시합니다.
 
@@ -28,11 +33,14 @@ CI(`.github/workflows/build.yml`)가 하는 일:
 프로그램의 "지금 업그레이드"(자동 다운로드 → 적용 → 재실행)는 Release 첨부 파일의 **이름과 `SHA256SUMS.txt`** 에 의지합니다.
 따라서 아래를 바꿀 때는 `src/ImeBadge.Core/UpdatePackage.cs` 와 `docs/test-matrix.md` 를 같이 손봐야 합니다.
 
+`<arch>` 는 지금 돌고 있는 프로세스의 아키텍처(`x64` 또는 `arm64`, `UpdatePackage.ArchToken`)입니다. 다른 아키텍처의 파일은 이름이 비슷해도 고르지 않고,
+x86·ARM32 처럼 릴리스를 만들지 않는 CPU 에서는 자동 업그레이드 대신 다운로드 페이지를 엽니다.
+
 | 첨부 파일 | 쓰는 쪽 |
 |---|---|
-| `ImeBadge-Setup-<버전>.exe` | 설치 프로그램으로 설치한 사용자 (없으면 `ImeBadge-Setup.exe`) |
-| `ImeBadge-win-x64-selfcontained.exe` | 무설치 self-contained exe 사용자 |
-| `ImeBadge-win-x64.exe` | 무설치 framework-dependent exe 사용자 |
+| `ImeBadge-Setup-<버전>-<arch>.exe` | 설치 프로그램으로 설치한 사용자 (없으면 롤링 이름 `ImeBadge-Setup-<arch>.exe`) |
+| `ImeBadge-win-<arch>-selfcontained.exe` | 무설치 self-contained exe 사용자 |
+| `ImeBadge-win-<arch>.exe` | 무설치 framework-dependent exe 사용자 |
 | `SHA256SUMS.txt` | 위 파일의 SHA-256. **이 파일이 없거나 해당 줄이 없으면 자동 업그레이드를 하지 않습니다**(다운로드 페이지 안내로 물러남) |
 
 `SHA256SUMS.txt` 는 서명 뒤에 만들어야 합니다(서명하면 파일 내용이 바뀌므로). 워크플로의 `Collect outputs` 단계가 이미 그 순서입니다.
@@ -79,8 +87,11 @@ SmartScreen 평판은 서명 후에도 다운로드 횟수가 쌓여야 경고�
 패키지 ID 는 `kimch0627.ImeBadge` 입니다. 등록되면 사용자는 `winget install kimch0627.ImeBadge` 한 줄로 설치합니다.
 
 매니페스트는 `winget/templates/` 의 템플릿에서 만들어집니다(`tools/winget/New-WingetManifest.ps1`).
-릴리스마다 `{{VERSION}}`, `{{SHA256}}`(릴리스의 SHA256SUMS.txt 에서), `{{DATE}}` 만 채워 넣습니다.
+릴리스마다 `{{VERSION}}`, `{{SHA256_X64}}`·`{{SHA256_ARM64}}`(릴리스의 SHA256SUMS.txt 에서 아키텍처별 설치 프로그램 해시), `{{DATE}}` 만 채워 넣습니다.
+설치 프로그램 항목(`Installers`)이 x64 와 arm64 두 개라서 ARM64 PC 에서 `winget install` 하면 arm64 판을 받습니다.
 1.0.0 매니페스트는 `winget/manifests/k/kimch0627/ImeBadge/1.0.0/` 에 있고, winget 스키마 1.10.0 으로 검증했습니다.
+(1.3.1 까지의 릴리스는 x64 하나뿐이고 파일 이름에 `-x64` 접미사가 없습니다. 그 버전으로 매니페스트를 다시 만들면 스크립트가
+옛 이름을 쓰고 arm64 항목을 뺍니다. 이미 있는 매니페스트는 그대로 둡니다.)
 
 ### 자동 제출 (권장)
 
@@ -137,11 +148,11 @@ dotnet test                               # Core 단위 테스트
 dotnet run --project src/ImeBadge         # 실행 (버전은 0.0.0-dev, 자동 업데이트 확인 안 함)
 dotnet run --project src/ImeBadge -- --debug
 
-# 배포용 exe
+# 배포용 exe (-r 을 win-arm64 로 바꾸면 ARM64 판. x64 PC 에서도 교차 컴파일된다)
 dotnet publish src/ImeBadge -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:Version=1.0.0
 
-# 설치 프로그램 (Inno Setup 6 설치 후)
-& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=1.0.0 /DMyAppFileVersion=1.0.0.0 "/DMySourceExe=..\src\ImeBadge\bin\Release\net8.0-windows\win-x64\publish\ImeBadge.exe" installer\ImeBadge.iss
+# 설치 프로그램 (Inno Setup 6 설치 후). /DMyArch 는 x64(기본) 또는 arm64. 결과: installer\Output\ImeBadge-Setup-1.0.0-x64.exe
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=1.0.0 /DMyAppFileVersion=1.0.0.0 /DMyArch=x64 "/DMySourceExe=..\src\ImeBadge\bin\Release\net8.0-windows\win-x64\publish\ImeBadge.exe" installer\ImeBadge.iss
 ```
 
 아이콘을 다시 만들려면 `pip install pillow` 후 `python tools/make_icons.py`. 글꼴 없이 도형(텍스트 커서 + 배지)만 그리므로

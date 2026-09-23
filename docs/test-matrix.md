@@ -77,6 +77,8 @@ caret 탐색·IME 판정·창 z-order 는 실제 앱에서만 확인할 수 있�
 | 절전 → 복귀 | 배지 정상 | ⬜ |
 | Program Files 설치 | 설정 저장이 됨(%APPDATA%) | ⬜ |
 | 트리밍 빌드 | ColorDialog, HttpClient, Registry 동작 | ⬜ |
+| ARM64 PC (Snapdragon 등) | `ImeBadge-Setup-<버전>-arm64.exe` 설치·실행. 작업 관리자 세부 정보의 "아키텍처" 열이 ARM64. 메모장·Chrome 에서 배지·한/영 판정 | ⬜ |
+| ARM64 PC 에 x64 판 | x64 설치 프로그램도 설치·실행됨(에뮬레이션). 그 위에 arm64 판을 설치하면 앱 목록에 한 항목만 남고 설정 유지 | ⬜ |
 | 유휴 CPU | 작업 관리자에서 1% 미만 | ⬜ |
 | caret 이벤트 | 메모장에서 빠르게 타이핑·화살표 이동 시 배지가 지연 없이 따라옴. 마우스를 흔들어도 CPU 가 튀지 않음(포인터 이벤트는 걸러짐). `--debug` 로그에 5개 훅 registered | ⬜ |
 | 장시간(8시간) 실행 | 메모리 증가 없음 | ⬜ |

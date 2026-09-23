@@ -571,9 +571,11 @@ sealed class BadgeForm : Form
     async void StartAutoUpdate(UpdateInfo info)
     {
         var flavor = Updater.Flavor;
-        var asset = UpdatePackage.Pick(info.Assets, flavor);
+        // 릴리스 파일은 아키텍처(x64 / arm64)마다 따로 있다. 지금 돌고 있는 프로세스와 같은 아키텍처의 파일만 받는다.
+        var arch = UpdatePackage.ArchToken(System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture);
+        var asset = UpdatePackage.Pick(info.Assets, flavor, arch);
         var sums = UpdatePackage.Sums(info.Assets);
-        Log.Write($"auto update: flavor={flavor} asset={asset?.Name ?? "(none)"}");
+        Log.Write($"auto update: flavor={flavor} arch={arch ?? "(unsupported)"} asset={asset?.Name ?? "(none)"}");
         if (asset is null) { AutoUpdateFailed(info, Strings.Format("update.auto.noAsset", flavor)); return; }
         if (sums is null) { AutoUpdateFailed(info, Strings.Get("update.auto.noChecksum")); return; }
 
