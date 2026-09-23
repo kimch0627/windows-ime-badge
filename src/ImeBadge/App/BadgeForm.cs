@@ -931,7 +931,7 @@ sealed class BadgeForm : Form
         // 활성 창이 자기도 최상위(TopMost)라면(FlowLauncher 등) 매 틱 실제 z-order를 확인한다. 활성 창이 뒤늦게
         // 활성화되며 다시 위로 올라오거나, 백그라운드 프로세스의 z-order 변경이 활성 창 아래로 제한되는 경우가 있다.
         if (Native.IsTopmost(s.Foreground) && Native.IsAbove(s.Foreground, Handle))
-            RaiseAbove(s.Foreground);
+            RaiseAbove(s.Foreground, allowAttach: !s.ImageTracked);
 
         _lastPos = pos;
         _lastFg = s.Foreground;
@@ -946,11 +946,15 @@ sealed class BadgeForm : Form
     /// 활성 창 <paramref name="fg"/>보다 위로 올린다. 보통의 SetWindowPos로 안 되면(Windows는 마지막 입력을 받지 않은
     /// 프로세스가 활성 창 위로 창을 올리는 것을 막는다) 활성 창 스레드의 입력 큐에 잠깐 붙어 그 권한을 빌린 뒤 바로 떼어 낸다.
     /// 안전장치: 응답 없는 창에는 붙지 않고(같이 멈출 수 있음), 같은 창에 세 번 실패하면 그 창에 대해서는 포기한다.
+    /// 마우스 버튼이 눌려 있으면(드래그 중) 붙지 않는다. 입력 큐를 붙였다 떼면 그 스레드의 마우스 캡처가 풀려 드래그가 끊긴다.
+    /// <paramref name="allowAttach"/> 가 false 면(이미지 커서 추적 중: 배지가 자주 움직여 매 틱 붙게 된다) 일반 올리기만 한다.
     /// </summary>
-    void RaiseAbove(IntPtr fg)
+    void RaiseAbove(IntPtr fg, bool allowAttach)
     {
         RaiseToTop();
         if (!Native.IsAbove(fg, Handle)) return;
+        if (!allowAttach) return;
+        if (Native.IsMouseButtonDown()) { Log.WriteIfChanged($"raise: skip attach while mouse button down fg='{Native.ClassName(fg)}'"); return; }
         if (_raiseFailFg == fg && _raiseFailCount >= 3) return;
         if (Native.IsHungAppWindow(fg)) { Log.WriteIfChanged($"raise: skip hung fg='{Native.ClassName(fg)}'"); return; }
 
