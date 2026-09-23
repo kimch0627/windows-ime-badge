@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-09-23
+
+해상도가 낮은 화면에서 설정 창이 잘리던 문제를 고친 릴리스입니다. 설정 변경은 없습니다.
+
 ### 수정
 - 해상도가 낮거나(예: 1366×768) 배율이 큰 화면에서 설정 창 아래쪽(기본값 복원·확인·취소 버튼)이 화면 밖으로 잘리던 문제.
   설정 창은 이제 창이 놓인 모니터의 작업 영역(작업 표시줄 제외)에 맞춰 크기를 잡고, 넘치는 내용은 스크롤된다.
@@ -245,7 +249,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.3.1...v1.4.0
