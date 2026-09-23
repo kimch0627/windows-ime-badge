@@ -26,10 +26,23 @@
 ### 수정
 - 브랜치 푸시 빌드의 버전 `0.0.0-<브랜치>.<sha7>` 이 sha7 이 0 으로 시작하는 숫자뿐일 때(예: `0879263`) SemVer 규칙에 어긋나
   CI 의 `dotnet restore` 가 실패하던 문제. `0.0.0-<브랜치>.g<sha7>` 로 바꿨다.
+- 릴리스 워크플로의 winget 매니페스트 생성(`tools/winget/New-WingetManifest.ps1`)이 1.5.1 에서 "SHA256SUMS.txt 가 아직 없다" 며 실패하던 문제.
+  릴리스를 만든 직후 GitHub API 의 `releases/tags/<태그>` 응답에 딸린 첨부 목록이 한동안 비어 있을 수 있어,
+  첨부 목록을 릴리스 전용 엔드포인트(`releases/<id>/assets`)에서 따로 받는다. 프로그램의 업데이트 확인(`releases/latest`)은 영향이 없었다.
 
 ### 호환
 - 벚꽃·캔디를 쓰던 사용자의 영문 색은 설정 파일에 저장된 예전 색 그대로 남고, 설정 창 색 견본에서는 "사용자 지정" 으로 보인다.
   새 색을 쓰려면 테마를 다시 고르거나 견본에서 고르면 된다.
+
+## [1.5.1] - 2026-09-23
+
+해상도가 낮은 화면에서 설정 창이 잘리던 문제를 고친 릴리스입니다. 설정 변경은 없습니다.
+
+### 수정
+- 해상도가 낮거나(예: 1366×768) 배율이 큰 화면에서 설정 창 아래쪽(기본값 복원·확인·취소 버튼)이 화면 밖으로 잘리던 문제.
+  설정 창은 이제 창이 놓인 모니터의 작업 영역(작업 표시줄 제외)에 맞춰 크기를 잡고, 넘치는 내용은 스크롤된다.
+  확인·취소 버튼 줄은 창 아래에 고정되어 스크롤과 상관없이 늘 보인다. 창 가장자리를 끌어 크기를 바꿀 수 있고(내용보다 크게는 안 늘어남),
+  배율이 다른 모니터로 옮기면 다시 맞춘다. 화면이 충분히 크면 모습은 예전과 같다.
 
 ## [1.5.0] - 2026-09-23
 
@@ -266,7 +279,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.3.1...v1.4.0

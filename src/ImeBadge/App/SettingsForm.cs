@@ -57,14 +57,13 @@ sealed class SettingsForm : Form
 
         Text = Strings.Format("settings.title", AppInfo.ProductName);
         Icon = Icons.App;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
+        // 크기를 바꿀 수 있는 창. 화면이 작으면 FitToScreen 이 작업 영역에 맞춰 줄이고 내용은 스크롤된다.
+        FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = true;
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
         AutoScaleDimensions = new SizeF(96F, 96F);   // 아래 픽셀 크기들은 96 DPI 기준. 고DPI 에서 WinForms 가 배율을 곱한다
         Font = Theme.DialogFont;
-        AutoSize = true; AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        Padding = new Padding(Outer);
 
         _flashTimer.Tick += (_, _) => { _flashTimer.Stop(); _flashing = false; _preview.Invalidate(); };
 
@@ -104,6 +103,54 @@ sealed class SettingsForm : Form
         Theme.ApplyTitleBar(this);
     }
 
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        FitToScreen(center: StartPosition == FormStartPosition.CenterScreen);
+    }
+
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e);
+        BeginInvoke(() => { if (!IsDisposed) FitToScreen(center: false); });   // 배율이 다른 모니터로 옮겼다. 새 배율로 레이아웃이 끝난 뒤 다시 맞춘다
+    }
+
+    /// <summary>
+    /// 창 크기를 내용에 맞추되, 창이 놓인 모니터의 작업 영역(작업 표시줄 제외)을 넘지 않게 한다.
+    /// 해상도가 낮거나 배율이 커서 다 들어가지 않으면 내용 영역(<see cref="_scroll"/>)에 스크롤바가 생기고, 아래 버튼 줄은 늘 보인다.
+    /// 사용자가 창을 늘려도 내용보다 커지지 않게 최대 크기를 내용 크기로 묶는다.
+    /// </summary>
+    void FitToScreen(bool center)
+    {
+        int outer = LogicalToDeviceUnits(Outer);
+        _scroll.AutoScrollPosition = Point.Empty;
+        _root.Location = new Point(outer, outer);
+        _scroll.AutoScrollMargin = new Size(outer, outer / 2);
+
+        var content = _root.GetPreferredSize(Size.Empty);
+        var need = new Size(content.Width + 2 * outer, content.Height + outer + outer / 2 + _buttonBar.GetPreferredSize(Size.Empty).Height);
+        var frame = Size - ClientSize;   // 제목 표시줄·테두리
+        // 처음 열 때는 마우스가 있는 모니터(트레이 아이콘을 누른 곳), 이미 떠 있으면 창이 걸친 모니터.
+        var area = (center ? Screen.FromPoint(Cursor.Position) : Screen.FromControl(this)).WorkingArea;
+        int gap = LogicalToDeviceUnits(8);
+        var max = new Size(area.Width - frame.Width - 2 * gap, area.Height - frame.Height - 2 * gap);
+
+        int w = need.Width, h = need.Height;
+        if (h > max.Height) { h = max.Height; w += SystemInformation.VerticalScrollBarWidth; }   // 세로 스크롤바 자리
+        if (w > max.Width) { w = max.Width; h = Math.Min(max.Height, h + SystemInformation.HorizontalScrollBarHeight); }
+
+        MaximumSize = Size.Empty;
+        ClientSize = new Size(w, h);
+        MaximumSize = new Size(need.Width + SystemInformation.VerticalScrollBarWidth, need.Height) + frame;
+        MinimumSize = new Size(Math.Min(Width, LogicalToDeviceUnits(420)), Math.Min(Height, LogicalToDeviceUnits(320)));
+
+        var loc = center ? new Point(area.Left + (area.Width - Width) / 2, area.Top + (area.Height - Height) / 2) : Location;
+        loc.X = Math.Max(area.Left, Math.Min(loc.X, area.Right - Width));
+        loc.Y = Math.Max(area.Top, Math.Min(loc.Y, area.Bottom - Height));
+        StartPosition = FormStartPosition.Manual;
+        Location = loc;
+    }
+
     // ── 화면 구성 ──
     // 레이아웃 원칙: 자동 크기(AutoSize) 컨테이너 안에는 Dock 을 쓰지 않는다. AutoSize 부모는 자식 크기로 자기 크기를 정하고,
     // Dock 된 자식은 부모 크기로 자기 크기를 정하므로 서로를 기다리다 폭 0 으로 접힌다(제목이 세로로 찍히던 문제).
@@ -112,9 +159,15 @@ sealed class SettingsForm : Form
     const int Outer = 20, GroupWidth = 424, CardInset = 16, CardGap = 12;
     const int InnerWidth = GroupWidth - 2 * CardInset;
 
+    // 창 구성: 위는 스크롤되는 내용 영역(_scroll 안의 _root), 아래는 늘 보이는 버튼 줄(_buttonBar).
+    // 창 자체는 AutoSize 가 아니므로 이 둘에는 Dock 을 쓴다(내용 _root 는 AutoSize 이고 Dock 없이 둔다).
+    Panel _scroll = null!;
+    TableLayoutPanel _root = null!;
+    FlowLayoutPanel _buttonBar = null!;
+
     void Build()
     {
-        var root = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Location = new Point(Outer, Outer) };
+        var root = _root = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Location = new Point(Outer, Outer) };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
@@ -136,8 +189,12 @@ sealed class SettingsForm : Form
         right.Controls.Add(BuildCornerGroup());
         root.Controls.Add(right, 1, 1);
 
-        // 아래: 버튼. 오른쪽 끝에 확인·취소, 왼쪽으로 떨어져 기본값 복원.
-        var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Anchor = AnchorStyles.Right, Margin = new Padding(0, 8, 0, 0) };
+        // 아래: 버튼. 오른쪽 끝에 확인·취소, 왼쪽으로 떨어져 기본값 복원. 창 아래에 붙어 스크롤과 상관없이 늘 보인다.
+        var buttons = _buttonBar = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Bottom, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = false, Padding = new Padding(Outer, 10, Outer, Outer),
+        };
         var cancel = new AccentButton { Text = Strings.Get("settings.cancel"), DialogResult = DialogResult.Cancel, AutoSize = true, Margin = new Padding(8, 0, 0, 0) };
         var ok = new AccentButton { Text = Strings.Get("settings.ok"), Primary = true, AutoSize = true, Margin = new Padding(8, 0, 0, 0) };
         var reset = new AccentButton { Text = Strings.Get("settings.reset"), AutoSize = true, Margin = new Padding(24, 0, 0, 0) };
@@ -152,11 +209,13 @@ sealed class SettingsForm : Form
             LoadDraftIntoControls();
         };
         buttons.Controls.Add(cancel); buttons.Controls.Add(ok); buttons.Controls.Add(reset);
-        root.Controls.Add(buttons, 0, 2);
-        root.SetColumnSpan(buttons, 2);
 
         AcceptButton = ok; CancelButton = cancel;
-        Controls.Add(root);
+        _scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        _scroll.Controls.Add(root);
+        // Dock 은 뒤(나중에 추가한 것)부터 자리를 잡는다: 버튼 줄이 먼저 아래를 차지하고, 스크롤 영역이 남은 곳을 채운다.
+        Controls.Add(_scroll);
+        Controls.Add(buttons);
     }
 
     Control BuildHeader()
