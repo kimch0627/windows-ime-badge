@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-23
+
+배지를 취향대로 꾸밀 수 있게 한 릴리스입니다. 테마 다섯 가지(클래식 · 벚꽃 · 캔디 · 민트초코 · 미드나잇)와
+캐릭터 배지 다섯 가지(고양이 · 강아지 · 하트 · 구름 · 별)를 설정 창과 트레이 메뉴에서 고를 수 있습니다.
+기본은 지금까지와 같은 클래식이라 업데이트해도 모습은 그대로이고, 예전 설정 파일도 그대로 읽힙니다.
+**한 가지 달라 보이는 점**: "Caps Lock 표시" 가 켜져 있으면(기본) 영문 배지가 평소 `a`, Caps Lock 이 켜지면 `A` 로 바뀝니다
+(한글은 `한` → `꺆`). 예전처럼 항상 `한` / `A` 로 보려면 설정 → 모양에서 "배지에 Caps Lock 표시" 를 끄세요.
+
 ### 추가
 - **디자인 테마**. 설정 창 모양 카드 맨 위(와 트레이 메뉴 "테마")에서 고른다: 클래식(기본, 지금까지의 모습) / 벚꽃 / 캔디 / 민트초코 / 미드나잇.
   테마는 배지 기본색, 배지 질감(부드러운 색조 글자·색조 그림자·위쪽 광택), 색 견본 11개, 설정 창·메뉴의 밝게/어둡게 색을 한 벌로 바꾼다.
@@ -231,7 +239,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.3.0...v1.3.1
