@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### 수정
+- 릴리스 워크플로의 winget 매니페스트 생성(`tools/winget/New-WingetManifest.ps1`)이 1.5.1 에서 "SHA256SUMS.txt 가 아직 없다" 며 실패하던 문제.
+  릴리스를 만든 직후 GitHub API 의 `releases/tags/<태그>` 응답에 딸린 첨부 목록이 한동안 비어 있을 수 있어,
+  첨부 목록을 릴리스 전용 엔드포인트(`releases/<id>/assets`)에서 따로 받는다. 프로그램의 업데이트 확인(`releases/latest`)은 영향이 없었다.
+
 ## [1.5.1] - 2026-09-23
 
 해상도가 낮은 화면에서 설정 창이 잘리던 문제를 고친 릴리스입니다. 설정 변경은 없습니다.

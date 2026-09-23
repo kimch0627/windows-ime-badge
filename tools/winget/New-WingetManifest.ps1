@@ -74,7 +74,10 @@ if ($archs.Values | Where-Object { -not $_.Sha256 }) {
         if ($env:GITHUB_TOKEN) {
             # API 로 첨부 파일을 찾아 받는다 (비공개 저장소에서도 동작).
             $rel = Invoke-RestMethod -Uri "$api/releases/tags/v$Version" -Headers $headers
-            $asset = $rel.assets | Where-Object { $_.name -eq 'SHA256SUMS.txt' } | Select-Object -First 1
+            # 첨부 목록은 릴리스 전용 엔드포인트에서 따로 받는다. releases/tags/<태그> 응답에 딸린 assets 는
+            # 릴리스를 만든 직후 태그가 늦게 잡히면 한동안 빈 채로 남는다(1.5.1 에서 실제로 5분 넘게 비어 있었다).
+            $assets = Invoke-RestMethod -Uri "$api/releases/$($rel.id)/assets?per_page=100" -Headers $headers
+            $asset = $assets | Where-Object { $_.name -eq 'SHA256SUMS.txt' } | Select-Object -First 1
             if (-not $asset) { throw "릴리스 v$Version 에 SHA256SUMS.txt 가 아직 없습니다." }
             $h = $headers.Clone(); $h['Accept'] = 'application/octet-stream'
             # Content 는 byte[] 다. 함수 밖으로 나가면 PowerShell 이 배열을 요소별로 풀어 버리므로 여기서 바로 문자열로 만든다.
