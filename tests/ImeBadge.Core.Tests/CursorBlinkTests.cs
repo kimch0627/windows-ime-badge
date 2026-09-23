@@ -64,4 +64,40 @@ public sealed class CursorBlinkTests
         var r = Eval(100, 200, 115, 217, 16 * 18 * 3 / 4);
         Assert.Equal(new Rectangle(100, 200, 16, 18), r);
     }
+
+    static bool Wide(int minX, int minY, int maxX, int maxY, int count) =>
+        CursorBlink.IsWide(minX, minY, maxX, maxY, count, MaxW, MaxH);
+
+    [Fact]
+    public void Wide_ScrollTallChange_IsWide()
+    {
+        // 스크롤: 세로로 여러 줄이 바뀜.
+        Assert.True(Wide(0, 0, 300, 200, 5000));
+    }
+
+    [Fact]
+    public void Wide_ManyPixelsInTwoLines_IsWide()
+    {
+        // 두 줄 높이지만 바뀐 픽셀이 커서 네 칸어치를 훌쩍 넘음(긴 출력).
+        Assert.True(Wide(0, 100, 1200, 100 + 2 * MaxH - 1, 4 * MaxW * MaxH + 1));
+    }
+
+    [Fact]
+    public void Wide_EnterMovesCursorOneLine_IsNotWide()
+    {
+        // Enter: 옛 커서 칸이 지워지고 다음 줄에 프롬프트 + 새 커서가 그려짐(두 줄 안, 픽셀 수 적당).
+        Assert.False(Wide(0, 200, 120, 236, 900));
+    }
+
+    [Fact]
+    public void Wide_BlinkingCursor_IsNotWide()
+    {
+        Assert.False(Wide(100, 200, 107, 217, 8 * 18));
+    }
+
+    [Fact]
+    public void Wide_NoChange_IsNotWide()
+    {
+        Assert.False(Wide(int.MaxValue, int.MaxValue, -1, -1, 0));
+    }
 }

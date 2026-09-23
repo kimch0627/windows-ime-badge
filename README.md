@@ -195,7 +195,13 @@ installer/ImeBadge.iss  Inno Setup 스크립트
    - 이미지 커서 추적(opt-in, `Ime/ImageCaret.cs`): 설정에서 "화면을 분석해 커서를 따라가기"를 켜면, 모서리로 가기 전에 대상 창을
      `PrintWindow(PW_RENDERFULLCONTENT)`로 두 번 캡처해 그 차이로 깜빡이는 커서를 찾습니다. 판정(작고 꽉 찬 사각형인가)은 순수
      로직(`Core/CursorBlink.cs`)에 있어 단위 테스트로 검증합니다. 찾으면 커서를 따라가고, 화면 출력이 많아 차이가 넓으면 못 찾은 것으로
-     보고 모서리로 되돌아갑니다. `PrintWindow` 가 대상 창만 그리므로 우리 배지가 캡처에 섞여 서로를 쫓는 되먹임이 없습니다.
+     보고 모서리로 되돌아갑니다. `PrintWindow` 는 대상 창만 그리므로 우리 배지가 캡처에 섞이지 않지만, GPU 로 그리는 자식 뷰
+     (Xshell 터미널 등)는 빈 화면을 주기도 합니다. 그러면 화면 캡처로 전환하고, 배지의 지금·이전 자리를 비교에서 빼서
+     배지 움직임을 커서로 오인하는 되먹임을 막습니다. 커서는 변할 때(깜빡임·타이핑)만 보이므로, 한 번 찾은 위치는 같은 창·같은
+     크기인 동안 계속 기억하고(창을 옮겨도 따라감), 스크롤·긴 출력처럼 화면이 크게 바뀌면 기억을 버리고 모서리로 돌아갔다가
+     커서가 다시 보이면 새 자리를 찾습니다(`Core/CursorBlink.IsWide`). 커서가 깜빡이지 않는 설정이면 타이핑으로 움직일 때만 갱신됩니다.
+     `--debug` 로그에 `caret:img(...)`, 기억한 위치를 쓰면 `caret:img-hold`, 못 찾으면 `img:nodiff`(변화 없음)·
+     `img:reject(WxH)`(커서 모양 아님)·`img:wide(WxH)`(화면이 크게 바뀜, 기억 버림)가 남습니다.
 4. `GetKeyboardLayout(tid)`의 하위 16비트가 `0x0412`(ko-KR)가 아니면 `OtherLang`(`?` 표시)입니다.
 5. **한/영 상태** (두 경로)
    - IMM32: `ImmGetDefaultIMEWnd(hwndFocus)`(hwndFocus가 0이면 최상위 창)에

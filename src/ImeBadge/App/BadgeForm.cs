@@ -624,6 +624,7 @@ sealed class BadgeForm : Form
     void HideBadge()
     {
         if (Visible) { Hide(); _hiddenSince = Environment.TickCount64; }
+        ImageCaret.Ignore = Rectangle.Empty;   // 숨겨진 배지는 화면 캡처에 없다
         StopAnim();
         UpdateTray(ImeState.Unknown);
         AdjustIdleInterval();
@@ -692,6 +693,7 @@ sealed class BadgeForm : Form
         var pos = corner is { } win
             ? BadgeLayout.Corner(win, bs, scale, area)
             : BadgeLayout.Compute(new LayoutInput(caret, bs, style, _settings.Placement, scale, area));
+        ImageCaret.Ignore = new Rectangle(pos, bs);   // 이미지 커서 추적이 화면 캡처에서 우리 배지를 빼도록
 
         // FlowLauncher처럼 자기도 최상위(TopMost)인 창은 나중에 뜬 쪽이 위에 온다. 배지가 처음 보일 때,
         // 활성 창이 바뀌었을 때, 위치가 바뀌었을 때마다 최상위 창들 중에서도 맨 위로 다시 올린다.
