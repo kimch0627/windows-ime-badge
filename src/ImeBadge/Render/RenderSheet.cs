@@ -146,39 +146,50 @@ static class RenderSheet
 
         // 6. 펄스 프레임
         s.Section("6. 한/영 전환 애니메이션(펄스) 프레임",
-            $"{BadgeForm.PulseMs} ms 동안 {BadgeForm.FrameMs} ms 마다 한 장(숫자 = ms). 칸마다 같은 caret(검은 선) 위-오른쪽에 앱과 같은 계산으로 놓았다. 글자가 프레임 사이에서 튀는지 본다(#47).");
+            $"{BadgeForm.PulseMs} ms 동안 {BadgeForm.FrameMs} ms 마다 한 장(숫자 = ms). 칸마다 같은 caret(검은 선) 위-오른쪽에 앱과 같은 계산으로 놓았다. " +
+            "예전 = 프레임마다 배율을 바꿔 새로 그림(글자가 오르내림), 지금 = 기본 그림을 확대(#47).");
         var times = Enumerable.Range(0, BadgeForm.PulseMs / BadgeForm.FrameMs + 1).Select(i => i * BadgeForm.FrameMs).Append(BadgeForm.PulseMs).Distinct().ToArray();
         var timeSlots = times.Select(t => t.ToString()).ToArray();
         var pulseCases = new[] { (DesignThemes.Classic, Han), (DesignThemes.Classic, EnA), (DesignThemes.Blossom, Han) };
         foreach (float k in new[] { 1f, 1.5f })
         {
             s.Headers(new[] { ($"배율 {k * 100:0}%", timeSlots, PulseCellSize(k).Width + 4f) });
-            foreach (var (design, item) in pulseCases)
-                s.Row($"{ThemeNames[design.Id]} {item.Caption} · {k * 100:0}%", new[]
-                {
-                    new SheetPanel(Light, PulseCellSize(k).Width + 4, times.Select(t => PulseCell(item, BadgeTheme.Of(design), k, PulseAt(t))).ToList()),
-                });
+            foreach (bool scaled in new[] { false, true })
+                foreach (var (design, item) in pulseCases)
+                    s.Row($"{ThemeNames[design.Id]} {item.Caption} · {k * 100:0}% · {(scaled ? "지금" : "예전")}", new[]
+                    {
+                        new SheetPanel(Light, PulseCellSize(k).Width + 4, times.Select(t => PulseCell(item, BadgeTheme.Of(design), k, PulseAt(t), scaled)).ToList()),
+                    });
         }
         var upTimes = times.Where(t => t <= BadgeForm.PulseMs / 2).ToArray();
         s.Headers(new[] { ("배율 100% ×3 확대(커지는 쪽)", upTimes.Select(t => t.ToString()).ToArray(), PulseCellSize(1f).Width * 3 + 4f) });
-        s.Row("클래식 한 · 100% ×3", new[]
-        {
-            new SheetPanel(Light, PulseCellSize(1f).Width * 3 + 4, upTimes.Select(t => Zoom(PulseCell(Han, BadgeTheme.Of(DesignThemes.Classic), 1f, PulseAt(t)), 3)).ToList()),
-        });
+        foreach (bool scaled in new[] { false, true })
+            s.Row($"클래식 한 · 100% ×3 · {(scaled ? "지금" : "예전")}", new[]
+            {
+                new SheetPanel(Light, PulseCellSize(1f).Width * 3 + 4, upTimes.Select(t => Zoom(PulseCell(Han, BadgeTheme.Of(DesignThemes.Classic), 1f, PulseAt(t), scaled), 3)).ToList()),
+            });
 
         return s.Finish();
     }
 
     static float PulseAt(int ms) => BadgeForm.PulseScale(Math.Clamp(ms / (float)BadgeForm.PulseMs, 0f, 1f));
 
+    static Bitmap ScaledOrRendered(in Item it, BadgeTheme theme, float baseScale, float pulse, bool scaled)
+    {
+        if (!scaled || pulse == 1f) return RenderItem(it, theme, baseScale * pulse, 100);
+        using var basePicture = RenderItem(it, theme, baseScale, 100);
+        return BadgeRenderer.ScaleFrame(basePicture, pulse);
+    }
+
     /// <summary>펄스 한 칸의 크기. 가장 커진 배지(1.18 배)와 caret 이 들어가게.</summary>
     static Size PulseCellSize(float baseScale) => new((int)Math.Ceiling(56 * baseScale), (int)Math.Ceiling(72 * baseScale));
 
     /// <summary>
-    /// 펄스 한 프레임을 실제 화면처럼 그린다. 칸 왼쪽 아래에 caret(정수 픽셀의 검은 막대)을 두고, 배지를 앱과 같은 배율(기본 × 펄스)로 그려
-    /// <see cref="BadgeLayout.Compute"/>(위-오른쪽)가 정한 자리에 놓는다. 창 위치가 정수 픽셀이듯 배지도 정수 좌표에 놓인다.
+    /// 펄스 한 프레임을 실제 화면처럼 그린다. 칸 왼쪽 아래에 caret(정수 픽셀의 검은 막대)을 두고, 배지를
+    /// <see cref="BadgeLayout.Compute"/>(위-오른쪽, 배율 = 기본 × 펄스)가 정한 자리에 놓는다. 창 위치가 정수 픽셀이듯 배지도 정수 좌표에 놓인다.
+    /// <paramref name="scaled"/>: 앱처럼 기본 그림을 <see cref="BadgeRenderer.ScaleFrame"/> 로 확대(지금). false 면 배율을 바꿔 새로 그림(예전).
     /// </summary>
-    static Bitmap PulseCell(in Item it, BadgeTheme theme, float baseScale, float pulse)
+    static Bitmap PulseCell(in Item it, BadgeTheme theme, float baseScale, float pulse, bool scaled)
     {
         var size = PulseCellSize(baseScale);
         var cell = new Bitmap(size.Width, size.Height, PixelFormat.Format32bppArgb);
@@ -188,7 +199,7 @@ static class RenderSheet
             Math.Max(1, (int)Math.Round(baseScale)), (int)Math.Round(16 * baseScale));
         g.FillRectangle(Brushes.Black, caret);
         float scale = baseScale * pulse;
-        using var badge = RenderItem(it, theme, scale, 100);
+        using var badge = ScaledOrRendered(it, theme, baseScale, pulse, scaled);
         var pos = BadgeLayout.Compute(new LayoutInput(caret, badge.Size, it.Style, BadgePlacement.AboveRight, scale, new Rectangle(Point.Empty, size)));
         g.DrawImage(badge, new Rectangle(pos, badge.Size));
         return cell;

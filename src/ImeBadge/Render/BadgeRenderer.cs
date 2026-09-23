@@ -116,6 +116,25 @@ static class BadgeRenderer
         };
     }
 
+    /// <summary>
+    /// 이미 그린 배지를 <paramref name="k"/> 배로 부드럽게 확대한다(펄스 애니메이션 프레임, <see cref="BadgeForm"/>).
+    /// 배율을 바꿔 새로 그리지 않으므로 모든 프레임의 글자 모양·자리가 같은 그림을 확대한 것이 된다(#47).
+    /// </summary>
+    public static Bitmap ScaleFrame(Bitmap src, float k)
+    {
+        int w = Math.Max(1, (int)Math.Round(src.Width * k)), h = Math.Max(1, (int)Math.Round(src.Height * k));
+        var bmp = new Bitmap(w, h, PixelFormat.Format32bppPArgb);
+        using var g = Graphics.FromImage(bmp);
+        g.Clear(Color.Transparent);
+        g.CompositingMode = CompositingMode.SourceCopy;
+        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        using var attr = new ImageAttributes();
+        attr.SetWrapMode(WrapMode.TileFlipXY);   // 가장자리 픽셀을 바깥의 투명과 섞지 않는다
+        g.DrawImage(src, new Rectangle(0, 0, w, h), 0, 0, src.Width, src.Height, GraphicsUnit.Pixel, attr);
+        return bmp;
+    }
+
     static Bitmap NewCanvas(int w, int h, out Graphics g)
     {
         var bmp = new Bitmap(Math.Max(1, w), Math.Max(1, h), PixelFormat.Format32bppPArgb);

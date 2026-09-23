@@ -29,6 +29,7 @@ sealed class BadgeForm : Form
     readonly System.Windows.Forms.Timer _animTimer = new() { Interval = FrameMs };
     Snapshot _lastSnapshot;
     Bitmap? _lastBmp;          // 마지막으로 올린 비트맵. 알파만 바꿔 다시 올릴 때 쓴다
+    Bitmap? _pulseBase;        // 펄스 동안 확대해 올릴 기본 배율 그림(PulseFrame). 펄스가 끝나면 버린다
     byte _lastAlpha = 255;
     bool _systemAnimations = Native.AnimationsEnabled();   // Windows 접근성 "애니메이션 효과"
 
@@ -51,6 +52,7 @@ sealed class BadgeForm : Form
     DateTime _flashUntil = DateTime.MinValue;
     (ImeState state, bool caps, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character) _renderKey;
     Size _bitmapSize;
+    (ImeState state, bool caps, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character) _pulseBaseKey;
     Point _lastPos = new(int.MinValue, int.MinValue);
     IntPtr _lastFg;
     bool _allowShow;
@@ -407,6 +409,8 @@ sealed class BadgeForm : Form
     {
         _anim = Anim.None;
         _animTimer.Stop();
+        _pulseBase?.Dispose();
+        _pulseBase = null;
     }
 
     /// <summary>진행률 0~1. 애니메이션이 없으면 1.</summary>
@@ -421,6 +425,24 @@ sealed class BadgeForm : Form
 
     /// <summary>펄스 배율. 진행률 0→1 동안 1 → 1+<see cref="PulseGrow"/> → 1 (반 사인).</summary>
     internal static float PulseScale(float progress) => 1f + PulseGrow * (float)Math.Sin(progress * Math.PI);
+
+    /// <summary>
+    /// 펄스 한 프레임(#47): 기본 배율로 한 번 그린 배지를 <paramref name="pulse"/> 배로 확대한 그림.
+    /// 프레임마다 배율을 바꿔 새로 그리면 글꼴 힌팅·정수 픽셀 맞춤·그림자 여백이 서로 다른 순간에 끊겨, 커지는 동안 글자가
+    /// 배지 안에서 1px 남짓 오르내리고 획 굵기가 깜빡였다. 같은 그림을 확대하면 모든 프레임의 글자 모양·자리가 같다.
+    /// 펄스는 0.26초라 확대로 조금 부드러워지는 것은 보이지 않고, 끝 프레임(배율 1)은 원래대로 새로 그린다.
+    /// </summary>
+    Bitmap PulseFrame(in Snapshot s, BadgeStyle style, float baseScale, float pulse)
+    {
+        var baseKey = (s.State, s.CapsLock, style, baseScale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor, _settings.Theme, _settings.Character);
+        if (_pulseBase is null || baseKey != _pulseBaseKey)
+        {
+            _pulseBase?.Dispose();
+            _pulseBase = BadgeRenderer.Render(s.State, style, baseScale, BadgeTheme.From(_settings), _settings.OpacityPercent, s.CapsLock);
+            _pulseBaseKey = baseKey;
+        }
+        return BadgeRenderer.ScaleFrame(_pulseBase, pulse);
+    }
 
     void AnimTick()
     {
@@ -883,7 +905,8 @@ sealed class BadgeForm : Form
         if (style == BadgeStyle.DotFlash)
             style = DateTime.Now < _flashUntil ? BadgeStyle.Pill : BadgeStyle.Dot;
 
-        float scale = Native.DpiScaleAt(caret.Location) * _settings.SizePercent / 100f * pulse;
+        float baseScale = Native.DpiScaleAt(caret.Location) * _settings.SizePercent / 100f;
+        float scale = baseScale * pulse;
 
         var key = (s.State, s.CapsLock, style, scale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor, _settings.Theme, _settings.Character);
         bool needRender = key != _renderKey || _lastBmp is null;
@@ -892,7 +915,9 @@ sealed class BadgeForm : Form
         Bitmap? bmp = null;
         if (needRender)
         {
-            bmp = BadgeRenderer.Render(s.State, style, scale, BadgeTheme.From(_settings), _settings.OpacityPercent, s.CapsLock);
+            bmp = pulse == 1f
+                ? BadgeRenderer.Render(s.State, style, scale, BadgeTheme.From(_settings), _settings.OpacityPercent, s.CapsLock)
+                : PulseFrame(s, style, baseScale, pulse);
             bs = bmp.Size;
         }
 
@@ -1026,6 +1051,7 @@ sealed class BadgeForm : Form
             _timer.Dispose();
             _animTimer.Dispose();
             _lastBmp?.Dispose();
+            _pulseBase?.Dispose();
             _settingsForm?.Dispose();
             _aboutForm?.Dispose();
             _updateProgress?.Dispose();
