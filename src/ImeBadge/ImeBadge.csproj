@@ -49,6 +49,8 @@
     - ILLink.Descriptors.xml: COM 인터페이스(Uia)의 메서드 순서(vtable)가 트리밍으로 흐트러지지 않게 통째로 보존한다.
   -->
   <PropertyGroup Condition="'$(SelfContained)' == 'true'">
+    <!-- 자동 업그레이드가 "내가 어떤 종류의 exe 인지" 알아야 릴리스에서 같은 종류의 파일을 받아 온다(App/Updater.cs). -->
+    <DefineConstants>$(DefineConstants);SELF_CONTAINED</DefineConstants>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <PublishTrimmed>true</PublishTrimmed>
     <TrimMode>full</TrimMode>

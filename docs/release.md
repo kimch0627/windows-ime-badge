@@ -23,6 +23,20 @@ CI(`.github/workflows/build.yml`)가 하는 일:
 
 프로그램의 "업데이트 확인"은 이 정식 Release(`prerelease=false`)만 봅니다. 롤링 사전 릴리스(`latest`, `dev-*`)는 무시합니다.
 
+### 자동 업그레이드가 의지하는 것
+
+프로그램의 "지금 업그레이드"(자동 다운로드 → 적용 → 재실행)는 Release 첨부 파일의 **이름과 `SHA256SUMS.txt`** 에 의지합니다.
+따라서 아래를 바꿀 때는 `src/ImeBadge.Core/UpdatePackage.cs` 와 `docs/test-matrix.md` 를 같이 손봐야 합니다.
+
+| 첨부 파일 | 쓰는 쪽 |
+|---|---|
+| `ImeBadge-Setup-<버전>.exe` | 설치 프로그램으로 설치한 사용자 (없으면 `ImeBadge-Setup.exe`) |
+| `ImeBadge-win-x64-selfcontained.exe` | 무설치 self-contained exe 사용자 |
+| `ImeBadge-win-x64.exe` | 무설치 framework-dependent exe 사용자 |
+| `SHA256SUMS.txt` | 위 파일의 SHA-256. **이 파일이 없거나 해당 줄이 없으면 자동 업그레이드를 하지 않습니다**(다운로드 페이지 안내로 물러남) |
+
+`SHA256SUMS.txt` 는 서명 뒤에 만들어야 합니다(서명하면 파일 내용이 바뀌므로). 워크플로의 `Collect outputs` 단계가 이미 그 순서입니다.
+
 ## 코드 서명 (SmartScreen 경고 없애기)
 
 서명이 없으면 처음 실행할 때 Windows SmartScreen 이 "알 수 없는 게시자" 경고를 띄웁니다.
