@@ -24,4 +24,18 @@
     <type fullname="ImeBadge.Tsf/ITfCompartmentMgr" preserve="all" />
     <type fullname="ImeBadge.Tsf/ITfCompartment" preserve="all" />
   </assembly>
+
+  <!--
+    .NET 자체의 COM 인터페이스(System.Runtime.InteropServices.ComTypes)도 같은 이유로 통째로 보존한다.
+    WinForms 는 클립보드(OLE)에 이 인터페이스들을 쓰는데(DataObject 가 IDataObject·IEnumFORMATETC 를 구현), 트리머가
+    IEnumFORMATETC 의 Skip/Clone, IAdviseSink·IEnumSTATDATA 의 메서드 전부를 지워 Clipboard.SetText 가
+    "Fatal error. 0x80131506" 으로 프로세스를 즉시 끝냈다(try/catch 로도 못 잡음, 정보 창의 "진단 정보 복사").
+    CoreLib 쪽(IEnumVARIANT, ITypeInfo 등)도 같은 식으로 잘려 있어 함께 보존한다.
+  -->
+  <assembly fullname="System.Runtime.InteropServices">
+    <namespace fullname="System.Runtime.InteropServices.ComTypes" />
+  </assembly>
+  <assembly fullname="System.Private.CoreLib">
+    <namespace fullname="System.Runtime.InteropServices.ComTypes" />
+  </assembly>
 </linker>

@@ -353,7 +353,8 @@ self-contained exe 크기를 줄이는 설정은 `src/ImeBadge/ImeBadge.csproj`�
 - **`ILLink.LinkAttributes.xml`.** WinForms가 쓰는 `ICommand` 인터페이스에 `[TypeConverter("...CommandConverter, PresentationFramework")]`
   속성이 붙어 있어, 트리머가 이 문자열을 따라가 WPF 전체(약 45 MB)를 살려 둡니다. 이 속성 인스턴스만 지워 고리를 끊습니다.
 - **`ILLink.Descriptors.xml`.** COM 인터페이스는 메서드 선언 순서가 곧 vtable 슬롯이라, 안 쓰는 자리표시자 메서드를
-  트리머가 지우면 엉뚱한 함수가 호출됩니다. `Uia` 형식을 통째로 보존합니다.
+  트리머가 지우면 엉뚱한 함수가 호출됩니다. `Uia`·`Tsf` 형식과 .NET 자체의 COM 인터페이스(`System.Runtime.InteropServices.ComTypes`)를
+  통째로 보존합니다. 후자는 WinForms 클립보드(OLE)가 쓰는데, 잘려 있으면 `Clipboard.SetText` 가 프로세스를 즉시 끝냅니다.
 - **WinForms 어셈블리 통째로 보존 (`TrimmerRootAssembly`).** WinForms는 실행 중에야 필요해지는 COM 인터페이스가 많아
   멤버 단위로 자르면 창을 만드는 순간 `TypeLoadException`으로 죽습니다(`Control.SetAcceptDrops`의 `IDropTarget`).
   `System.Windows.Forms`와 `System.Windows.Forms.Primitives`는 자르지 않고, 나머지 런타임만 자릅니다. 약 5 MB를 더 쓰는 대신 안전합니다.
