@@ -18,14 +18,15 @@ sealed class BadgeForm : Form
     const int IdleAfterMs = 2000;      // 배지가 이만큼 숨겨져 있으면 폴링을 느리게
     internal const int FlashMs = 1500; // DotFlash: 변경 직후 글자를 보여 주는 시간 (설정 창 미리보기도 같은 시간을 쓴다)
     const int FadeMs = 150;            // 나타날 때 페이드인
-    const int PulseMs = 260;           // 한/영이 바뀔 때 살짝 커졌다 돌아오는 시간
+    internal const int PulseMs = 260;  // 한/영이 바뀔 때 살짝 커졌다 돌아오는 시간 (확인 그림도 같은 곡선을 쓴다)
     const float PulseGrow = 0.18f;     // 펄스 최대 확대 비율
+    internal const int FrameMs = 16;   // 애니메이션 한 프레임(약 60fps)
 
     /// <summary>진행 중인 배지 애니메이션. 별도의 16ms 타이머가 마지막 상태로 다시 그린다(IME 는 다시 읽지 않는다).</summary>
     enum Anim { None, FadeIn, Pulse }
     Anim _anim;
     long _animStart;
-    readonly System.Windows.Forms.Timer _animTimer = new() { Interval = 16 };
+    readonly System.Windows.Forms.Timer _animTimer = new() { Interval = FrameMs };
     Snapshot _lastSnapshot;
     Bitmap? _lastBmp;          // 마지막으로 올린 비트맵. 알파만 바꿔 다시 올릴 때 쓴다
     byte _lastAlpha = 255;
@@ -417,6 +418,9 @@ sealed class BadgeForm : Form
     }
 
     static float EaseOut(float p) => 1f - (1f - p) * (1f - p);
+
+    /// <summary>펄스 배율. 진행률 0→1 동안 1 → 1+<see cref="PulseGrow"/> → 1 (반 사인).</summary>
+    internal static float PulseScale(float progress) => 1f + PulseGrow * (float)Math.Sin(progress * Math.PI);
 
     void AnimTick()
     {
@@ -871,7 +875,7 @@ sealed class BadgeForm : Form
             else if (changed) StartAnim(Anim.Pulse);
         }
         float progress = AnimProgress();
-        float pulse = _anim == Anim.Pulse ? 1f + PulseGrow * (float)Math.Sin(progress * Math.PI) : 1f;
+        float pulse = _anim == Anim.Pulse ? PulseScale(progress) : 1f;
         byte alpha = _anim == Anim.FadeIn ? (byte)Math.Round(255 * EaseOut(progress)) : (byte)255;
 
         // DotFlash: 변경 직후 1.5초는 둥근 배지, 그 뒤는 점
