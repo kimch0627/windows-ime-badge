@@ -64,7 +64,22 @@ public sealed class DesignThemesTests
         }
     }
 
-    /// <summary>테두리 개선안: 모든 견본에서 테두리가 배지색과 구별된다(Flat 1.6, Soft 1.4 이상).</summary>
+    /// <summary>
+    /// 한/영 기본색은 색상(hue)만이 아니라 밝기도 달라야 한다. 휘도 대비 1.5 이상이면 흑백으로 보거나 색약이어도 두 배지가 구별된다.
+    /// (벚꽃 핑크·라벤더, 캔디 코랄·하늘색은 한때 1.08·1.12 로 밝기가 거의 같았다.)
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(ThemeIds))]
+    public void Defaults_HangulAndEnglish_DifferInLightness(string id)
+    {
+        var t = DesignThemes.Get(id);
+        ColorHex.TryParse(t.HangulColor, out int ko);
+        ColorHex.TryParse(t.EnglishColor, out int en);
+        double ratio = ColorHex.ContrastRatio(ko, en);
+        Assert.True(ratio >= 1.5, $"{id}: {ratio:0.00}");
+    }
+
+    /// <summary>테두리: 모든 견본에서 테두리가 배지색과 구별된다(Flat 1.6, Soft 1.4 이상).</summary>
     [Theory]
     [MemberData(nameof(ThemeIds))]
     public void EdgeOn_StandsOutOnEverySwatch(string id)

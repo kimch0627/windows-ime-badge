@@ -10,9 +10,9 @@ using System.Linq;
 namespace ImeBadge;
 
 /// <summary>
-/// 개발용 배지 시안 한 장(PNG). <c>ImeBadge.exe --render-sheet [경로]</c> 로 실행하면 창·트레이 없이 그림만 저장하고 끝낸다.
+/// 개발용 배지 확인 그림 한 장(PNG). <c>ImeBadge.exe --render-sheet [경로]</c> 로 실행하면 창·트레이 없이 그림만 저장하고 끝낸다.
 /// 렌더러는 GDI+(Windows 전용)라 Linux 에서 도는 단위 테스트로는 모습을 확인할 수 없어, CI 의 Windows 러너가 이 그림을 만들어
-/// 롤링 사전 릴리스에 붙인다(build.yml). 지금 모습(<see cref="RenderOptions.Legacy"/>)과 개선안을 항목별로 나란히 그린다.
+/// 롤링 사전 릴리스에 붙인다(build.yml). 모든 테마·모양·캐릭터, 불투명도, 배율, 트레이 아이콘, 한/영 색의 흑백 구분을 한눈에 본다.
 /// </summary>
 static class RenderSheet
 {
@@ -39,25 +39,9 @@ static class RenderSheet
         return true;
     }
 
-    // ── 시안 내용 ──
-
-    /// <summary>한/영 색 구분 제안. 벚꽃·캔디는 두 기본색의 밝기가 거의 같아(휘도 대비 1.08·1.12) 흑백·색약으로는 구별이 어렵다. 영문 색을 진하게 한 안.</summary>
-    static readonly Dictionary<string, string> ProposedEnglish = new() { ["blossom"] = "#8E7CE0", ["candy"] = "#1C74C9" };
-
     static readonly Dictionary<string, string> ThemeNames = new()
     {
         [DesignThemes.ClassicId] = "클래식", ["blossom"] = "벚꽃", ["candy"] = "캔디", ["mint"] = "민트초코", ["midnight"] = "미드나잇",
-    };
-
-    /// <summary>하나씩만 켠 개선 항목. 헤일로는 불투명도 100% 에서 보이지 않으므로 3번 구역에서 따로 본다.</summary>
-    static readonly (string Name, RenderOptions Options)[] Steps =
-    {
-        ("현재", RenderOptions.Legacy),
-        ("광택(림)만", new(FluentGloss: true)),
-        ("테두리만", new(DualBorder: true)),
-        ("글자 정렬만", new(InkLayout: true)),
-        ("영문 글꼴만", new(LatinFont: BadgeFonts.SegoeUI)),
-        ("전체 개선안", RenderOptions.Improved),
     };
 
     /// <summary>한 칸에 그릴 배지.</summary>
@@ -69,7 +53,7 @@ static class RenderSheet
     static readonly Item[] Gallery =
     {
         Han, EnA, EnCaps, HanCaps,
-        new("상자", ImeState.Hangul, BadgeStyle.Box), new("점", ImeState.Hangul, BadgeStyle.Dot),
+        new("상자", ImeState.Hangul, BadgeStyle.Box), new("점", ImeState.Hangul, BadgeStyle.Dot), new("?", ImeState.OtherLang),
         new("고양이", ImeState.Hangul, Character: BadgeCharacters.Cat), new("강아지", ImeState.English, Character: BadgeCharacters.Dog),
         new("하트", ImeState.Hangul, Character: BadgeCharacters.Heart), new("구름 Caps", ImeState.English, Caps: true, Character: BadgeCharacters.Cloud),
         new("별 Caps", ImeState.Hangul, Caps: true, Character: BadgeCharacters.Star),
@@ -81,125 +65,93 @@ static class RenderSheet
     {
         using var s = new Sheet(2200, 9000);
         const float Main = 1.5f;   // 125~150% 배율 노트북이 흔하다
+        var themes = DesignThemes.All;
 
-        s.Title("ImeBadge 배지 시안");
+        s.Title("ImeBadge 배지 모습");
         s.Note($"버전 {AppVersion.Display} · {DateTime.Now:yyyy-MM-dd HH:mm} · {Environment.OSVersion.VersionString}");
-        s.Note("글꼴: " + string.Join(" · ", new[] { BadgeRenderer.FontFamily, BadgeFonts.SegoeUI, BadgeFonts.SegoeUISemibold }
+        s.Note("글꼴: " + string.Join(" · ", new[] { BadgeRenderer.FontFamily, BadgeFonts.Latin }
             .Select(f => $"{f} {(BadgeFonts.IsInstalled(f) ? "있음" : "없음")}")));
-        s.Note("현재 = v1.5.0 까지의 모습.  개선안 = 광택 림 + 같은 색조 테두리 + 잉크 기준 글자 정렬 + 영문 Segoe UI + 불투명도 헤일로.");
 
-        // 1. 테마별 전체 모양
-        s.Section("1. 테마별 현재 vs 개선안", "배율 150%, 불투명도 100%. Caps = Caps Lock 켜짐.");
+        // 1. 테마별 모양
+        s.Section("1. 테마별 모양", "배율 150%, 불투명도 100%. Caps = Caps Lock 켜짐, ? = 다른 언어.");
         float slot = 54;
         var gallerySlots = Gallery.Select(i => i.Caption).ToArray();
         s.Headers(new[] { ("밝은 배경", gallerySlots, slot), ("어두운 배경", gallerySlots, slot) });
-        foreach (var design in DesignThemes.All)
+        foreach (var design in themes)
         {
             var theme = BadgeTheme.Of(design);
-            foreach (var (name, opts) in new[] { Steps[0], Steps[^1] })
-                s.Row($"{ThemeNames[design.Id]} · {name}", new[]
-                {
-                    Panel(Light, slot, Gallery, theme, Main, 100, opts),
-                    Panel(Dark, slot, Gallery, theme, Main, 100, opts),
-                });
-            s.Space(6);
+            s.Row(ThemeNames[design.Id], new[] { Panel(Light, slot, Gallery, theme, Main, 100), Panel(Dark, slot, Gallery, theme, Main, 100) });
         }
 
-        // 2. 항목별 효과
-        s.Section("2. 항목별 효과 (하나씩만 켠 것)", "배율 150%, 불투명도 100%. 어느 항목을 받아들일지 고르는 용도.");
-        slot = 50;
-        var trio = new[] { Han, EnA, EnCaps };
-        var trioSlots = trio.Select(i => i.Caption).ToArray();
-        s.Headers(DesignThemes.All.Select(d => (ThemeNames[d.Id], trioSlots, slot))
-            .Concat(DesignThemes.All.Select(d => (ThemeNames[d.Id] + " (어둡게)", trioSlots, slot))).ToArray());
-        foreach (var (name, opts) in Steps)
-            s.Row(name, DesignThemes.All.Select(d => Panel(Light, slot, trio, BadgeTheme.Of(d), Main, 100, opts))
-                .Concat(DesignThemes.All.Select(d => Panel(Dark, slot, trio, BadgeTheme.Of(d), Main, 100, opts))).ToArray());
-
-        // 3. 불투명도
-        s.Section("3. 불투명도와 글자 가독성", "배율 150%. 배지를 글 위에 겹쳐 그렸다. '같은 색' = 배지와 같은 색의 선택 영역 위.");
-        slot = 54;
+        // 2. 불투명도
+        s.Section("2. 불투명도와 글자 가독성", "배율 150%. 배지를 글 위에 겹쳐 그렸다. '같은 색' = 배지와 같은 색의 선택 영역 위.");
         var pair = new[] { Han, EnA };
         var pairSlots = pair.Select(i => i.Caption).ToArray();
         var opacities = new[] { 100, 60, 30 };
         s.Headers(opacities.SelectMany(op => new[] { ($"{op}% 흰 문서", pairSlots, slot), ($"{op}% 어두운", pairSlots, slot), ($"{op}% 같은 색", pairSlots, slot) }).ToArray());
-        foreach (var id in new[] { DesignThemes.ClassicId, "candy", "blossom" })
+        foreach (var design in themes)
         {
-            var theme = BadgeTheme.Of(DesignThemes.Get(id));
-            foreach (var (name, opts) in new[] { Steps[0], ("헤일로만", new RenderOptions(TextHalo: true)), Steps[^1] })
-                s.Row($"{ThemeNames[id]} · {name}", opacities.SelectMany(op => new[]
-                {
-                    Panel(Light, slot, pair, theme, Main, op, opts, backdrop: Color.FromArgb(0x30, 0x30, 0x30)),
-                    Panel(Dark, slot, pair, theme, Main, op, opts, backdrop: Color.FromArgb(0xE0, 0xE0, 0xE0)),
-                    Panel(theme.Hangul, slot, pair, theme, Main, op, opts, backdrop: Color.White),
-                }).ToArray());
-            s.Space(6);
+            var theme = BadgeTheme.Of(design);
+            s.Row(ThemeNames[design.Id], opacities.SelectMany(op => new[]
+            {
+                Panel(Light, slot, pair, theme, Main, op, backdrop: Color.FromArgb(0x30, 0x30, 0x30)),
+                Panel(Dark, slot, pair, theme, Main, op, backdrop: Color.FromArgb(0xE0, 0xE0, 0xE0)),
+                Panel(theme.Hangul, slot, pair, theme, Main, op, backdrop: Color.White),
+            }).ToArray());
         }
 
-        // 4. 크기
-        s.Section("4. 크기(배율)", "흰 배경. 마지막 칸은 배율 100% 를 3배로 확대(픽셀 그대로)한 것 — 림·테두리가 뭉개지는지 본다.");
+        // 3. 크기
+        s.Section("3. 크기(배율)", "흰 배경. 마지막 칸은 배율 100% 를 3배로 확대(픽셀 그대로)한 것 — 림·테두리가 뭉개지는지 본다.");
         var scales = new[] { 1f, 1.25f, 1.5f, 2f };
         var sizeItems = new[] { Han, EnA, HanCaps };
         var sizeSlots = sizeItems.Select(i => i.Caption).ToArray();
         s.Headers(scales.Select(k => ($"{k * 100:0}%", sizeSlots, 36 * k)).Append(("100% ×3 확대", pairSlots, 110f)).ToArray());
-        foreach (var id in new[] { DesignThemes.ClassicId, "blossom", "midnight" })
-        {
-            var theme = BadgeTheme.Of(DesignThemes.Get(id));
-            foreach (var (name, opts) in new[] { Steps[0], Steps[^1] })
-            {
-                var panels = scales.Select(k => Panel(Light, 36 * k, sizeItems, theme, k, 100, opts)).ToList();
-                panels.Add(new SheetPanel(Light, 110, pair.Select(i => Zoom(RenderItem(i, theme, 1f, 100, opts), 3)).ToList()));
-                s.Row($"{ThemeNames[id]} · {name}", panels);
-            }
-            s.Space(6);
-        }
-
-        // 5. 영문 글꼴
-        s.Section("5. 영문 글꼴 후보", "나머지 개선안은 켠 상태, 배율 150%. 한글(맑은 고딕 Bold)과 굵기가 어울리는지 본다.");
-        var fontItems = new[] { Han, EnA, EnCaps, new Item("?", ImeState.OtherLang), new Item("고양이 a", ImeState.English, Character: BadgeCharacters.Cat) };
-        var fontSlots = fontItems.Select(i => i.Caption).ToArray();
-        s.Headers(new[] { ("클래식", fontSlots, 54f), ("캔디", fontSlots, 54f), ("미드나잇 (어둡게)", fontSlots, 54f) });
-        foreach (var (name, font) in new (string, string?)[] { ("맑은 고딕 Bold (현재)", null), ("Segoe UI Bold", BadgeFonts.SegoeUI), ("Segoe UI Semibold", BadgeFonts.SegoeUISemibold) })
-        {
-            var opts = RenderOptions.Improved with { LatinFont = font };
-            string label = font is null || BadgeFonts.IsInstalled(font) ? name : name + " (없음 → 맑은 고딕)";
-            s.Row(label, new[]
-            {
-                Panel(Light, 54, fontItems, BadgeTheme.Of(DesignThemes.Classic), Main, 100, opts),
-                Panel(Light, 54, fontItems, BadgeTheme.Of(DesignThemes.Get("candy")), Main, 100, opts),
-                Panel(Dark, 54, fontItems, BadgeTheme.Of(DesignThemes.Get("midnight")), Main, 100, opts),
-            });
-        }
-
-        // 6. 한/영 색 구분
-        s.Section("6. 한/영 색 구분 — 흑백으로 보면", "개선안으로 그림. 두 색의 휘도 대비가 1.5 미만이면 흑백·색약으로는 거의 같은 밝기로 보인다.");
-        s.Headers(new[] { ("색", pairSlots, 54f), ("흑백", pairSlots, 54f) });
-        foreach (var design in DesignThemes.All)
+        foreach (var design in themes)
         {
             var theme = BadgeTheme.Of(design);
-            ColorRow($"{ThemeNames[design.Id]} · 현재 색", theme);
-            if (ProposedEnglish.TryGetValue(design.Id, out var hex) && ColorHex.TryParse(hex, out int argb))
-                ColorRow($"{ThemeNames[design.Id]} · 제안 (영문 {hex})", theme with { English = Color.FromArgb(argb) });
+            var panels = scales.Select(k => Panel(Light, 36 * k, sizeItems, theme, k, 100)).ToList();
+            panels.Add(new SheetPanel(Light, 110, pair.Select(i => Zoom(RenderItem(i, theme, 1f, 100), 3)).ToList()));
+            s.Row(ThemeNames[design.Id], panels);
         }
 
-        void ColorRow(string label, BadgeTheme theme)
+        // 4. 트레이 아이콘
+        s.Section("4. 트레이 아이콘", "100% 배율은 16px, 150% 는 24px. 마지막 칸은 16px 을 4배로 확대한 것.");
+        var trayStates = new[] { ImeState.Hangul, ImeState.English, ImeState.OtherLang };
+        var traySlots = new[] { "한", "A", "?" };
+        var traySizes = new[] { 16, 20, 24, 32 };
+        s.Headers(traySizes.Select(px => ($"{px}px", traySlots, 40f))
+            .Append(("24px 어두운 작업 표시줄", traySlots, 40f)).Append(("16px ×4 확대", traySlots, 72f)).ToArray());
+        foreach (var design in themes)
         {
+            var theme = BadgeTheme.Of(design);
+            var panels = traySizes.Select(px => new SheetPanel(Light, 40, trayStates.Select(st => TrayIcons.RenderState(st, px, theme)).ToList())).ToList();
+            panels.Add(new SheetPanel(Dark, 40, trayStates.Select(st => TrayIcons.RenderState(st, 24, theme)).ToList()));
+            panels.Add(new SheetPanel(Light, 72, trayStates.Select(st => Zoom(TrayIcons.RenderState(st, 16, theme), 4)).ToList()));
+            s.Row(ThemeNames[design.Id], panels);
+        }
+
+        // 5. 한/영 색 구분
+        s.Section("5. 한/영 색 구분 — 흑백으로 보면", "두 기본색의 휘도 대비가 1.5 이상이면 흑백·색약으로 봐도 밝기로 구별된다(테스트로 확인).");
+        s.Headers(new[] { ("색", pairSlots, 54f), ("흑백", pairSlots, 54f) });
+        foreach (var design in themes)
+        {
+            var theme = BadgeTheme.Of(design);
             double ratio = ColorHex.ContrastRatio(theme.Hangul.ToArgb(), theme.English.ToArgb());
-            s.Row(label, new[]
+            s.Row(ThemeNames[design.Id], new[]
             {
-                Panel(Light, 54, pair, theme, Main, 100, RenderOptions.Improved),
-                new SheetPanel(Light, 54, pair.Select(i => Gray(RenderItem(i, theme, Main, 100, RenderOptions.Improved))).ToList()),
-            }, $"휘도 대비 {ratio:0.00}" + (ratio < 1.5 ? "  ← 구별 어려움" : ""));
+                Panel(Light, 54, pair, theme, Main, 100),
+                new SheetPanel(Light, 54, pair.Select(i => Gray(RenderItem(i, theme, Main, 100))).ToList()),
+            }, $"{design.HangulColor} / {design.EnglishColor} · 휘도 대비 {ratio:0.00}");
         }
 
         return s.Finish();
     }
 
-    static Bitmap RenderItem(in Item it, BadgeTheme theme, float scale, int opacity, RenderOptions opts) =>
-        BadgeRenderer.Render(it.State, it.Style, scale, theme with { Character = it.Character }, opacity, it.Caps, opts);
+    static Bitmap RenderItem(in Item it, BadgeTheme theme, float scale, int opacity) =>
+        BadgeRenderer.Render(it.State, it.Style, scale, theme with { Character = it.Character }, opacity, it.Caps);
 
-    static SheetPanel Panel(Color bg, float slot, IEnumerable<Item> items, BadgeTheme theme, float scale, int opacity, RenderOptions opts, Color? backdrop = null) =>
-        new(bg, slot, items.Select(i => RenderItem(i, theme, scale, opacity, opts)).ToList(), backdrop);
+    static SheetPanel Panel(Color bg, float slot, IEnumerable<Item> items, BadgeTheme theme, float scale, int opacity, Color? backdrop = null) =>
+        new(bg, slot, items.Select(i => RenderItem(i, theme, scale, opacity)).ToList(), backdrop);
 
     /// <summary>픽셀을 그대로 k 배로 키운다(nearest-neighbor). 1px 선이 뭉개졌는지 보려고.</summary>
     static Bitmap Zoom(Bitmap src, int k)

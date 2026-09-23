@@ -25,7 +25,7 @@ static class Program
             return;
         }
 
-        // 개발용: 배지 시안 그림(PNG)만 저장하고 끝낸다. 창·트레이를 만들지 않으므로 떠 있는 인스턴스와 상관없다(build.yml 이 CI 에서 실행).
+        // 개발용: 배지 확인 그림(PNG)만 저장하고 끝낸다. 창·트레이를 만들지 않으므로 떠 있는 인스턴스와 상관없다(build.yml 이 CI 에서 실행).
         if (RenderSheet.TryRun(args))
         {
             Log.Write("=== exit (render-sheet) ===");
