@@ -72,11 +72,12 @@
 
   <!-- 트리밍 후에도 런타임 팩에서 그대로 복사되는 파일 중 이 프로그램에 필요 없는 것을 뺀다.
        Presentation*/wpfgfx/D3DCompiler/PenImc: WPF 네이티브·관리 DLL (WPF 창을 만들지 않음)
-       mscordaccore*/mscordbi/createdump/DiaSymReader: 디버거·크래시 덤프 지원용 (실행에는 불필요) -->
+       mscordaccore*/mscordbi/createdump/DiaSymReader: 디버거·크래시 덤프 지원용 (실행에는 불필요)
+       DiaSymReader 는 런타임 팩마다 이름이 다르다(win-x64: ...Native.amd64, win-arm64: ...Native.arm64) → 접두사로 맞춘다. -->
   <Target Name="RemoveUnneededPublishFiles" AfterTargets="ComputeResolvedFilesToPublishList" Condition="'$(PublishTrimmed)' == 'true'">
     <ItemGroup>
       <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
-        Condition="$([System.String]::Copy('%(Filename)').StartsWith('Presentation')) or $([System.String]::Copy('%(Filename)').StartsWith('wpfgfx')) or $([System.String]::Copy('%(Filename)').StartsWith('D3DCompiler')) or $([System.String]::Copy('%(Filename)').StartsWith('PenImc')) or $([System.String]::Copy('%(Filename)').StartsWith('mscordaccore')) or '%(Filename)' == 'mscordbi' or '%(Filename)' == 'createdump' or '%(Filename)' == 'Microsoft.DiaSymReader.Native.amd64'" />
+        Condition="$([System.String]::Copy('%(Filename)').StartsWith('Presentation')) or $([System.String]::Copy('%(Filename)').StartsWith('wpfgfx')) or $([System.String]::Copy('%(Filename)').StartsWith('D3DCompiler')) or $([System.String]::Copy('%(Filename)').StartsWith('PenImc')) or $([System.String]::Copy('%(Filename)').StartsWith('mscordaccore')) or '%(Filename)' == 'mscordbi' or '%(Filename)' == 'createdump' or $([System.String]::Copy('%(Filename)').StartsWith('Microsoft.DiaSymReader.Native'))" />
     </ItemGroup>
   </Target>
 </Project>

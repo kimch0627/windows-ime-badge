@@ -21,12 +21,16 @@ Windows 10/11에서 **글자를 입력하기 전에** 지금 키보드가 한글
 ### 설치
 
 GitHub **[Releases](https://github.com/kimch0627/windows-ime-badge/releases)** 페이지에서 받습니다. 세 가지 중 하나면 됩니다.
+파일 이름의 `<arch>` 는 PC 의 CPU 종류입니다. 보통의 인텔·AMD PC 는 **x64**, Snapdragon 같은 ARM 노트북(Copilot+ PC 등)은 **arm64** 를 받습니다.
+(설정 → 시스템 → 정보 → "시스템 종류" 에서 확인. 32-bit Windows 는 지원하지 않습니다.)
 
 | 파일 | 어떤 분께 | 비고 |
 |---|---|---|
-| `ImeBadge-Setup-<버전>.exe` | **대부분의 분. 권장** | 설치 프로그램. 관리자 권한 불필요. 자동 시작·바로 가기 옵션. 제거는 Windows 설정 → 앱에서 |
-| `ImeBadge-win-x64-selfcontained.exe` | 설치 없이 그냥 실행하고 싶은 분 | 약 19 MB 단일 파일. 아무 폴더에 두고 실행 |
-| `ImeBadge-win-x64.exe` | PC에 .NET 8 데스크톱 런타임이 이미 있는 분 | 약 200 KB. 없으면 실행 시 설치 안내 창이 뜸 (`winget install Microsoft.DotNet.DesktopRuntime.8`) |
+| `ImeBadge-Setup-<버전>-<arch>.exe` | **대부분의 분. 권장** | 설치 프로그램. 관리자 권한 불필요. 자동 시작·바로 가기 옵션. 제거는 Windows 설정 → 앱에서 |
+| `ImeBadge-win-<arch>-selfcontained.exe` | 설치 없이 그냥 실행하고 싶은 분 | 약 19 MB 단일 파일. 아무 폴더에 두고 실행 |
+| `ImeBadge-win-<arch>.exe` | PC에 .NET 8 데스크톱 런타임이 이미 있는 분 | 약 200 KB. 없으면 실행 시 설치 안내 창이 뜸 (`winget install Microsoft.DotNet.DesktopRuntime.8`) |
+
+ARM64 PC 에서 x64 파일을 받아도 Windows 의 x64 에뮬레이션으로 동작하지만, arm64 파일이 더 빠르고 배터리를 덜 씁니다.
 
 winget 을 쓰신다면 (등록 심사가 끝난 뒤부터):
 

@@ -5,6 +5,11 @@
 ## [Unreleased]
 
 ### 추가
+- Windows on ARM(ARM64) 네이티브 빌드. x64 빌드와 같은 세 가지(설치 프로그램, self-contained exe, framework-dependent exe)를
+  `arm64` 로도 만든다. ARM64 PC 는 지금까지 x64 에뮬레이션으로 돌렸는데, 네이티브 빌드가 더 빠르고 배터리를 덜 쓴다.
+  winget 매니페스트에도 `arm64` 설치 프로그램이 들어가 ARM64 PC 에서 `winget install` 하면 그 판을 받는다.
+  자동 업그레이드도 지금 돌고 있는 프로세스의 아키텍처에 맞는 파일을 받는다(x64·arm64 가 아니면 다운로드 페이지를 여는 쪽으로 물러난다).
+  x86(32-bit) 은 만들지 않는다(Windows 11 에 32-bit 판이 없고 Windows 10 은 지원 종료).
 - **자동 업그레이드**. 업데이트 창의 "지금 업그레이드" 를 누르면 새 버전을 알아서 내려받아 적용하고 프로그램을 다시 띄운다.
   다운로드 페이지를 열어 직접 설치하는 길(기존 동작)도 그대로 남아 있다.
   - 설치 프로그램으로 설치했으면 새 설치 프로그램을 조용히 다시 돌린다
@@ -19,6 +24,9 @@
   - 업데이트 알림 풍선을 클릭하면 다운로드 페이지가 아니라 업데이트 창(업그레이드 버튼이 있는 쪽)이 열린다.
 
 ### 변경
+- 릴리스 파일 이름에 CPU 아키텍처가 붙는다. 설치 프로그램 `ImeBadge-Setup-<버전>.exe` → `ImeBadge-Setup-<버전>-x64.exe`(+ `-arm64.exe`),
+  롤링 사전 릴리스의 고정 이름 `ImeBadge-Setup.exe` → `ImeBadge-Setup-x64.exe` / `ImeBadge-Setup-arm64.exe`.
+  exe 두 가지(`ImeBadge-win-x64.exe`, `ImeBadge-win-x64-selfcontained.exe`)는 이름이 그대로고 `arm64` 판이 나란히 추가된다.
 - 설치 프로그램이 `/RESTARTAPP`(조용한 설치 후 프로그램 다시 띄우기)과 명령줄로 설치 범위 지정(`/CURRENTUSER`·`/ALLUSERS`)을 받아들인다.
   자동 업그레이드가 쓰는 옵션이며, 손으로 설치할 때의 동작은 달라지지 않는다.
 - 자동 업그레이드로 내려받은 파일은 `%LOCALAPPDATA%\ImeBadge\update` 에 잠시 두고 다음 실행 때 지운다.
