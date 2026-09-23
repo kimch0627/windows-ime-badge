@@ -93,8 +93,26 @@ caret 탐색·IME 판정·창 z-order 는 실제 앱에서만 확인할 수 있�
 
 ## 5. 자동 업그레이드
 
-예전 버전(예: 한 단계 낮은 정식 릴리스)을 설치해 두고 트레이 메뉴 → 업데이트 확인 → **지금 업그레이드** 로 확인합니다.
-`--debug` 로 실행하면 `install site:`, `auto update: flavor=...`, `apply-update:` 줄이 로그에 남습니다.
+자동 업그레이드는 **정식 릴리스(`releases/latest`)** 만 봅니다. 그래서 테스트하려면 "새 코드를, 최신 정식 릴리스보다 낮은
+버전 번호로" 빌드해 두고 실제 릴리스로 올라가게 해야 합니다(개발 빌드 `0.0.0` 은 업그레이드 항목 자체가 숨겨집니다).
+
+```powershell
+# 예: 최신 정식 릴리스가 v1.3.0 일 때, 새 코드를 1.2.9 로 새겨 빌드한다
+dotnet publish src\ImeBadge\ImeBadge.csproj -c Release -r win-x64 --self-contained true `
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:Version=1.2.9 -o out\sc
+# 설치본으로 확인할 때는 같은 exe 로 설치 프로그램까지 만든다
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=1.2.9 /DMyAppFileVersion=1.2.9.0 `
+  /DMySourceExe=..\out\sc\ImeBadge.exe installer\ImeBadge.iss
+```
+
+그 뒤 트레이 메뉴 → 업데이트 확인 → **지금 업그레이드**. `--debug` 로 실행하면
+`install site:`, `auto update: flavor=...`, `apply-update:` 줄이 로그에 남고, 설치본 경로는 `update-setup.log` 도 남습니다.
+
+> **이 방식으로 완전히 확인되지 않는 한 가지**: 설치본의 **자동 재실행**은 *내려받은* 설치 프로그램이 `/RESTARTAPP` 을
+> 알아야 동작합니다. 그 지원은 이 변경에 처음 들어갔으므로, 예전 릴리스(v1.3.0 등)로 업그레이드하는 테스트에서는
+> 설치까지는 조용히 끝나도 프로그램이 스스로 다시 뜨지 않습니다(직접 실행하면 새 버전). 실제 사용자는 항상
+> 이 기능이 들어간 버전 **이후**의 설치 프로그램을 받으므로 영향이 없고, 이 항목은 다음 정식 릴리스(v1.4.0 → v1.4.1)
+> 업그레이드에서 확인됩니다. 무설치 exe 경로의 재실행은 우리 코드가 하므로 지금 그대로 확인됩니다.
 
 | 항목 | 확인 내용 | 결과 |
 |---|---|---|
