@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+### 추가
+- Windows on ARM(ARM64) 네이티브 빌드. x64 빌드와 같은 세 가지(설치 프로그램, self-contained exe, framework-dependent exe)를
+  `arm64` 로도 만든다. ARM64 PC 는 지금까지 x64 에뮬레이션으로 돌렸는데, 네이티브 빌드가 더 빠르고 배터리를 덜 쓴다.
+  winget 매니페스트에도 `arm64` 설치 프로그램이 들어가 ARM64 PC 에서 `winget install` 하면 그 판을 받는다.
+  x86(32-bit) 은 만들지 않는다(Windows 11 에 32-bit 판이 없고 Windows 10 은 지원 종료).
+
+### 변경
+- 릴리스 파일 이름에 CPU 아키텍처가 붙는다. 설치 프로그램 `ImeBadge-Setup-<버전>.exe` → `ImeBadge-Setup-<버전>-x64.exe`(+ `-arm64.exe`),
+  롤링 사전 릴리스의 고정 이름 `ImeBadge-Setup.exe` → `ImeBadge-Setup-x64.exe` / `ImeBadge-Setup-arm64.exe`.
+  exe 두 가지(`ImeBadge-win-x64.exe`, `ImeBadge-win-x64-selfcontained.exe`)는 이름이 그대로고 `arm64` 판이 나란히 추가된다.
+
 ### 수정
 - 이미지 커서 추적: `PrintWindow` 가 빈 화면을 주는 창(GPU 로 그리는 Xshell 터미널 뷰 등)에서 커서를 전혀 못 찾던 문제.
   빈 프레임을 감지하면 화면 캡처로 전환하고, 우리 배지의 지금·이전 자리를 비교에서 빼서 배지 움직임을 커서로 오인하지 않게 했다.
@@ -18,21 +29,12 @@ Xshell 처럼 자체 커서를 그려 Windows 가 커서 위치를 모르는 터
 예전 설정 파일은 그대로 읽히며 새 항목("커서를 못 찾는 앱" = `Xshell*`, 이미지 커서 추적 = 꺼짐)은 기본값으로 채워집니다.
 
 ### 추가
-- Windows on ARM(ARM64) 네이티브 빌드. x64 빌드와 같은 세 가지(설치 프로그램, self-contained exe, framework-dependent exe)를
-  `arm64` 로도 만든다. ARM64 PC 는 지금까지 x64 에뮬레이션으로 돌렸는데, 네이티브 빌드가 더 빠르고 배터리를 덜 쓴다.
-  winget 매니페스트에도 `arm64` 설치 프로그램이 들어가 ARM64 PC 에서 `winget install` 하면 그 판을 받는다.
-  x86(32-bit) 은 만들지 않는다(Windows 11 에 32-bit 판이 없고 Windows 10 은 지원 종료).
 - Xshell 처럼 자체 커서를 그리는 앱(Win32 caret 도 UI Automation 텍스트 정보도 없음)에서도 배지가 뜬다.
   "커서를 못 찾는 앱" 목록(설정 창, 기본 `Xshell*`)에 있는 앱은 배지를 입력 창의 왼쪽 아래 모서리에 고정해 띄운다.
   목록으로 고르는 이유는 작업 표시줄처럼 글자를 입력하지 않는 곳에는 뜨지 않게 하기 위해서다. `--debug` 로그에 `corner` 가 남는다.
 - 이미지 커서 추적(실험적, 기본 꺼짐). 설정 → "커서를 못 찾는 앱" → "화면을 분석해 커서를 따라가기" 를 켜면, 위 목록의 앱에서
   모서리에 고정하는 대신 대상 창을 두 번 캡처(`PrintWindow`)해 그 차이로 깜빡이는 커서를 찾아 따라간다. 화면 출력이 많으면
   못 찾아 모서리로 되돌아가고 CPU 를 조금 더 쓴다. `--debug` 로그에 `caret:img(...)` 가 남는다.
-
-### 변경
-- 릴리스 파일 이름에 CPU 아키텍처가 붙는다. 설치 프로그램 `ImeBadge-Setup-<버전>.exe` → `ImeBadge-Setup-<버전>-x64.exe`(+ `-arm64.exe`),
-  롤링 사전 릴리스의 고정 이름 `ImeBadge-Setup.exe` → `ImeBadge-Setup-x64.exe` / `ImeBadge-Setup-arm64.exe`.
-  exe 두 가지(`ImeBadge-win-x64.exe`, `ImeBadge-win-x64-selfcontained.exe`)는 이름이 그대로고 `arm64` 판이 나란히 추가된다.
 
 ## [1.2.0] - 2026-09-22
 

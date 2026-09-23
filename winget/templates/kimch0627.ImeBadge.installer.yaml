@@ -19,7 +19,7 @@ AppsAndFeaturesEntries:
     InstallerType: inno
 # 아키텍처마다 설치 프로그램이 따로 있다. winget 이 PC 의 CPU 에 맞는 것을 고른다(ARM64 PC 는 arm64 판).
 # FILE_* 자리는 New-WingetManifest.ps1 이 ImeBadge-Setup-<버전>-<arch>.exe 로 채운다.
-# 1.2.0 이전 릴리스는 x64 하나뿐이라 스크립트가 arm64 항목을 빼고 옛 이름 ImeBadge-Setup-<버전>.exe 를 쓴다.
+# 1.3.0 까지의 릴리스는 x64 하나뿐이라 스크립트가 arm64 항목을 빼고 옛 이름 ImeBadge-Setup-<버전>.exe 를 쓴다.
 Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/kimch0627/windows-ime-badge/releases/download/v{{VERSION}}/{{FILE_X64}}
