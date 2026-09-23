@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 추가
+- CI 가 트리밍된 self-contained 빌드에서 COM 인터페이스의 메서드가 잘렸는지 검사한다(`tools/ComTrimCheck`).
+  잘리면 vtable 이 어긋나 `Fatal error. 0x80131506` 으로 죽으므로(아래 "진단 정보 복사" 문제), 그런 빌드는 이제 CI 에서 실패한다.
+
 ### 수정
 - 릴리스 워크플로의 winget 매니페스트 생성(`tools/winget/New-WingetManifest.ps1`)이 1.5.1 에서 "SHA256SUMS.txt 가 아직 없다" 며 실패하던 문제.
   릴리스를 만든 직후 GitHub API 의 `releases/tags/<태그>` 응답에 딸린 첨부 목록이 한동안 비어 있을 수 있어,
