@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### 수정
+- 정보 창의 "진단 정보 복사" 를 누르면 프로그램이 오류 안내 없이 바로 꺼지던 문제(설치판·self-contained exe).
+  크기를 줄이는 트리밍이 .NET 의 COM 인터페이스(`IEnumFORMATETC` 의 `Skip`·`Clone`, `IAdviseSink`·`IEnumSTATDATA` 의 메서드 전부)를
+  지워, WinForms 클립보드(OLE)가 `Fatal error. 0x80131506` 으로 프로세스를 끝냈다. try/catch 로도 잡히지 않아 errors.log 에도 남지 않았다.
+  `ILLink.Descriptors.xml` 이 `System.Runtime.InteropServices.ComTypes` 를 통째로 보존한다(exe 약 6 KB 증가).
+  같은 식으로 잘려 있던 CoreLib 쪽(`IEnumVARIANT`, `ITypeInfo`)도 함께 보존한다.
+
 ## [1.5.1] - 2026-09-23
 
 해상도가 낮은 화면에서 설정 창이 잘리던 문제를 고친 릴리스입니다. 설정 변경은 없습니다.
