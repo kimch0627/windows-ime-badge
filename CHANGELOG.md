@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-09-23
+
+정보 창의 "진단 정보 복사" 를 누르면 프로그램이 꺼지던 문제를 고친 릴리스입니다. 설정 변경은 없습니다.
+
 ### 수정
 - 릴리스 워크플로의 winget 매니페스트 생성(`tools/winget/New-WingetManifest.ps1`)이 1.5.1 에서 "SHA256SUMS.txt 가 아직 없다" 며 실패하던 문제.
   릴리스를 만든 직후 GitHub API 의 `releases/tags/<태그>` 응답에 딸린 첨부 목록이 한동안 비어 있을 수 있어,
@@ -259,7 +263,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.1...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.2...HEAD
+[1.5.2]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.4.0...v1.4.1
