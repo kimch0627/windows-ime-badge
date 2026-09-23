@@ -58,10 +58,11 @@ sealed class BadgeForm : Form
     long _hiddenSince = Environment.TickCount64;
     int _pollErrors;
     IntPtr _raiseFailFg; int _raiseFailCount;
-    string? _pendingUpdateUrl;
+    UpdateInfo? _pendingUpdate;
     CancellationTokenSource? _updateCts;
     SettingsForm? _settingsForm;
     AboutForm? _aboutForm;
+    UpdateProgressForm? _updateProgress;
 
     ToolStripMenuItem _pauseItem = null!, _autostartItem = null!;
     ToolStripLabel _statusItem = null!;   // 누를 수 없는 상태 줄. 비활성 메뉴 항목과 달리 아이콘이 회색으로 바래지 않는다
@@ -94,7 +95,8 @@ sealed class BadgeForm : Form
         _tray.DoubleClick += (_, _) => OpenSettings();
         _tray.BalloonTipClicked += (_, _) =>
         {
-            if (_pendingUpdateUrl is not null) AboutForm.Open(SafeUrl.GitHubOr(_pendingUpdateUrl, AppInfo.ReleasesUrl));
+            // 업데이트 알림을 눌렀으면 업데이트 창(업그레이드 버튼이 있는 쪽)을, 아니면 설정을 연다.
+            if (_pendingUpdate is { } info) OfferUpdate(info);
             else OpenSettings();
         };
 
@@ -516,7 +518,7 @@ sealed class BadgeForm : Form
 
             if (info is not null && VersionInfo.IsNewer(AppVersion.Display, info.Tag))
             {
-                _pendingUpdateUrl = info.Url;
+                _pendingUpdate = info;
                 Log.Write($"update available: {info.Tag}");
                 if (manual) OfferUpdate(info);
                 else if (info.Tag != _settings.SkippedUpdateTag)
@@ -538,16 +540,125 @@ sealed class BadgeForm : Form
         }
     }
 
-    /// <summary>수동 확인에서 새 버전을 찾았을 때: 열기 / 나중에 / 이 버전 건너뛰기.</summary>
+    /// <summary>새 버전을 찾았을 때 띄우는 업데이트 창: 지금 업그레이드 / 다운로드 페이지 열기 / 나중에 / 이 버전 건너뛰기.</summary>
     void OfferUpdate(UpdateInfo info)
     {
-        int choice = Dialogs.Choose(Strings.Format("update.offer.heading", info.Tag), Strings.Format("update.offer.text", AppVersion.Display), TaskDialogIcon.Information,
-            (Strings.Get("update.open"), Strings.Get("update.open.note")),
-            (Strings.Get("update.later"), Strings.Get("update.later.note")),
-            (Strings.Get("update.skip"), Strings.Format("update.skip.note", info.Tag)));
-        if (choice == 0) AboutForm.Open(info.Url);
-        else if (choice == 2) { _settings.SkippedUpdateTag = info.Tag; _store.Save(_settings); }
+        if (_updateProgress is { IsDisposed: false } running) { running.Activate(); return; }   // 이미 받고 있으면 그 창으로
+
+        var actions = new List<(string title, string? note, Action run)>();
+        // 개발 빌드(0.0.0)는 자기 자리(bin\Debug 등)를 릴리스 파일로 덮어쓰지 않는다. 다운로드 페이지만 안내한다.
+        if (!AppVersion.IsDevBuild)
+            actions.Add((Strings.Get("update.upgrade"), Strings.Get("update.upgrade.note"), () => StartAutoUpdate(info)));
+        actions.Add((Strings.Get("update.open"), Strings.Get("update.open.note"), () => AboutForm.Open(info.Url)));
+        actions.Add((Strings.Get("update.later"), Strings.Get("update.later.note"), () => { }));
+        actions.Add((Strings.Get("update.skip"), Strings.Format("update.skip.note", info.Tag), () =>
+        {
+            _settings.SkippedUpdateTag = info.Tag;
+            _store.Save(_settings);
+        }));
+
+        var commands = new (string, string?)[actions.Count];
+        for (int i = 0; i < actions.Count; i++) commands[i] = (actions[i].title, actions[i].note);
+        int choice = Dialogs.Choose(Strings.Format("update.offer.heading", info.Tag), Strings.Format("update.offer.text", AppVersion.Display),
+            TaskDialogIcon.Information, commands);
+        if (choice >= 0) actions[choice].run();   // 닫거나 취소하면 -1
     }
+
+    /// <summary>
+    /// "지금 업그레이드": 릴리스에서 내 설치 형태에 맞는 파일을 받아 SHA-256 을 확인하고 적용한 뒤 프로그램을 끝낸다
+    /// (설치 프로그램 또는 새 exe 가 곧 다시 띄워 준다). 어느 단계에서 실패하든 쓰던 버전은 그대로 남는다.
+    /// </summary>
+    async void StartAutoUpdate(UpdateInfo info)
+    {
+        var flavor = Updater.Flavor;
+        var asset = UpdatePackage.Pick(info.Assets, flavor);
+        var sums = UpdatePackage.Sums(info.Assets);
+        Log.Write($"auto update: flavor={flavor} asset={asset?.Name ?? "(none)"}");
+        if (asset is null) { AutoUpdateFailed(info, Strings.Format("update.auto.noAsset", flavor)); return; }
+        if (sums is null) { AutoUpdateFailed(info, Strings.Get("update.auto.noChecksum")); return; }
+
+        var cts = new CancellationTokenSource();
+        var form = _updateProgress = new UpdateProgressForm(info.Tag);
+        form.Cancelled += () => cts.Cancel();
+        form.FormClosed += (_, _) =>
+        {
+            cts.Cancel();
+            if (ReferenceEquals(_updateProgress, form)) _updateProgress = null;
+            form.Dispose();
+        };
+        form.Show();
+        form.Activate();
+        form.Report(Strings.Get("update.preparing"), -1);
+
+        void Fail(string? detail)
+        {
+            if (!form.IsDisposed) form.Close();
+            AutoUpdateFailed(info, detail);
+        }
+
+        try
+        {
+            System.IO.Directory.CreateDirectory(_paths.UpdateDir);
+            string sumsText = await UpdateChecker.FetchTextAsync(sums.Url, UpdatePackage.MaxSumsBytes, cts.Token);
+            string? expected = UpdatePackage.ExpectedHash(sumsText, asset.Name);
+            if (expected is null)
+            {
+                Fail(Strings.Get("update.auto.noChecksum"));
+                return;
+            }
+
+            string staged = System.IO.Path.Combine(_paths.UpdateDir, UpdatePackage.StagedFileName(info.Tag, asset.Name));
+            var progress = new Progress<DownloadProgress>(pr =>
+            {
+                if (form.IsDisposed) return;
+                form.Report(pr.Total > 0
+                    ? Strings.Format("update.downloading", Mb(pr.Done), Mb(pr.Total))
+                    : Strings.Format("update.downloading.unknown", Mb(pr.Done)), pr.Total > 0 ? pr.Percent : -1);
+            });
+            string actual = await UpdateChecker.DownloadAsync(asset, staged, progress, cts.Token);
+
+            form.Report(Strings.Get("update.verifying"), 100);
+            if (!UpdatePackage.HashMatches(expected, actual))
+            {
+                Log.Error($"auto update: checksum mismatch for {asset.Name} (expected {expected}, got {actual})");
+                try { System.IO.File.Delete(staged); } catch { }
+                Fail(Strings.Get("update.auto.checksum"));
+                return;
+            }
+
+            form.Finish(Strings.Get("update.applying"));
+            if (!Updater.Apply(staged, _paths)) { Fail(null); return; }
+
+            // 적용이 시작됐다. 설치 프로그램(또는 새 exe)이 우리가 나가기를 기다리므로 여기서 조용히 끝낸다.
+            Log.Write("auto update: applied, exiting");
+            _pendingUpdate = null;
+            Application.Exit();
+        }
+        catch (OperationCanceledException)
+        {
+            Log.Write("auto update cancelled");
+            if (!form.IsDisposed) form.Close();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("auto update failed", ex);
+            Fail(ex.Message);
+        }
+    }
+
+    /// <summary>자동 업그레이드가 막혔을 때: 원인을 알려 주고 다운로드 페이지를 열 기회를 준다.</summary>
+    void AutoUpdateFailed(UpdateInfo info, string? detail)
+    {
+        string text = Strings.Get("update.auto.failed.text");
+        int choice = Dialogs.Choose(Strings.Get("update.auto.failed"),
+            string.IsNullOrWhiteSpace(detail) ? text : detail + "\n\n" + text, TaskDialogIcon.Warning,
+            (Strings.Get("update.open"), Strings.Get("update.open.note")),
+            (Strings.Get("dialog.close"), null));
+        if (choice == 0) AboutForm.Open(info.Url);
+    }
+
+    /// <summary>바이트를 "12.3"(MB) 로. 진행 표시에만 쓴다.</summary>
+    static string Mb(long bytes) => (bytes / 1048576.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
 
     // ── 시스템 이벤트 ──
     // SystemEvents 는 별도 스레드에서 올 수 있다. 창·타이머는 UI 스레드에서만 만지도록 넘긴다.
@@ -815,6 +926,7 @@ sealed class BadgeForm : Form
             _lastBmp?.Dispose();
             _settingsForm?.Dispose();
             _aboutForm?.Dispose();
+            _updateProgress?.Dispose();
             _tray.Visible = false;
             _tray.Icon = Icons.App;   // 캐시한 아이콘을 해제하기 전에 참조를 끊는다
             _tray.Dispose();

@@ -15,6 +15,16 @@ static class Program
         Log.Configure(paths);
         Log.Write($"=== {AppInfo.ProductName} {AppVersion.Display} start ===");
 
+        // 자동 업그레이드의 마지막 단계. 새로 받은 exe 가 이 모드로 실행되어 옛 exe 자리를 차지하고
+        // 그 자리의 exe 를 다시 띄운다. 창도 트레이 아이콘도 만들지 않으므로 중복 실행 검사보다 앞에 둔다.
+        if (Updater.Has(args, Updater.ApplySwitch))
+        {
+            ApplicationConfiguration.Initialize();   // 실패를 알리는 대화상자만 쓴다(창은 만들지 않는다)
+            Updater.RunApply(args);
+            Log.Write("=== exit (apply-update) ===");
+            return;
+        }
+
         // 이미 떠 있으면 그쪽에 설정 창을 열라고 알리고 끝낸다.
         using var single = new SingleInstance();
         if (!single.IsFirst)
@@ -28,6 +38,8 @@ static class Program
         try
         {
             ApplicationConfiguration.Initialize();
+
+            Updater.CleanStaging(paths);   // 지난 업그레이드가 남긴 설치 파일 치우기
 
             var store = new SettingsStore(paths);
             bool firstRun = !File.Exists(store.FilePath) && !(store.LegacyFilePath is { } legacy && File.Exists(legacy));

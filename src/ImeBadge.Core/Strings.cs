@@ -211,7 +211,7 @@ public static class Strings
 
         // ── 업데이트 ──
         ["update.balloon.title"] = "새 버전이 있습니다",
-        ["update.balloon.text"] = "{0} {1} 을(를) 받을 수 있습니다. (현재 {2})\n클릭하면 다운로드 페이지가 열립니다.",
+        ["update.balloon.text"] = "{0} {1} 을(를) 받을 수 있습니다. (현재 {2})\n클릭하면 업데이트 창이 열립니다.",
         ["update.none"] = "아직 정식 릴리스가 없습니다.",
         ["update.latest"] = "최신 버전을 쓰고 있습니다.",
         ["update.current"] = "현재 {0}",
@@ -226,6 +226,22 @@ public static class Strings
         ["update.later.note"] = "다음에 다시 알립니다.",
         ["update.skip"] = "이 버전 건너뛰기",
         ["update.skip.note"] = "{0} 은(는) 자동으로 알리지 않습니다. 더 새 버전이 나오면 다시 알립니다.",
+        ["update.upgrade"] = "지금 업그레이드",
+        ["update.upgrade.note"] = "새 버전을 내려받아 적용하고 자동으로 다시 시작합니다.",
+        ["update.progress.title"] = "업데이트 {0}",
+        ["update.preparing"] = "준비하는 중...",
+        ["update.downloading"] = "내려받는 중... {0} / {1} MB",
+        ["update.downloading.unknown"] = "내려받는 중... {0} MB",
+        ["update.verifying"] = "받은 파일을 확인하는 중...",
+        ["update.applying"] = "적용하는 중... 잠시 뒤 새 버전으로 다시 시작합니다.",
+        ["update.cancel"] = "취소",
+        ["update.auto.failed"] = "자동 업그레이드를 마치지 못했습니다.",
+        ["update.auto.failed.text"] = "다운로드 페이지에서 직접 받아 설치할 수 있습니다.",
+        ["update.auto.noAsset"] = "이 릴리스에는 지금 쓰는 설치 형태({0})에 맞는 파일이 없습니다.",
+        ["update.auto.noChecksum"] = "이 릴리스에 체크섬 목록(SHA256SUMS.txt)이 없어 받은 파일을 확인할 수 없습니다.",
+        ["update.auto.checksum"] = "받은 파일이 손상되었습니다(체크섬이 맞지 않음).",
+        ["update.apply.failed"] = "새 버전으로 바꾸지 못했습니다.",
+        ["update.apply.failed.text"] = "프로그램 파일을 쓸 수 없었습니다. 예전 버전이 그대로 남아 있으니, 다운로드 페이지에서 받아 다시 설치해 주세요.",
     };
 
     static readonly Dictionary<string, string> En = new()
@@ -390,7 +406,7 @@ public static class Strings
 
         // ── Updates ──
         ["update.balloon.title"] = "New version available",
-        ["update.balloon.text"] = "{0} {1} is available (you have {2}).\nClick to open the download page.",
+        ["update.balloon.text"] = "{0} {1} is available (you have {2}).\nClick to open the update window.",
         ["update.none"] = "There is no stable release yet.",
         ["update.latest"] = "You're on the latest version.",
         ["update.current"] = "Current: {0}",
@@ -405,5 +421,21 @@ public static class Strings
         ["update.later.note"] = "Remind me next time.",
         ["update.skip"] = "Skip this version",
         ["update.skip.note"] = "{0} won't be announced again. You'll be notified when a newer version is out.",
+        ["update.upgrade"] = "Upgrade now",
+        ["update.upgrade.note"] = "Downloads the new version, applies it and restarts automatically.",
+        ["update.progress.title"] = "Update {0}",
+        ["update.preparing"] = "Preparing...",
+        ["update.downloading"] = "Downloading... {0} / {1} MB",
+        ["update.downloading.unknown"] = "Downloading... {0} MB",
+        ["update.verifying"] = "Verifying the download...",
+        ["update.applying"] = "Applying... the new version will start in a moment.",
+        ["update.cancel"] = "Cancel",
+        ["update.auto.failed"] = "The automatic upgrade could not be completed.",
+        ["update.auto.failed.text"] = "You can download and install the new version yourself.",
+        ["update.auto.noAsset"] = "This release has no file for the way this copy was installed ({0}).",
+        ["update.auto.noChecksum"] = "This release has no checksum list (SHA256SUMS.txt), so the download cannot be verified.",
+        ["update.auto.checksum"] = "The downloaded file is corrupt (checksum mismatch).",
+        ["update.apply.failed"] = "Could not switch to the new version.",
+        ["update.apply.failed.text"] = "The program file could not be written. Your current version is untouched - please download and install the new version manually.",
     };
 }
