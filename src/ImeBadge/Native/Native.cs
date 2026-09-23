@@ -53,6 +53,7 @@ static class Native
     [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
     [DllImport("user32.dll")] public static extern IntPtr GetKeyboardLayout(uint tid);
     [DllImport("user32.dll")] public static extern short GetKeyState(int vKey);
+    [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vKey);
     [DllImport("user32.dll")] public static extern bool IsHungAppWindow(IntPtr hWnd);
     [DllImport("imm32.dll")] public static extern IntPtr ImmGetDefaultIMEWnd(IntPtr hWnd);
     [DllImport("user32.dll")]
@@ -147,6 +148,16 @@ static class Native
     /// <summary>Caps Lock 이 켜져 있는가. 토글 키는 GetKeyState 의 최하위 비트가 켜짐 상태다(스레드에 상관없이 전역 값).</summary>
     public static bool IsCapsLockOn() => (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
 
+    public const int VK_LBUTTON = 0x01, VK_RBUTTON = 0x02, VK_MBUTTON = 0x04;
+
+    /// <summary>
+    /// 지금 마우스 버튼이 눌려 있는가(드래그·텍스트 선택 중). GetAsyncKeyState 의 최상위 비트가 "눌림"이며 스레드와 무관한 실제 상태다.
+    /// 이때 다른 스레드의 입력 큐에 붙거나(AttachThreadInput) 창을 강제로 다시 그리게 하면(PrintWindow) 진행 중인 드래그가 끊길 수 있다.
+    /// </summary>
+    public static bool IsMouseButtonDown() =>
+        (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 || (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0
+        || (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
+
     public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
     public const uint EVENT_OBJECT_FOCUS = 0x8005;
     public const uint EVENT_OBJECT_LOCATIONCHANGE = 0x800B;      // 창·caret·마우스 포인터 등의 위치 변경. idObject 로 걸러 써야 한다
@@ -158,6 +169,7 @@ static class Native
     public const int OBJID_CURSOR = -9;
 
     public const uint GW_HWNDPREV = 3;           // z-order에서 바로 위(더 앞) 창
+    public const uint GW_OWNER = 4;              // 소유자 창(대화상자·도구 창이면 보통 본 창)
     public const int GWL_EXSTYLE = -20;
     public const int WS_EX_TOPMOST = 0x00000008;
 
@@ -195,6 +207,13 @@ static class Native
         if (hwnd == IntPtr.Zero || ClassName(hwnd) != "ApplicationFrameWindow") return IntPtr.Zero;
         return FindWindowEx(hwnd, IntPtr.Zero, "Windows.UI.Core.CoreWindow", null);
     }
+
+    /// <summary>
+    /// 대화상자·보조 창인가: 표준 대화상자 클래스(#32770)이거나 다른 창이 소유한(owned) 창. 설정 창·속성 창처럼
+    /// 본 작업 화면(터미널 뷰 등)이 아닌 창을 가려낼 때 쓴다.
+    /// </summary>
+    public static bool IsDialogLike(IntPtr hwnd) =>
+        hwnd != IntPtr.Zero && (ClassName(hwnd) == "#32770" || GetWindow(hwnd, GW_OWNER) != IntPtr.Zero);
 
     public static bool IsTopmost(IntPtr hwnd) =>
         hwnd != IntPtr.Zero && ((long)GetWindowLongPtr(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
