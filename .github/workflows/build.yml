@@ -8,7 +8,10 @@
 # | v* 태그 push / 수동 release_tag | 그 태그의 정식 Release (버전 번호가 exe·설치 프로그램에 새겨진다)   |
 # | main 에 `release: vX.Y.Z ...` 제목의 커밋 push | 워크플로가 그 태그를 만들고 정식 Release 생성 (태그를 직접 푸시할 수 없는 환경용) |
 #
-# 결과물 세 가지: 설치 프로그램(권장), self-contained exe(무설치), framework-dependent exe(.NET 8 런타임 필요).
+# 결과물은 CPU 아키텍처(x64, arm64)마다 세 가지: 설치 프로그램(권장), self-contained exe(무설치), framework-dependent exe(.NET 8 런타임 필요).
+#   ImeBadge-Setup-<버전>-<arch>.exe / ImeBadge-win-<arch>-selfcontained.exe / ImeBadge-win-<arch>.exe
+# arm64 는 x64 러너에서 교차 컴파일한다(dotnet publish -r win-arm64, Inno Setup ArchitecturesAllowed=arm64).
+# x86(32-bit) 은 만들지 않는다: Windows 11 에는 32-bit 판이 없고 Windows 10 은 지원이 끝났다.
 #
 # Actions Artifacts 는 쓰지 않는다. 이 계정은 아티팩트 저장 용량 한도에 걸려 업로드가 실패한다.
 # Release 첨부 파일은 그 용량을 쓰지 않는다. 롤링 사전 릴리스는 태그(latest, dev-*)를 강제로 옮기는
@@ -118,16 +121,29 @@ jobs:
       - name: Test (Windows)
         run: dotnet test tests/ImeBadge.Core.Tests/ImeBadge.Core.Tests.csproj -c Release --no-restore
 
-      - name: Publish (framework-dependent, .NET 8 런타임 필요)
-        run: >
-          dotnet publish src/ImeBadge/ImeBadge.csproj -c Release -r win-x64 --self-contained false
-          -p:PublishSingleFile=true -p:DebugType=none -p:Version=${{ env.VERSION }} -o out/fd
+      # 아키텍처마다 publish 한다. arm64 는 x64 러너에서 교차 컴파일(런타임 팩 win-arm64 를 NuGet 에서 받는다).
+      - name: Publish (framework-dependent, .NET 8 런타임 필요) — x64, arm64
+        shell: pwsh
+        run: |
+          foreach ($arch in "x64", "arm64") {
+            "::group::framework-dependent win-$arch"
+            dotnet publish src/ImeBadge/ImeBadge.csproj -c Release -r win-$arch --self-contained false `
+              -p:PublishSingleFile=true -p:DebugType=none -p:Version=${{ env.VERSION }} -o out/fd-$arch
+            if ($LASTEXITCODE -ne 0) { throw "dotnet publish (fd, win-$arch) failed ($LASTEXITCODE)" }
+            "::endgroup::"
+          }
 
-      - name: Publish (self-contained, 런타임 포함, 트리밍·압축은 csproj 설정)
-        run: >
-          dotnet publish src/ImeBadge/ImeBadge.csproj -c Release -r win-x64 --self-contained true
-          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
-          -p:DebugType=none -p:Version=${{ env.VERSION }} -o out/sc
+      - name: Publish (self-contained, 런타임 포함, 트리밍·압축은 csproj 설정) — x64, arm64
+        shell: pwsh
+        run: |
+          foreach ($arch in "x64", "arm64") {
+            "::group::self-contained win-$arch"
+            dotnet publish src/ImeBadge/ImeBadge.csproj -c Release -r win-$arch --self-contained true `
+              -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+              -p:DebugType=none -p:Version=${{ env.VERSION }} -o out/sc-$arch
+            if ($LASTEXITCODE -ne 0) { throw "dotnet publish (sc, win-$arch) failed ($LASTEXITCODE)" }
+            "::endgroup::"
+          }
 
       - name: Check signing secrets
         id: sign
@@ -166,8 +182,12 @@ jobs:
         run: |
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { throw "ISCC.exe not found at $iscc" }
-          & $iscc "/DMyAppVersion=${{ env.VERSION }}" "/DMyAppFileVersion=${{ env.FILE_VERSION }}" "/DMySourceExe=..\out\sc\ImeBadge.exe" installer\ImeBadge.iss
-          if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)" }
+          foreach ($arch in "x64", "arm64") {
+            "::group::installer $arch"
+            & $iscc "/DMyAppVersion=${{ env.VERSION }}" "/DMyAppFileVersion=${{ env.FILE_VERSION }}" "/DMyArch=$arch" "/DMySourceExe=..\out\sc-$arch\ImeBadge.exe" installer\ImeBadge.iss
+            if ($LASTEXITCODE -ne 0) { throw "ISCC ($arch) failed ($LASTEXITCODE)" }
+            "::endgroup::"
+          }
 
       - name: Sign installer (Azure Trusted Signing)
         if: steps.sign.outputs.enabled == 'true'
@@ -188,11 +208,13 @@ jobs:
       - name: Collect outputs
         shell: pwsh
         run: |
-          Copy-Item out/fd/ImeBadge.exe out/ImeBadge-win-x64.exe
-          Copy-Item out/sc/ImeBadge.exe out/ImeBadge-win-x64-selfcontained.exe
-          Copy-Item installer/Output/ImeBadge-Setup-*.exe out/
-          # 롤링 사전 릴리스용 고정 이름. 버전이 든 이름으로 올리면 커밋마다 파일이 쌓여 덮어써지지 않는다.
-          Copy-Item installer/Output/ImeBadge-Setup-*.exe out/ImeBadge-Setup.exe
+          foreach ($arch in "x64", "arm64") {
+            Copy-Item out/fd-$arch/ImeBadge.exe out/ImeBadge-win-$arch.exe
+            Copy-Item out/sc-$arch/ImeBadge.exe out/ImeBadge-win-$arch-selfcontained.exe
+            Copy-Item installer/Output/ImeBadge-Setup-${{ env.VERSION }}-$arch.exe out/
+            # 롤링 사전 릴리스용 고정 이름. 버전이 든 이름으로 올리면 커밋마다 파일이 쌓여 덮어써지지 않는다.
+            Copy-Item installer/Output/ImeBadge-Setup-${{ env.VERSION }}-$arch.exe out/ImeBadge-Setup-$arch.exe
+          }
           Get-ChildItem out/*.exe | ForEach-Object { "{0,-48} {1,8:N1} MB" -f $_.Name, ($_.Length / 1MB) }
           Get-ChildItem out/*.exe | ForEach-Object { "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } | Set-Content out/SHA256SUMS.txt
           Get-Content out/SHA256SUMS.txt
@@ -200,6 +222,7 @@ jobs:
       # 브랜치 푸시마다 롤링 태그(latest / dev-<브랜치>)를 이 커밋으로 옮기고 사전 릴리스 첨부 파일을 갱신한다.
       # (Dependabot 이 미는 브랜치는 제외. 의존성 갱신마다 dev-dependabot-* 릴리스가 쌓이는 것을 막는다.)
       # 항상 같은 주소에서 최신 빌드를 받을 수 있다:
+      #   https://github.com/<owner>/<repo>/releases/download/latest/ImeBadge-Setup-x64.exe
       #   https://github.com/<owner>/<repo>/releases/download/latest/ImeBadge-win-x64-selfcontained.exe
       - name: Move rolling tag (브랜치 푸시일 때만)
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && github.actor != 'dependabot[bot]'
@@ -216,9 +239,12 @@ jobs:
           body: "`${{ github.ref_name }}` 브랜치의 최신 자동 빌드입니다. 커밋마다 덮어써집니다. 검증된 버전은 v* 릴리스를 받으세요."
           prerelease: true
           files: |
-            out/ImeBadge-Setup.exe
+            out/ImeBadge-Setup-x64.exe
+            out/ImeBadge-Setup-arm64.exe
             out/ImeBadge-win-x64.exe
             out/ImeBadge-win-x64-selfcontained.exe
+            out/ImeBadge-win-arm64.exe
+            out/ImeBadge-win-arm64-selfcontained.exe
             out/SHA256SUMS.txt
 
       # 커밋 제목이 "release: vX.Y.Z" 이면 그 태그를 이 커밋에 만든다. 같은 태그가 이미 있으면 실패해서 알려 준다.
@@ -237,9 +263,12 @@ jobs:
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
           files: |
-            out/ImeBadge-Setup-*.exe
+            out/ImeBadge-Setup-${{ env.VERSION }}-x64.exe
+            out/ImeBadge-Setup-${{ env.VERSION }}-arm64.exe
             out/ImeBadge-win-x64.exe
             out/ImeBadge-win-x64-selfcontained.exe
+            out/ImeBadge-win-arm64.exe
+            out/ImeBadge-win-arm64-selfcontained.exe
             out/SHA256SUMS.txt
 
   # 정식 릴리스가 만들어졌으면 winget 매니페스트를 만들고(WINGET_TOKEN 이 있으면) microsoft/winget-pkgs 에 PR 을 낸다.

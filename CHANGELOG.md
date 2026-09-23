@@ -5,12 +5,21 @@
 ## [Unreleased]
 
 ### 추가
+- Windows on ARM(ARM64) 네이티브 빌드. x64 빌드와 같은 세 가지(설치 프로그램, self-contained exe, framework-dependent exe)를
+  `arm64` 로도 만든다. ARM64 PC 는 지금까지 x64 에뮬레이션으로 돌렸는데, 네이티브 빌드가 더 빠르고 배터리를 덜 쓴다.
+  winget 매니페스트에도 `arm64` 설치 프로그램이 들어가 ARM64 PC 에서 `winget install` 하면 그 판을 받는다.
+  x86(32-bit) 은 만들지 않는다(Windows 11 에 32-bit 판이 없고 Windows 10 은 지원 종료).
 - Xshell 처럼 자체 커서를 그리는 앱(Win32 caret 도 UI Automation 텍스트 정보도 없음)에서도 배지가 뜬다.
   - caret 을 찾는 세 번째 경로: 앱이 IME 에 알려 준 조합(composition) 창 위치(`IMC_GETCOMPOSITIONWINDOW`)와 조합 글꼴 높이를 읽는다.
     앱이 커서가 움직일 때마다 갱신하면 배지가 커서를 따라가고, 조합을 시작할 때만 갱신하면 마지막 한글 입력 자리에 머무른다.
   - 그래도 못 찾으면 "커서를 못 찾는 앱" 목록(설정 창, 기본 `Xshell*`)에 있는 앱은 입력 창의 왼쪽 아래 모서리에 배지를 고정한다.
     목록으로 고르는 이유는 작업 표시줄처럼 글자를 입력하지 않는 곳에는 뜨지 않게 하기 위해서다.
   - `--debug` 로그에 `caret:imm(x,y,h=…)`, `imm:comp(style=…)`, `imm:noaccess`, `corner` 가 남는다.
+
+### 변경
+- 릴리스 파일 이름에 CPU 아키텍처가 붙는다. 설치 프로그램 `ImeBadge-Setup-<버전>.exe` → `ImeBadge-Setup-<버전>-x64.exe`(+ `-arm64.exe`),
+  롤링 사전 릴리스의 고정 이름 `ImeBadge-Setup.exe` → `ImeBadge-Setup-x64.exe` / `ImeBadge-Setup-arm64.exe`.
+  exe 두 가지(`ImeBadge-win-x64.exe`, `ImeBadge-win-x64-selfcontained.exe`)는 이름이 그대로고 `arm64` 판이 나란히 추가된다.
 
 ## [1.2.0] - 2026-09-22
 
