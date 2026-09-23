@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.10.0.schema.json
+PackageIdentifier: kimch0627.ImeBadge
+PackageVersion: "1.2.0"
+InstallerLocale: ko-KR
+InstallerType: inno
+Scope: user
+InstallModes:
+  - interactive
+  - silent
+  - silentWithProgress
+InstallerSwitches:
+  Custom: /CURRENTUSER
+UpgradeBehavior: install
+ReleaseDate: "2026-09-22"
+AppsAndFeaturesEntries:
+  - DisplayName: ImeBadge
+    Publisher: kimch0627
+    ProductCode: "{7E2C1D7A-9B1E-4E63-9A2B-5F1C0B7D3A21}_is1"
+    InstallerType: inno
+# 아키텍처마다 설치 프로그램이 따로 있다. winget 이 PC 의 CPU 에 맞는 것을 고른다(ARM64 PC 는 arm64 판).
+# FILE_* 자리는 New-WingetManifest.ps1 이 ImeBadge-Setup-<버전>-<arch>.exe 로 채운다.
+# 1.3.1 까지의 릴리스는 x64 하나뿐이라 스크립트가 arm64 항목을 빼고 옛 이름 ImeBadge-Setup-<버전>.exe 를 쓴다.
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/kimch0627/windows-ime-badge/releases/download/v1.2.0/ImeBadge-Setup-1.2.0.exe
+    InstallerSha256: "A436E03D16EAA6F3D5A5E5B95A5EA4409AE7A44E4627E609BBC03E9F6F10EE8D"
+    ProductCode: "{7E2C1D7A-9B1E-4E63-9A2B-5F1C0B7D3A21}_is1"
+ManifestType: installer
+ManifestVersion: 1.10.0
