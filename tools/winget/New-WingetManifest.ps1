@@ -63,7 +63,7 @@ $archs = [ordered]@{
     x64   = @{ File = "ImeBadge-Setup-$Version-x64.exe";   FilePlaceholder = '{{FILE_X64}}';   ShaPlaceholder = '{{SHA256_X64}}';   Sha256 = $Sha256X64 }
     arm64 = @{ File = "ImeBadge-Setup-$Version-arm64.exe"; FilePlaceholder = '{{FILE_ARM64}}'; ShaPlaceholder = '{{SHA256_ARM64}}'; Sha256 = $Sha256Arm64 }
 }
-# 1.3.0 까지의 릴리스는 x64 설치 프로그램 하나뿐이고 이름에 "-x64" 접미사가 없다. 그 릴리스로 매니페스트를 다시 만들 때
+# 1.3.1 까지의 릴리스는 x64 설치 프로그램 하나뿐이고 이름에 "-x64" 접미사가 없다. 그 릴리스로 매니페스트를 다시 만들 때
 # (수동 제출, winget 파일을 바꾼 브랜치 푸시의 검증)는 옛 이름을 쓰고 arm64 항목을 뺀다.
 $legacyFile = "ImeBadge-Setup-$Version.exe"
 $legacy = $false
