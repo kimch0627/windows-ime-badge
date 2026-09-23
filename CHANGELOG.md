@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-23
+
+Windows on ARM(ARM64) 네이티브 빌드와, 업데이트 창에서 버튼 하나로 새 버전을 받아 적용하는 자동 업그레이드를 더한 릴리스입니다.
+설정 변경은 없습니다. 릴리스 파일 이름에 CPU 아키텍처(`-x64` / `-arm64`)가 붙으니 직접 내려받을 때는 PC 에 맞는 파일을 고르세요.
+
 ### 추가
 - Windows on ARM(ARM64) 네이티브 빌드. x64 빌드와 같은 세 가지(설치 프로그램, self-contained exe, framework-dependent exe)를
   `arm64` 로도 만든다. ARM64 PC 는 지금까지 x64 에뮬레이션으로 돌렸는데, 네이티브 빌드가 더 빠르고 배터리를 덜 쓴다.
@@ -188,7 +193,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.1.0...v1.2.0
