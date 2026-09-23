@@ -265,4 +265,31 @@ public static class ColorHex
         }
         return unchecked((int)0xFF000000);
     }
+
+    /// <summary>
+    /// 배지 테두리색. 흰/검 반투명 대신 배지색을 같은 색조로 어둡게 해서, 밝은 배경에서도 윤곽이 보이고
+    /// 어두운 배지에 흰 테두리가 둘러진 스티커 같은 느낌이 없다. 배지색과의 대비가 목표(Flat 1.6, Soft 1.4)에 닿을 때까지 조금씩 어둡게 한다.
+    /// 아주 어두운 색(휘도 0.06 미만)은 더 어둡게 해도 티가 나지 않으므로 반대로 흰색 쪽으로 섞는다(어두운 회색 배지의 옅은 윤곽).
+    /// </summary>
+    public static int EdgeOn(int argb, bool soft)
+    {
+        const int White = unchecked((int)0xFFFFFFFF);
+        int c = argb | unchecked((int)0xFF000000);
+        double target = soft ? 1.4 : 1.6;
+        if (RelativeLuminance(c) < 0.06)
+        {
+            for (int step = 5; step <= 30; step++)   // t = 0.10, 0.12, ... 0.60
+            {
+                int e = Mix(c, White, step * 0.02);
+                if (ContrastRatio(c, e) >= target) return e;
+            }
+            return Mix(c, White, 0.6);
+        }
+        for (int step = soft ? 41 : 35; step >= 15; step--)   // f = 0.82(Soft) / 0.70(Flat), ... 0.30
+        {
+            int e = Darken(c, step * 0.02);
+            if (ContrastRatio(c, e) >= target) return e;
+        }
+        return Darken(c, 0.3);
+    }
 }
