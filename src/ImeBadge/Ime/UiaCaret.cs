@@ -8,10 +8,8 @@ namespace ImeBadge;
 static class UiaCaret
 {
     /// <summary>caret 사각형(화면 좌표). 정확한 caret을 못 찾으면 입력창 왼쪽 아래 1x1(높이 0)로 근사.</summary>
-    /// <param name="readOnly">포커스가 읽기 전용 컨트롤에 있어 일부러 null 을 돌려준 경우 true. 다른 경로로 더 찾지 않아야 한다.</param>
-    public static Rectangle? Find(StringBuilder? dump, out bool readOnly)
+    public static Rectangle? Find(StringBuilder? dump)
     {
-        readOnly = false;
         Uia.IUIAutomationElement? el = null;
         object? valuePat = null, textPat = null;
         Uia.IUIAutomationTextRangeArray? sel = null;
@@ -25,7 +23,6 @@ static class UiaCaret
             if (valuePat is Uia.IUIAutomationValuePattern v && v.get_CurrentIsReadOnly())
             {
                 dump?.Append(" uia:readonly");
-                readOnly = true;
                 return null;
             }
 

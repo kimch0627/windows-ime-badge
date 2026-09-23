@@ -85,7 +85,7 @@ winget install kimch0627.ImeBadge
 | | 언어 | 설정 창·트레이 메뉴·알림의 언어. 시스템 언어(자동, 기본) / 한국어 / English. 바꾸면 설정 창이 새 언어로 바로 다시 열리고 편집 중이던 값은 유지. 배지 글자(`한`/`A`)는 바뀌지 않음 |
 | 미리보기 | | 현재 설정으로 실제 렌더러가 그린 배지. 왼쪽은 밝은 배경(메모장), 오른쪽은 어두운 배경(VS Code 등). 작은 편집기처럼 여러 줄 글 위에 그려 배지가 옆줄 글자를 얼마나 가리고 얼마나 비치는지 보임 |
 | 배지를 띄우지 않을 앱 | 프로세스 이름 목록 | 실행 중인 앱을 목록에서 고르거나 이름을 직접 입력해 추가. `.exe` 생략 가능, 끝에 `*` 는 앞부분 일치. 예: `mstsc`, `Unreal*` |
-| 커서를 못 찾는 앱 | 프로세스 이름 목록 | 자체 커서를 그려 커서 위치를 알 수 없는 앱(Xshell 같은 터미널). 이 목록의 앱은 그럴 때 배지를 입력 창 왼쪽 아래 모서리에 고정해 띄움(위치 설정 무시). 기본 `Xshell*` |
+| 커서를 못 찾는 앱 | 프로세스 이름 목록 + 이미지 추적 토글 | 자체 커서를 그려 커서 위치를 알 수 없는 앱(Xshell 같은 터미널). 이 목록의 앱은 배지를 입력 창 왼쪽 아래 모서리에 고정해 띄움(위치 설정 무시). 기본 `Xshell*`. "화면을 분석해 커서를 따라가기"(실험적)를 켜면 화면 캡처로 커서를 찾아 따라감 |
 
 각 항목에 마우스를 올리면 짧은 설명(툴팁)이 보이고, Alt+밑줄 글자로 항목에 바로 갈 수 있습니다.
 
@@ -184,7 +184,7 @@ installer/ImeBadge.iss  Inno Setup 스크립트
    활성 창이 UWP 껍데기(`ApplicationFrameWindow`, ApplicationFrameHost.exe)이면 그 안의 `Windows.UI.Core.CoreWindow`
    자식 창(실제 앱 프로세스)을 대신 씁니다(`Native.UwpCoreWindow`). 액자가 아니라 그림에게 묻는 셈입니다.
 2. 프로세스 이름이 제외 목록에 있거나(`ProcessFilter`), 창이 모니터 전체를 덮으면(`Native.IsFullscreen`) 여기서 끝. 배지를 숨깁니다.
-3. **caret 위치** (세 경로 + 마지막 대안)
+3. **caret 위치** (두 경로 + 마지막 대안)
    - 1순위: `GetGUIThreadInfo(tid)`의 `hwndCaret`/`rcCaret` → `ClientToScreen()`. 메모장·Word 등
      Win32 caret을 만드는 앱.
    - 2순위: UI Automation. `IUIAutomation.GetFocusedElement()` → `IUIAutomationTextPattern.GetSelection()`.
@@ -192,15 +192,20 @@ installer/ImeBadge.iss  Inno Setup 스크립트
      점으로 접은 뒤, 넓이 0이면 `ExpandToEnclosingUnit(Character)`로 한 글자 넓혀 사각형을 얻습니다.
      Chrome/Edge/Electron(VS Code) 같은 앱용. TextPattern이 없으면 Edit/ComboBox
      컨트롤의 왼쪽 아래 모서리를 씁니다(높이 0 = 근사). 읽기 전용이라고 밝힌 요소에는 배지를 띄우지 않습니다.
-   - 3순위: IMM32 조합 창 위치 (`Ime/ImmCaret.cs`). 자체 커서를 그리는 앱(Xshell 같은 터미널)은 한글 조합 글자가 커서 자리에
-     나타나도록 `ImmSetCompositionWindow` 로 IME 에 커서 위치를 알려 줍니다. 그 값을 앱의 기본 IME 창에
-     `WM_IME_CONTROL`/`IMC_GETCOMPOSITIONWINDOW` 로 되물어 읽고, `IMC_GETCOMPOSITIONFONT` 의 글꼴 높이를 caret 높이로 씁니다.
-     결과 버퍼가 상대 프로세스 안에 있어야 하므로 `VirtualAllocEx` 로 잠시 빌리고 `ReadProcessMemory` 로 읽습니다(쓰기는 하지 않음).
-     열 수 없는 프로세스(관리자 권한 등)와 위치를 정해 준 적이 없는 앱(`CFS_DEFAULT`)은 건너뜁니다. 앱이 커서가 움직일 때마다
-     갱신하면 배지도 따라가고, 조합을 시작할 때만 갱신하면 마지막 한글 입력 자리에 머무릅니다.
-   - 마지막 대안: 그래도 못 찾았고 "커서를 못 찾는 앱" 목록(`CornerBadgeProcesses`, 기본 `Xshell*`)에 있으면 포커스 창의
+   - 마지막 대안: 두 경로로 못 찾았고 "커서를 못 찾는 앱" 목록(`CornerBadgeProcesses`, 기본 `Xshell*`)에 있으면 포커스 창의
      사각형을 넘겨 배지를 그 왼쪽 아래 모서리에 고정합니다(`BadgeLayout.Corner`). 위치 설정은 적용하지 않습니다.
      모든 앱에 적용하지 않는 이유: 작업 표시줄처럼 글자를 입력하지 않는 곳에도 배지가 뜨기 때문입니다.
+     Xshell 같은 터미널은 Win32 caret 도, UI Automation 텍스트 정보도, IMM 조합 창 위치도 노출하지 않아 API 로는 커서를 알 수 없습니다.
+   - 이미지 커서 추적(opt-in, `Ime/ImageCaret.cs`): 설정에서 "화면을 분석해 커서를 따라가기"를 켜면, 모서리로 가기 전에 대상 창을
+     `PrintWindow(PW_RENDERFULLCONTENT)`로 두 번 캡처해 그 차이로 깜빡이는 커서를 찾습니다. 판정(작고 꽉 찬 사각형인가)은 순수
+     로직(`Core/CursorBlink.cs`)에 있어 단위 테스트로 검증합니다. 찾으면 커서를 따라가고, 화면 출력이 많아 차이가 넓으면 못 찾은 것으로
+     보고 모서리로 되돌아갑니다. `PrintWindow` 는 대상 창만 그리므로 우리 배지가 캡처에 섞이지 않지만, GPU 로 그리는 자식 뷰
+     (Xshell 터미널 등)는 빈 화면을 주기도 합니다. 그러면 화면 캡처로 전환하고, 배지의 지금·이전 자리를 비교에서 빼서
+     배지 움직임을 커서로 오인하는 되먹임을 막습니다. 커서는 변할 때(깜빡임·타이핑)만 보이므로, 한 번 찾은 위치는 같은 창·같은
+     크기인 동안 계속 기억하고(창을 옮겨도 따라감), 스크롤·긴 출력처럼 화면이 크게 바뀌면 기억을 버리고 모서리로 돌아갔다가
+     커서가 다시 보이면 새 자리를 찾습니다(`Core/CursorBlink.IsWide`). 커서가 깜빡이지 않는 설정이면 타이핑으로 움직일 때만 갱신됩니다.
+     `--debug` 로그에 `caret:img(...)`, 기억한 위치를 쓰면 `caret:img-hold`, 못 찾으면 `img:nodiff`(변화 없음)·
+     `img:reject(WxH)`(커서 모양 아님)·`img:wide(WxH)`(화면이 크게 바뀜, 기억 버림)가 남습니다.
 4. `GetKeyboardLayout(tid)`의 하위 16비트가 `0x0412`(ko-KR)가 아니면 `OtherLang`(`?` 표시)입니다.
 5. **한/영 상태** (두 경로)
    - IMM32: `ImmGetDefaultIMEWnd(hwndFocus)`(hwndFocus가 0이면 최상위 창)에
@@ -325,9 +330,12 @@ WinForms는 .NET 8에서 공식적으로 트리밍 미지원(`NETSDK1175`)이므
   그래도 caret 을 못 찾는 컨트롤이 있을 수 있습니다(`--debug` 로그의 `uia:none` 항목을 이슈에 올려 주세요).
 - **터미널**(Windows Terminal)은 IMM32 상태 보고가 부정확해 TSF 전역 compartment 를 먼저 읽습니다. Windows 설정 → 시간 및 언어 →
   입력 → 고급 키보드 설정에서 "앱 창마다 다른 입력 방법 사용" 을 켰다면 전역 값이 활성 창과 다를 수 있습니다.
-- **자체 커서를 그리는 터미널**(Xshell 등)은 Win32 caret 도 접근성 텍스트 정보도 없어 커서 위치를 직접 알 수 없습니다.
-  IME 에 알려 준 조합 창 위치를 대신 읽는데, 앱이 그 값을 조합 시작 때만 갱신하면 배지가 마지막 한글 입력 자리에 머무를 수 있습니다.
-  그마저 없으면 "커서를 못 찾는 앱" 목록에 있는 앱은 창 왼쪽 아래 모서리에 고정해 띄웁니다.
+- **자체 커서를 그리는 터미널**(Xshell 등)은 Win32 caret 도, 접근성 텍스트 정보도, IMM 조합 창 위치도 노출하지 않아
+  API 로는 커서 위치를 알 수 없습니다. "커서를 못 찾는 앱" 목록(기본 `Xshell*`)에 있는 앱은 배지를 입력 창의 왼쪽 아래
+  모서리에 고정해 띄웁니다. 목록에서 빼면 그 앱에서는 배지를 띄우지 않습니다.
+  - 설정에서 **"화면을 분석해 커서를 따라가기"**(실험적)를 켜면 화면 캡처로 커서를 찾아 따라갑니다. 다만 화면 출력이 많으면
+    못 찾아 모서리로 되돌아가고, 캡처 때문에 CPU 를 조금 더 씁니다. SecureCRT 처럼 접근성용 "추적 가능한 삽입 캐럿" 옵션이
+    있는 터미널이라면 그 옵션을 켜는 편이 낫습니다(그러면 1순위 Win32 caret 경로가 정확히 커서를 따라갑니다).
 - **코드 서명**은 아직 없습니다. 시크릿을 넣으면 CI 가 자동으로 서명합니다([docs/release.md](docs/release.md)).
 - **일본어·중국어 IME** 는 지원하지 않습니다(`?` 표시). 한국 사용자 우선으로 개발 중입니다.
 

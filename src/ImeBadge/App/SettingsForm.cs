@@ -28,7 +28,7 @@ sealed class SettingsForm : Form
     ComboBox _language = null!;
     ColorSwatches _hangulColor = null!, _englishColor = null!;
     Label _hangulHex = null!, _englishHex = null!;
-    ToggleSwitch _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!;
+    ToggleSwitch _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!, _trackImage = null!;
     HotkeyBox _hotkeyBox = null!;
     ProcessListEditor _excluded = null!, _corner = null!;
     PreviewPanel _preview = null!;
@@ -263,15 +263,27 @@ sealed class SettingsForm : Form
         return g;
     }
 
-    /// <summary>caret 을 못 찾는 앱(Xshell 등)에서 배지를 창 모서리에 띄울 앱 목록. 제외 목록과 같은 편집기를 쓴다.</summary>
+    /// <summary>caret 을 못 찾는 앱(Xshell 등)의 앱 목록 + 이미지 커서 추적 토글. 목록은 제외 목록과 같은 편집기를 쓴다.</summary>
     GroupBox BuildCornerGroup()
     {
         var g = NewGroup(Strings.Get("group.corner"), Strings.Get("group.corner.desc"));
+        var stack = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = false, Location = g.ContentOrigin, Margin = Padding.Empty,
+        };
+
+        _trackImage = Toggle(Strings.Get("corner.trackImage"), on => { _draft.TrackCursorByImage = on; Touch(); });
+        _tips.SetToolTip(_trackImage, Strings.Get("corner.trackImage.tip"));
+        stack.Controls.Add(_trackImage);
+
         _corner = new ProcessListEditor(() => _draft.CornerBadgeProcesses, InnerWidth, _tips,
             Strings.Get("corner.add"), Strings.Get("corner.remove"), Strings.Get("exclude.new.tip"), Strings.Get("corner.note"))
-        { Location = g.ContentOrigin };
+        { Margin = new Padding(0, 8, 0, 0) };
         _corner.Changed += Touch;
-        g.Controls.Add(_corner);
+        stack.Controls.Add(_corner);
+
+        g.Controls.Add(stack);
         return g;
     }
 
@@ -420,6 +432,7 @@ sealed class SettingsForm : Form
         _hotkeyBox.Text = _draft.Hotkey;
         _updates.Checked = _draft.CheckForUpdates;
         _language.SelectedIndex = Math.Max(0, Array.FindIndex(Labels.Languages, l => l.value == _draft.Language));
+        _trackImage.Checked = _draft.TrackCursorByImage;
         _excluded.Reload();
         _corner.Reload();
     }
