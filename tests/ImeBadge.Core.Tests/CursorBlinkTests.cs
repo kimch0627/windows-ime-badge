@@ -100,4 +100,34 @@ public sealed class CursorBlinkTests
     {
         Assert.False(Wide(int.MaxValue, int.MaxValue, -1, -1, 0));
     }
+
+    [Fact]
+    public void OverlapsAny_TraceOfOldBadgePosition_IsDetected()
+    {
+        // 배지가 (100,100) 40x40 에 있다가 옮겨 간 뒤, 그 자리에 남은 흔적을 커서로 찾은 경우.
+        var badges = new[] { Rectangle.Empty, new Rectangle(100, 100, 40, 40) };
+        Assert.True(CursorBlink.OverlapsAny(new Rectangle(110, 110, 20, 20), badges, 4));
+    }
+
+    [Fact]
+    public void OverlapsAny_EdgeWithinMargin_IsDetected()
+    {
+        // 배지 오른쪽 가장자리에서 2px 떨어진 그림자 흔적.
+        var badges = new[] { new Rectangle(100, 100, 40, 40) };
+        Assert.True(CursorBlink.OverlapsAny(new Rectangle(142, 110, 2, 18), badges, 4));
+    }
+
+    [Fact]
+    public void OverlapsAny_RealCursorAwayFromBadge_IsNotDetected()
+    {
+        var badges = new[] { new Rectangle(100, 100, 40, 40) };
+        Assert.False(CursorBlink.OverlapsAny(new Rectangle(300, 110, 8, 18), badges, 4));
+    }
+
+    [Fact]
+    public void OverlapsAny_NoBadges_IsNotDetected()
+    {
+        Assert.False(CursorBlink.OverlapsAny(new Rectangle(0, 0, 8, 18), new[] { Rectangle.Empty }, 4));
+        Assert.False(CursorBlink.OverlapsAny(new Rectangle(0, 0, 8, 18), System.Array.Empty<Rectangle>(), 4));
+    }
 }

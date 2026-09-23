@@ -11,8 +11,9 @@ enum ImeState { Unknown, Hangul, English, OtherLang }
 /// <summary>한 번 읽은 결과. 배지를 띄우지 않을 이유가 있으면 <see cref="Suppressed"/> 에 적힌다.</summary>
 /// <param name="CapsLock">영문 모드이고 Caps Lock 이 켜져 있는가(설정에서 표시를 껐으면 항상 false).</param>
 /// <param name="Corner">caret 을 못 찾았지만 모서리 배지 대상 앱이면 포커스 창의 화면 사각형. 배지를 그 왼쪽 아래 모서리에 둔다.</param>
+/// <param name="ImageTracked">이미지 커서 추적(<see cref="ImageCaret"/>)이 이 창에 대해 돌고 있다.</param>
 readonly record struct Snapshot(ImeState State, Rectangle? Caret, IntPtr Foreground = default, string? Suppressed = null, bool CapsLock = false,
-                                Rectangle? Corner = null);
+                                Rectangle? Corner = null, bool ImageTracked = false);
 
 /// <summary>활성 창의 caret 위치와 한/영 상태를 한 번 읽어 <see cref="Snapshot"/> 으로 돌려준다.</summary>
 static class ImeReader
@@ -74,13 +75,20 @@ static class ImeReader
         // 찾아 따라가고(실험적), 못 찾으면 포커스 창의 왼쪽 아래 모서리에 고정한다. Xshell 은 Win32 caret 도 UI Automation 텍스트도
         // IMM 조합 창 위치도 노출하지 않아 API 로는 커서를 알 수 없다.
         Rectangle? corner = null;
+        bool imageTracked = false;
         if (caret is null && settings.CornerBadgeProcesses.Count > 0 && ProcessFilter.IsExcluded(settings.CornerBadgeProcesses, process))
         {
             var host = gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target;
             if (Native.GetWindowRect(host, out var wr) && wr.Right > wr.Left && wr.Bottom > wr.Top)
             {
-                if (settings.TrackCursorByImage)
+                // 이미지 추적은 본 작업 화면(터미널 뷰)에만 쓴다. 같은 앱의 설정·속성 대화상자(#32770 또는 소유된 창)는
+                // 깜빡이는 커서가 없고, 자식 컨트롤은 PrintWindow 가 빈 화면을 줘 화면 캡처로 넘어가며 배지 흔적을 커서로 오인하기 쉽다.
+                if (settings.TrackCursorByImage && Native.IsDialogLike(fg)) dump?.Append(" img:skip-dialog");
+                else if (settings.TrackCursorByImage)
+                {
+                    imageTracked = true;
                     caret = ImageCaret.Find(host, Native.DpiScaleAt(new Point(wr.Left, wr.Top)), dump);
+                }
                 if (caret is null)
                 {
                     corner = wr.ToRectangle();
@@ -103,7 +111,7 @@ static class ImeReader
             Log.WriteIfChanged($"fg='{Native.ClassName(fg)}' focus='{Native.ClassName(gti.hwndFocus)}' tid={tid} pid={pid} => {state}{dump}");
         }
 
-        return new(state, caret, fg, CapsLock: caps, Corner: corner);
+        return new(state, caret, fg, CapsLock: caps, Corner: corner, ImageTracked: imageTracked);
     }
 
     /// <summary>
