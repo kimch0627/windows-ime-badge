@@ -23,6 +23,18 @@
   자동 업그레이드가 쓰는 옵션이며, 손으로 설치할 때의 동작은 달라지지 않는다.
 - 자동 업그레이드로 내려받은 파일은 `%LOCALAPPDATA%\ImeBadge\update` 에 잠시 두고 다음 실행 때 지운다.
 
+## [1.3.1] - 2026-09-23
+
+1.3.0 의 이미지 커서 추적(opt-in)이 Xshell 에서 실제로 커서를 따라가게 고친 릴리스입니다. 설정 변경은 없습니다.
+
+### 수정
+- 이미지 커서 추적: `PrintWindow` 가 빈 화면을 주는 창(GPU 로 그리는 Xshell 터미널 뷰 등)에서 커서를 전혀 못 찾던 문제.
+  빈 프레임을 감지하면 화면 캡처로 전환하고, 우리 배지의 지금·이전 자리를 비교에서 빼서 배지 움직임을 커서로 오인하지 않게 했다.
+  `--debug` 로그에 못 찾은 이유(`img:nodiff`, `img:reject(WxH)`, `img:capture-fail`)가 남는다.
+- 이미지 커서 추적: 커서를 찾은 뒤 1.5초 안에 다시 변화를 못 보면(깜빡이지 않는 커서, 타이핑 멈춤) 모서리로 되돌아가던 것.
+  이제 같은 창·같은 크기인 동안 마지막 위치를 계속 기억하고(창을 옮겨도 따라감), 스크롤·긴 출력처럼 화면이 크게 바뀔 때만
+  기억을 버리고 모서리로 돌아간다(`img:wide(WxH)`). 커서가 다시 보이면 새 자리를 찾는다.
+
 ## [1.3.0] - 2026-09-22
 
 Xshell 처럼 자체 커서를 그려 Windows 가 커서 위치를 모르는 터미널에서도 배지를 볼 수 있게 한 릴리스입니다.
@@ -168,7 +180,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.0.1...v1.1.0
