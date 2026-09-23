@@ -64,6 +64,33 @@ public sealed class DesignThemesTests
         }
     }
 
+    /// <summary>테두리 개선안: 모든 견본에서 테두리가 배지색과 구별된다(Flat 1.6, Soft 1.4 이상).</summary>
+    [Theory]
+    [MemberData(nameof(ThemeIds))]
+    public void EdgeOn_StandsOutOnEverySwatch(string id)
+    {
+        var t = DesignThemes.Get(id);
+        bool soft = t.Finish == BadgeFinish.Soft;
+        foreach (var hex in t.Swatches)
+        {
+            ColorHex.TryParse(hex, out int fill);
+            double ratio = ColorHex.ContrastRatio(fill, ColorHex.EdgeOn(fill, soft));
+            Assert.True(ratio >= (soft ? 1.4 : 1.6), $"{id} {hex}: {ratio:0.00}");
+        }
+    }
+
+    [Fact]
+    public void EdgeOn_DarkensMidTones_LightensNearBlack()
+    {
+        ColorHex.TryParse("#0067C0", out int blue);
+        int edge = ColorHex.EdgeOn(blue, soft: false);
+        Assert.True(ColorHex.RelativeLuminance(edge) < ColorHex.RelativeLuminance(blue));
+        Assert.True((edge & 0xFF) > ((edge >> 16) & 0xFF));   // 파랑 색조가 남는다
+
+        ColorHex.TryParse("#3C3C3C", out int gray);
+        Assert.True(ColorHex.RelativeLuminance(ColorHex.EdgeOn(gray, soft: false)) > ColorHex.RelativeLuminance(gray));
+    }
+
     /// <summary>설정 창의 확인 버튼(강조색 위 글자)도 읽혀야 한다.</summary>
     [Theory]
     [MemberData(nameof(ThemeIds))]

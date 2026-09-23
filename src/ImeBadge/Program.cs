@@ -25,6 +25,13 @@ static class Program
             return;
         }
 
+        // 개발용: 배지 시안 그림(PNG)만 저장하고 끝낸다. 창·트레이를 만들지 않으므로 떠 있는 인스턴스와 상관없다(build.yml 이 CI 에서 실행).
+        if (RenderSheet.TryRun(args))
+        {
+            Log.Write("=== exit (render-sheet) ===");
+            return;
+        }
+
         // 이미 떠 있으면 그쪽에 설정 창을 열라고 알리고 끝낸다.
         using var single = new SingleInstance();
         if (!single.IsFirst)
