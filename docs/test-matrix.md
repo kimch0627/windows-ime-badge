@@ -99,16 +99,27 @@ caret 탐색·IME 판정·창 z-order 는 실제 앱에서만 확인할 수 있�
 버전 번호로" 빌드해 두고 실제 릴리스로 올라가게 해야 합니다(개발 빌드 `0.0.0` 은 업그레이드 항목 자체가 숨겨집니다).
 
 ```powershell
-# 예: 최신 정식 릴리스가 v1.3.0 일 때, 새 코드를 1.2.9 로 새겨 빌드한다
+# 예: 최신 정식 릴리스보다 낮은 1.2.9 로 새겨 빌드한다 (ARM64 PC 면 x64 를 arm64 로)
 dotnet publish src\ImeBadge\ImeBadge.csproj -c Release -r win-x64 --self-contained true `
-  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:Version=1.2.9 -o out\sc
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:Version=1.2.9 -o out\sc-x64
 # 설치본으로 확인할 때는 같은 exe 로 설치 프로그램까지 만든다
-& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=1.2.9 /DMyAppFileVersion=1.2.9.0 `
-  /DMySourceExe=..\out\sc\ImeBadge.exe installer\ImeBadge.iss
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=1.2.9 /DMyAppFileVersion=1.2.9.0 /DMyArch=x64 `
+  /DMySourceExe=..\out\sc-x64\ImeBadge.exe installer\ImeBadge.iss
 ```
 
 그 뒤 트레이 메뉴 → 업데이트 확인 → **지금 업그레이드**. `--debug` 로 실행하면
-`install site:`, `auto update: flavor=...`, `apply-update:` 줄이 로그에 남고, 설치본 경로는 `update-setup.log` 도 남습니다.
+`install site:`, `auto update: flavor=... arch=...`, `apply-update:` 줄이 로그에 남고, 설치본 경로는 `update-setup.log` 도 남습니다.
+
+> **목표 릴리스에 맞는 파일이 있어야 합니다**: 자동 업그레이드는 형태·아키텍처에 맞는 이름의 파일만 고릅니다
+> (`UpdatePackage.Pick`). 그래서 최신 정식 릴리스가 무엇이냐에 따라 테스트할 수 있는 경로가 다릅니다.
+>
+> | 최신 정식 릴리스 | 무설치 exe (x64) | 무설치 exe (arm64) | 설치본 |
+> |---|---|---|---|
+> | v1.3.1 이하 (아키텍처 이름 도입 전) | ✅ `ImeBadge-win-x64*.exe` 가 있음 | ❌ arm64 파일 없음 | ❌ `ImeBadge-Setup-<버전>.exe` 는 새 규칙(`…-x64.exe`)과 맞지 않음 |
+> | v1.4.0 이상 | ✅ | ✅ | ✅ |
+>
+> ❌ 칸은 "이 릴리스에는 지금 쓰는 설치 형태에 맞는 파일이 없습니다" 안내로 끝나는 것이 **정상 동작**입니다
+> (다른 이름의 파일을 짐작해서 받지 않는다). 설치본·arm64 경로는 v1.4.0 을 낸 뒤 확인됩니다.
 
 > **이 방식으로 완전히 확인되지 않는 한 가지**: 설치본의 **자동 재실행**은 *내려받은* 설치 프로그램이 `/RESTARTAPP` 을
 > 알아야 동작합니다. 그 지원은 이 변경에 처음 들어갔으므로, 예전 릴리스(v1.3.0 등)로 업그레이드하는 테스트에서는

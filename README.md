@@ -310,7 +310,7 @@ caret 좌표와 배지 위치가 어긋납니다.
 | 단계 | 하는 일 | 코드 |
 |---|---|---|
 | 1. 형태 판별 | Inno Setup 의 제거 정보 키(`...\Uninstall\{AppId}_is1`)의 `InstallLocation` 이 지금 exe 폴더와 같으면 **설치본**, 아니면 **무설치 exe**. 무설치는 빌드 상수 `SELF_CONTAINED` 로 self-contained / framework-dependent 를 구분 | `App/Updater.cs` |
-| 2. 파일 고르기 | 릴리스 첨부 파일에서 형태에 맞는 이름을 고름 (`ImeBadge-Setup-*.exe` / `ImeBadge-win-x64-selfcontained.exe` / `ImeBadge-win-x64.exe`) | `UpdatePackage.Pick` |
+| 2. 파일 고르기 | 릴리스 첨부 파일에서 형태와 **지금 돌고 있는 프로세스의 아키텍처**(x64 / arm64)에 맞는 이름을 고름 (`ImeBadge-Setup-<버전>-<arch>.exe` / `ImeBadge-win-<arch>-selfcontained.exe` / `ImeBadge-win-<arch>.exe`). 다른 아키텍처의 파일은 절대 고르지 않고, x86 처럼 릴리스가 없는 아키텍처면 다운로드 페이지로 물러남 | `UpdatePackage.Pick` |
 | 3. 내려받기 | `%LOCALAPPDATA%\ImeBadge\update` 에 받으면서 SHA-256 을 같이 계산. 받는 중에는 `.part` 이름이라 중간에 끊겨도 반쪽 파일이 남지 않음. 200 MB 상한 | `UpdateChecker.DownloadAsync` |
 | 4. 검증 | 릴리스의 `SHA256SUMS.txt` 와 대조. 목록에 없거나 해시가 다르면 적용하지 않고 받은 파일을 지움 | `UpdatePackage.ExpectedHash` |
 | 5. 적용(설치본) | `/SILENT /SUPPRESSMSGBOXES /NOCANCEL /NORESTART /RESTARTAPP /CURRENTUSER(또는 /ALLUSERS) /DIR="<기존 위치>" /TASKS="<현재 상태>"` 로 실행. 모든 사용자용 설치면 UAC 로 권한 상승 | `Updater.RunInstaller` |
