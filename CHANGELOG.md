@@ -8,6 +8,11 @@
 - 릴리스 워크플로의 winget 매니페스트 생성(`tools/winget/New-WingetManifest.ps1`)이 1.5.1 에서 "SHA256SUMS.txt 가 아직 없다" 며 실패하던 문제.
   릴리스를 만든 직후 GitHub API 의 `releases/tags/<태그>` 응답에 딸린 첨부 목록이 한동안 비어 있을 수 있어,
   첨부 목록을 릴리스 전용 엔드포인트(`releases/<id>/assets`)에서 따로 받는다. 프로그램의 업데이트 확인(`releases/latest`)은 영향이 없었다.
+- 정보 창의 "진단 정보 복사" 를 누르면 프로그램이 오류 안내 없이 바로 꺼지던 문제(설치판·self-contained exe).
+  크기를 줄이는 트리밍이 .NET 의 COM 인터페이스(`IEnumFORMATETC` 의 `Skip`·`Clone`, `IAdviseSink`·`IEnumSTATDATA` 의 메서드 전부)를
+  지워, WinForms 클립보드(OLE)가 `Fatal error. 0x80131506` 으로 프로세스를 끝냈다. try/catch 로도 잡히지 않아 errors.log 에도 남지 않았다.
+  `ILLink.Descriptors.xml` 이 `System.Runtime.InteropServices.ComTypes` 를 통째로 보존한다(exe 약 6 KB 증가).
+  같은 식으로 잘려 있던 CoreLib 쪽(`IEnumVARIANT`, `ITypeInfo`)도 함께 보존한다.
 
 ## [1.5.1] - 2026-09-23
 

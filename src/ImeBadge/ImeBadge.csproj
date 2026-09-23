@@ -46,7 +46,7 @@
       `-p:PublishTrimmed=false` 로 끄면 66 MB 짜리 안전한 빌드가 된다.
     - BuiltInComInteropSupport: 트리밍하면 기본값이 false 가 되어 [ComImport] COM 호출(Uia 클래스)이 막힌다. 켜 둔다.
     - ILLink.LinkAttributes.xml: ICommand 의 [TypeConverter] 속성이 WPF 전체(약 45 MB)를 끌어오는 고리를 끊는다.
-    - ILLink.Descriptors.xml: COM 인터페이스(Uia)의 메서드 순서(vtable)가 트리밍으로 흐트러지지 않게 통째로 보존한다.
+    - ILLink.Descriptors.xml: COM 인터페이스(Uia, Tsf, .NET 의 ComTypes)의 메서드 순서(vtable)가 트리밍으로 흐트러지지 않게 통째로 보존한다.
   -->
   <PropertyGroup Condition="'$(SelfContained)' == 'true'">
     <!-- 자동 업그레이드가 "내가 어떤 종류의 exe 인지" 알아야 릴리스에서 같은 종류의 파일을 받아 온다(App/Updater.cs). -->
