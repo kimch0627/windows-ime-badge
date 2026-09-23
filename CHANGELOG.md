@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-09-23
+
+1.3.0 의 이미지 커서 추적(opt-in)이 Xshell 에서 실제로 커서를 따라가게 고친 릴리스입니다. 설정 변경은 없습니다.
+
 ### 수정
 - 이미지 커서 추적: `PrintWindow` 가 빈 화면을 주는 창(GPU 로 그리는 Xshell 터미널 뷰 등)에서 커서를 전혀 못 찾던 문제.
   빈 프레임을 감지하면 화면 캡처로 전환하고, 우리 배지의 지금·이전 자리를 비교에서 빼서 배지 움직임을 커서로 오인하지 않게 했다.
@@ -157,7 +161,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.0.1...v1.1.0
