@@ -359,6 +359,11 @@ self-contained exe 크기를 줄이는 설정은 `src/ImeBadge/ImeBadge.csproj`�
 - **`BuiltInComInteropSupport=true`.** 트리밍 기본값은 COM 호출을 끄는 것이라 명시적으로 켭니다.
 - **디버깅 전용 파일 제외.** `mscordaccore`, `createdump` 등 디버거·크래시 덤프용 파일은 실행에 필요 없어 뺍니다.
 
+COM 인터페이스가 잘리는 사고는 CI 가 막습니다. CI 는 self-contained 를 단일 파일이 아닌 폴더로 한 번 더 publish 하고(x64),
+`tools/ComTrimCheck` 로 `[ComImport]`·`[InterfaceType]` 인터페이스마다 트리밍 전 원본(NuGet 캐시의 런타임 팩, 앱의 빌드 출력)과
+메서드 개수를 비교합니다. 하나라도 줄었으면 그 형식 이름(예: `IEnumFORMATETC — 메서드 4 → 2개 (잘림: Skip, Clone)`)을 찍고
+실패하니, `ILLink.Descriptors.xml` 에 그 형식을 보존하도록 추가하면 됩니다. 디자인 타임에만 쓰는 `IToolboxService` 는 허용 목록에 있습니다.
+
 WinForms는 .NET 8에서 공식적으로 트리밍 미지원(`NETSDK1175`)이므로 `_SuppressWinFormsTrimError`로 경고를 끄고 씁니다.
 트리밍된 빌드에서 특정 기능이 깨지면 `-p:PublishTrimmed=false` 로 트리밍만 끄면 66 MB짜리 안전한 빌드가 됩니다.
 
