@@ -179,12 +179,12 @@ static class BadgeRenderer
     /// 테두리: 배지색을 같은 색조로 어둡게 한 선(<see cref="ColorHex.EdgeOn"/>). 밝은 배경에서도 윤곽이 보이고, 흰/검 테두리처럼 튀지 않는다.
     /// 불투명도를 낮춰도 <see cref="EdgeMinAlpha"/> 이상으로 남겨 배지가 어디 있는지는 보이게 한다.
     /// </summary>
-    static Pen OutlinePen(Color fill, float width, in BadgeTheme theme, float contrastWidth)
-    {
-        if (theme.Contrast is { } hc) return new(hc.Edge, contrastWidth);   // 고대비: 창 글자색 실선
-        var edge = Color.FromArgb(ColorHex.EdgeOn(fill.ToArgb(), theme.Finish == BadgeFinish.Soft));
-        return new(Color.FromArgb(Math.Max((int)fill.A, EdgeMinAlpha), edge), width);
-    }
+    static Pen OutlinePen(Color fill, float width, in BadgeTheme theme, float contrastWidth) =>
+        new(EdgeColor(fill, theme), theme.Contrast is null ? width : contrastWidth);   // 고대비: 창 글자색 실선
+
+    /// <summary>테두리색. 고대비면 창 글자색.</summary>
+    static Color EdgeColor(Color fill, in BadgeTheme theme) => theme.Contrast is { } hc ? hc.Edge
+        : Color.FromArgb(Math.Max((int)fill.A, EdgeMinAlpha), Color.FromArgb(ColorHex.EdgeOn(fill.ToArgb(), theme.Finish == BadgeFinish.Soft)));
 
     const int EdgeMinAlpha = 160;
 
@@ -314,28 +314,15 @@ static class BadgeRenderer
         return bmp;
     }
 
-    /// <summary>밑줄 시안(#48). 확인 그림에서 비교한 뒤 하나만 남긴다.</summary>
-    internal enum UnderlineLook { Flat, BottomEdge, Outline, ShadowOnly }
-
     /// <summary>
-    /// 밑줄 막대. 막대 위쪽은 캔버스 맨 위에 붙이고 좌우 여백은 대칭으로 둬서, caret 아래 위치(<see cref="BadgeLayout"/>)가 예전과 같다.
-    /// 아래 여백은 그림자 자리. 고대비는 그림자 없이 창 글자색 선(바탕과 같은 색인 영문 밑줄도 보이게).
+    /// 밑줄 막대(#48). 아래쪽 1px(배율 반영)만 같은 색조로 진하게 하고 옅은 그림자를 깐다. 아래 선과 그림자 덕에 배지와 같은 색 배경
+    /// (파란 링크 위의 파란 막대)에서도 막대가 보인다. 3px 막대라 사방 테두리는 배지 색을 덮고 림·그라데이션은 보이지 않아 넣지 않는다.
+    /// 막대 위쪽은 캔버스 맨 위에 붙이고 좌우 여백은 대칭이라 caret 아래 위치(<see cref="BadgeLayout"/>)는 예전과 같다. 아래 여백은 그림자 자리.
+    /// 고대비는 그림자 없이 아래 선이 창 글자색이라, 창 바탕색인 영문 밑줄도 선으로 보인다.
     /// </summary>
-    internal static Bitmap RenderUnderline(Color color, float scale, in BadgeTheme theme, UnderlineLook look = UnderlineLook.Flat)
+    static Bitmap RenderUnderline(Color color, float scale, in BadgeTheme theme)
     {
         int w = (int)Math.Round(16 * scale), h = (int)Math.Round(3 * scale);
-        if (look == UnderlineLook.Flat)
-        {
-            var flat = NewCanvas(w, h, out var fg);
-            using (fg)
-            {
-                using var brush = new SolidBrush(color);
-                using var path = RoundedRect(new RectangleF(0, 0, w, h), h / 2f);
-                fg.FillPath(brush, path);
-            }
-            return flat;
-        }
-
         int pad = ShadowPad(scale);
         var bmp = NewCanvas(w + 2 * pad, h + pad, out var g);
         using (g)
@@ -343,35 +330,18 @@ static class BadgeRenderer
             var rect = new RectangleF(pad, 0, w, h);
             using var bar = RoundedRect(rect, h / 2f);
             DrawShadow(g, bar, scale, color, theme);
-            float line = Math.Max(1f, MathF.Round(scale));
-            using var pen = OutlinePen(color, line, theme, line);
-            bool hc = theme.Contrast is not null;
-            if (look == UnderlineLook.BottomEdge && (h > line || hc))
+            // 아래 선: 세로 그라데이션을 한 지점에서 뚝 끊어 채운다(클립으로 자르면 둥근 끝이 계단 진다).
+            float line = Math.Min(h, Math.Max(1f, MathF.Round(scale)));
+            var edge = EdgeColor(color, theme);
+            var box = new RectangleF(rect.X, rect.Y - 1, rect.Width, rect.Height + 2);   // 가장자리 픽셀이 반대편 색으로 감기지 않게 넉넉히
+            float stop = (1 + h - line) / box.Height;
+            using var brush = new LinearGradientBrush(box, color, edge, LinearGradientMode.Vertical) { WrapMode = WrapMode.TileFlipXY };
+            brush.InterpolationColors = new ColorBlend
             {
-                // 아래쪽 line px 만 테두리색: 세로 그라데이션을 한 지점에서 뚝 끊어 채운다(클립은 계단이 져서).
-                var fill = color;
-                var edge = pen.Color;
-                var box = new RectangleF(rect.X, rect.Y - 1, rect.Width, rect.Height + 2);   // 가장자리 픽셀이 반대편 색으로 감기지 않게 넉넉히
-                float stop = (1 + h - line) / box.Height;
-                using var brush = new LinearGradientBrush(box, fill, edge, LinearGradientMode.Vertical) { WrapMode = WrapMode.TileFlipXY };
-                brush.InterpolationColors = new ColorBlend
-                {
-                    Colors = new[] { fill, fill, edge, edge },
-                    Positions = new[] { 0f, Math.Max(0f, stop - 0.001f), stop, 1f },
-                };
-                g.FillPath(brush, bar);
-            }
-            else
-            {
-                using var brush = new SolidBrush(color);
-                g.FillPath(brush, bar);
-                if (look == UnderlineLook.Outline || hc)
-                {
-                    var inner = RectangleF.Inflate(rect, -line / 2, -line / 2);   // 선이 막대 안쪽에만 오게
-                    using var frame = RoundedRect(inner, inner.Height / 2);
-                    g.DrawPath(pen, frame);
-                }
-            }
+                Colors = new[] { color, color, edge, edge },
+                Positions = new[] { 0f, Math.Max(0f, stop - 0.001f), stop, 1f },
+            };
+            g.FillPath(brush, bar);
         }
         return bmp;
     }
