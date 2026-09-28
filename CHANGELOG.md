@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-09-28
+
+파스텔 테마(벚꽃·캔디·민트초코·미드나잇)의 배지 글자를 더 또렷하게 하고, 불투명도를 낮췄을 때 어두운 화면에서 글자가 묻히던 문제를 고친 릴리스입니다.
+밑줄 모양 배지에도 윤곽과 그림자가 생깁니다. 설정 파일 형식은 그대로입니다.
+
 ### 변경
 - **밑줄 모양 배지**에도 다른 모양처럼 윤곽과 그림자를 넣었다([#48](https://github.com/kimch0627/windows-ime-badge/issues/48)).
   막대 아래 가장자리 1px 을 배지색과 같은 색조로 진하게 하고 옅은 그림자를 깔아, 배지와 비슷한 색의 배경(파란 링크 밑줄 위의 파란 막대 등)에서도 막대가 보인다.
@@ -335,7 +340,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.2...v1.6.0
 [1.5.2]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.1...v1.5.2
