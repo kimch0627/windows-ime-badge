@@ -227,14 +227,15 @@ static class BadgeRenderer
     }
 
     /// <summary>
-    /// 헤일로 굵기(배율 1 기준 px, 획 양쪽으로 절반씩)와 짙기. 불투명도를 낮추면 뒤의 문서가 비쳐 글자가 묻히므로, 글자 둘레만
-    /// 배지 채움을 불투명 쪽으로 이만큼 짙게 깐다. 너무 짙거나 굵으면 글자 둘레에 덩어리가 보여서 옅고 얇게 둔다.
+    /// 헤일로 굵기(배율 1 기준 px, 획 양쪽으로 절반씩). 불투명도를 낮추면 뒤의 문서가 비쳐 글자가 묻히므로, 글자 둘레만
+    /// 배지 채움을 짙게 깐다. 짙기는 색마다 <see cref="ColorHex.HaloAlpha"/> 가 정한다(흰·검 배경 모두에서 글자 대비 4.5 이상).
+    /// 1.8px 로는 획 양옆 0.9px 라 작은 배지에서 거의 보이지 않았다.
     /// </summary>
-    const float HaloWidth = 1.8f, HaloStrength = 0.6f;
+    const float HaloWidth = 2.4f;
 
     /// <summary>헤일로 붓(광택 그라데이션 포함). 불투명도 100% 면 바탕과 같아 보이지 않으므로 null.</summary>
-    static Brush? HaloBrush(Color fill, RectangleF bounds, in BadgeTheme theme) =>
-        fill.A < 255 ? FillBrush(Color.FromArgb(fill.A + (int)Math.Round((255 - fill.A) * HaloStrength), fill), bounds, theme) : null;
+    static Brush? HaloBrush(Color fill, Color ink, RectangleF bounds, in BadgeTheme theme) =>
+        fill.A < 255 ? FillBrush(Color.FromArgb(ColorHex.HaloAlpha(fill.ToArgb(), ink.ToArgb(), fill.A), fill), bounds, theme) : null;
 
     /// <summary>잉크 경계를 재는 글자 배치 형식. 여백을 덧붙이지 않는다. 앱이 끝날 때까지 쓰므로 해제하지 않는다.</summary>
     static readonly StringFormat Typographic = (StringFormat)StringFormat.GenericTypographic.Clone();
@@ -407,7 +408,7 @@ static class BadgeRenderer
             using var markPath = MarkPath(mark, cx, ref cy, ib, gap: 1.5f * scale,
                 barW: Math.Max(6 * scale, Math.Min(ib.Width, w - 8 * scale)), barH: Math.Max(1f, 1.5f * scale), triH: Math.Max(2f, 2.5f * scale), snap: true);
             using var textBrush = new SolidBrush(ink);
-            using var halo = HaloBrush(color, rect, theme);
+            using var halo = HaloBrush(color, ink, rect, theme);
             DrawCentered(g, text, font, glyph, cx, cy, snap: true, textBrush, markPath, halo, HaloWidth * scale);
         }
         return bmp;
@@ -536,7 +537,7 @@ static class BadgeRenderer
             using var markPath = MarkPath(mark, fig.TextX, ref cy, ib, gap: 1.2f,
                 barW: Math.Max(fig.FontSize * 0.5f, ib.Width), barH: 1.4f, triH: 2.3f, snap: false);
             using var textBrush = new SolidBrush(ink);
-            using var halo = HaloBrush(color, bounds, theme);
+            using var halo = HaloBrush(color, ink, bounds, theme);
             DrawCentered(g, text, font, glyph, fig.TextX, cy, snap: false, textBrush, markPath, halo, HaloWidth);
         }
         return bmp;

@@ -183,6 +183,65 @@ public sealed class DesignThemesTests
         Assert.True(((text >> 16) & 0xFF) > (text & 0xFF) - 40);                                    // 핑크 색조가 남은 진한 색
     }
 
+    /// <summary>진한 색조 글자는 4.5 에 딱 맞추지 않고 여유(6:1)를 둔다. 흰 글자를 쓰는 색(4.5 이상)은 그대로, 6 이 불가능하면 검정.</summary>
+    [Theory]
+    [MemberData(nameof(ThemeIds))]
+    public void SoftTheme_DarkInk_HasMarginOverAA(string id)
+    {
+        var t = DesignThemes.Get(id);
+        if (t.Finish != BadgeFinish.Soft) return;
+        foreach (var hex in t.Swatches)
+        {
+            ColorHex.TryParse(hex, out int fill);
+            int ink = ColorHex.SoftTextOn(fill);
+            if (ink == unchecked((int)0xFFFFFFFF)) continue;
+            // 중간 톤(#5C7CE0 등)은 검정으로도 6 에 못 미친다. 그때는 검정(낼 수 있는 가장 큰 대비).
+            double best = Math.Min(ColorHex.SoftInkContrast, ColorHex.ContrastRatio(fill, unchecked((int)0xFF000000)));
+            double ratio = ColorHex.ContrastRatio(fill, ink);
+            Assert.True(ratio >= best - 1e-9, $"{id} {hex}: {ratio:0.00}");
+        }
+    }
+
+    static int InkOn(DesignTheme t, int fill) =>
+        t.Finish == BadgeFinish.Soft ? ColorHex.SoftTextOn(fill)
+            : ColorHex.PrefersWhiteText(fill) ? unchecked((int)0xFFFFFFFF) : unchecked((int)0xFF000000);
+
+    /// <summary>
+    /// 불투명도를 낮춰도(30~100%) 글자 둘레(헤일로)가 흰 문서·검은 편집기 어느 쪽 위에서든 글자와 4.5:1 이상.
+    /// 예전(고정 짙기)에는 캔디 한글 55% 가 어두운 배경에서 3.3:1, 30% 에서 2.7:1 이었다.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(ThemeIds))]
+    public void Halo_KeepsTextReadable_AtAnyOpacity_OnWhiteAndBlack(string id)
+    {
+        const int White = unchecked((int)0xFFFFFFFF), Black = unchecked((int)0xFF000000);
+        var t = DesignThemes.Get(id);
+        foreach (var hex in new[] { t.HangulColor, t.EnglishColor, t.OtherColor })
+        {
+            ColorHex.TryParse(hex, out int fill);
+            int ink = InkOn(t, fill);
+            for (int op = 30; op <= 100; op += 5)
+            {
+                int alpha = 255 * op / 100;
+                int halo = ColorHex.HaloAlpha(fill, ink, alpha);
+                Assert.InRange(halo, alpha, 255);
+                foreach (int bg in new[] { White, Black })
+                {
+                    double ratio = ColorHex.ContrastRatio(ink, ColorHex.Over(fill, halo, bg));
+                    Assert.True(ratio >= ColorHex.HaloContrast, $"{id} {hex} {op}% on {ColorHex.ToHex(bg)}: {ratio:0.00}");
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void HaloAlpha_StaysLow_WhenContrastIsAlreadyEnough()
+    {
+        // 불투명(255)이면 그대로, 흰 바탕 위 검은 글자처럼 넉넉하면 배지 알파에서 크게 올리지 않는다.
+        Assert.Equal(255, ColorHex.HaloAlpha(unchecked((int)0xFFFFFFFF), unchecked((int)0xFF000000), 255));
+        Assert.True(ColorHex.HaloAlpha(unchecked((int)0xFF3C3C3C), unchecked((int)0xFFFFFFFF), 200) < 230);
+    }
+
     [Theory]
     [InlineData(null, "")]
     [InlineData("", "")]
