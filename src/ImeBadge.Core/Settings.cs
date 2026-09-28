@@ -257,8 +257,14 @@ public static class ColorHex
     public static int Darken(int argb, double f) => Mix(unchecked((int)((uint)argb & 0xFF000000)), argb, Math.Clamp(f, 0, 1));
 
     /// <summary>
+    /// 진한 색조 글자가 배지색과 이루어야 하는 대비. 4.5(WCAG AA 최소)에 딱 맞추면 파스텔 위 글자가 흐려 보여서(캔디 한글 4.53)
+    /// 여유를 둔다. 흰 글자는 4.5 이상이면 그대로 쓴다(중간 톤 파랑은 진한 글자로 바꿔도 4.5 에 못 미친다).
+    /// </summary>
+    public const double SoftInkContrast = 6.0;
+
+    /// <summary>
     /// 부드러운 테마의 글자색. 흰 글자가 4.5:1(WCAG AA) 이상이면 흰색, 아니면 배지 색을 진하게 만든 색 중에서
-    /// 4.5:1 을 넘는 가장 밝은 것(색감이 가장 많이 남는 것). 파스텔 핑크 위 검정 대신 딥 플럼 글자가 된다.
+    /// <see cref="SoftInkContrast"/> 를 넘는 가장 밝은 것(색감이 가장 많이 남는 것). 파스텔 핑크 위 검정 대신 딥 플럼 글자가 된다.
     /// </summary>
     public static int SoftTextOn(int argb)
     {
@@ -267,9 +273,32 @@ public static class ColorHex
         for (int step = 31; step >= 0; step--)   // f = 0.62, 0.60, ... 0
         {
             int c = Darken(argb, step * 0.02);
-            if (ContrastRatio(argb, c) >= 4.5) return unchecked((int)0xFF000000) | (c & 0xFFFFFF);
+            if (ContrastRatio(argb, c) >= SoftInkContrast) return unchecked((int)0xFF000000) | (c & 0xFFFFFF);
         }
         return unchecked((int)0xFF000000);
+    }
+
+    /// <summary>글자와 헤일로(글자 둘레의 짙은 채움)가 어떤 배경 위에서도 이루어야 하는 대비(WCAG AA).</summary>
+    public const double HaloContrast = 4.5;
+
+    /// <summary>색 <paramref name="argb"/> 를 알파 <paramref name="alpha"/>(0~255)로 <paramref name="background"/> 위에 겹친 색.</summary>
+    public static int Over(int argb, int alpha, int background) =>
+        unchecked((int)0xFF000000) | (Mix(background, argb, Math.Clamp(alpha, 0, 255) / 255.0) & 0xFFFFFF);
+
+    /// <summary>
+    /// 반투명 배지의 글자 둘레(헤일로)에 쓸 알파. 불투명도를 낮추면 뒤 문서가 비쳐서, 파스텔 배지는 어두운 편집기 위에서 어두워져
+    /// 진한 글자가 묻히고, 진한 배지는 흰 문서 위에서 밝아져 흰 글자가 묻힌다. 뒤가 무슨 색일지 모르므로 가장 밝은(흰) 배경과
+    /// 가장 어두운(검정) 배경 둘 다에서 글자 <paramref name="ink"/> 와의 대비가 <see cref="HaloContrast"/> 이상이 되는
+    /// 가장 낮은 알파를 고른다(배지 알파 <paramref name="alpha"/> 보다 낮지는 않다). 대비가 넉넉한 색은 헤일로가 옅게 남아
+    /// 둘레에 덩어리가 보이지 않고, 모자란 색만 불투명에 가까워진다. 어느 알파로도 안 되면 255(배지 불투명과 같음).
+    /// </summary>
+    public static int HaloAlpha(int fill, int ink, int alpha)
+    {
+        const int White = unchecked((int)0xFFFFFFFF), Black = unchecked((int)0xFF000000);
+        for (int a = Math.Clamp(alpha, 0, 255); a < 255; a++)
+            if (ContrastRatio(ink, Over(fill, a, White)) >= HaloContrast && ContrastRatio(ink, Over(fill, a, Black)) >= HaloContrast)
+                return a;
+        return 255;
     }
 
     /// <summary>
