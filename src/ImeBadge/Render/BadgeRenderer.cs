@@ -8,14 +8,25 @@ using System.Drawing.Text;
 namespace ImeBadge;
 
 /// <summary>
+/// 고대비 모드의 글자·테두리색(#46). 채움은 <see cref="BadgeTheme.Hangul"/>(강조색)·<see cref="BadgeTheme.English"/>(창 바탕색)에 들어 있다.
+/// Windows 고대비 팔레트의 짝(Highlight↔HighlightText, Window↔WindowText)을 그대로 써서 사용자가 고른 대비를 지킨다.
+/// </summary>
+readonly record struct BadgeContrast(Color HangulInk, Color OtherInk, Color Edge);
+
+/// <summary>
 /// 배지 색·질감 조합. 설정의 "#RRGGBB" 문자열과 디자인 테마에서 만든다.
 /// <paramref name="Character"/> 가 비어 있지 않으면 둥근 배지 대신 그 캐릭터 모양(고양이 등)으로 그린다.
+/// <paramref name="Contrast"/> 가 있으면 고대비 모드: 시스템 색 그대로, 굵은 테두리, 광택·그림자·반투명 없음.
 /// </summary>
 readonly record struct BadgeTheme(Color Hangul, Color English, Color Other,
-    BadgeFinish Finish = BadgeFinish.Flat, float Gloss = 0f, string Character = "", bool ShowCapsLock = true)
+    BadgeFinish Finish = BadgeFinish.Flat, float Gloss = 0f, string Character = "", bool ShowCapsLock = true, BadgeContrast? Contrast = null)
 {
+    /// <summary>설정에서 만든 조합. Windows 고대비 모드면 설정 색 대신 시스템 색(<see cref="HighContrast"/>).</summary>
     public static BadgeTheme From(Settings s)
     {
+        if (System.Windows.Forms.SystemInformation.HighContrast)
+            return HighContrast(SystemColors.Window, SystemColors.WindowText, SystemColors.Highlight, SystemColors.HighlightText)
+                with { Character = BadgeCharacters.Normalize(s.Character), ShowCapsLock = s.ShowCapsLock };
         var design = DesignThemes.Get(s.Theme);
         return new(
             ParseOr(s.HangulColor, Settings.DefaultHangulColor),
@@ -24,11 +35,22 @@ readonly record struct BadgeTheme(Color Hangul, Color English, Color Other,
             design.Finish, design.Gloss, BadgeCharacters.Normalize(s.Character), s.ShowCapsLock);
     }
 
+    /// <summary>
+    /// 고대비 조합: 한글 = 강조색(Highlight) 바탕에 강조 글자색, 영문·다른 언어 = 창 바탕색에 창 글자색, 테두리 = 창 글자색.
+    /// 영문 배지는 창 바탕과 같은 색이라 윤곽은 테두리가 맡고, 한/영은 바탕색과 글자(한/a)로 구별된다.
+    /// </summary>
+    public static BadgeTheme HighContrast(Color window, Color windowText, Color highlight, Color highlightText) =>
+        new(Opaque(highlight), Opaque(window), Opaque(window),
+            Contrast: new BadgeContrast(Opaque(highlightText), Opaque(windowText), Opaque(windowText)));
+
     /// <summary>테마 기본색으로 만든 조합(설정 창의 테마 타일, 트레이 메뉴의 테마 항목 미리보기용).</summary>
     public static BadgeTheme Of(DesignTheme d) => new(
         ParseOr(d.HangulColor, Settings.DefaultHangulColor), ParseOr(d.EnglishColor, Settings.DefaultEnglishColor),
         ParseOr(d.OtherColor, DesignThemes.ClassicOtherColor),
         d.Finish, d.Gloss);
+
+    /// <summary>시스템 색(KnownColor)을 지금 값의 불투명한 색으로 굳힌다. 캐시 키 비교가 값으로 되게.</summary>
+    static Color Opaque(Color c) => Color.FromArgb(255, c.R, c.G, c.B);
 
     static Color ParseOr(string text, string fallback) =>
         Color.FromArgb(ColorHex.TryParse(text, out int a) ? a : (ColorHex.TryParse(fallback, out int b) ? b : unchecked((int)0xFF000000)));
@@ -101,12 +123,17 @@ static class BadgeRenderer
         return ColorHex.PrefersWhiteText(argb) ? Color.White : Color.Black;
     }
 
+    /// <summary>이 상태의 배지 글자색. 고대비면 팔레트의 짝(강조 글자색·창 글자색), 아니면 바탕 밝기로 고른 색.</summary>
+    public static Color InkFor(ImeState state, Color background, in BadgeTheme theme) =>
+        theme.Contrast is { } hc ? (state == ImeState.Hangul ? hc.HangulInk : hc.OtherInk) : TextColorOn(background, theme.Finish);
+
     public static Bitmap Render(ImeState state, BadgeStyle style, float scale, in BadgeTheme theme, int opacityPercent = 100, bool capsLock = false,
                                 bool shift = false)
     {
         var (text, color, mark) = Look(state, theme, capsLock, shift);
-        var fill = Color.FromArgb(Math.Clamp(255 * opacityPercent / 100, 30, 255), color);
-        var ink = TextColorOn(color, theme.Finish);
+        // 고대비는 불투명도 설정과 상관없이 늘 불투명(비치면 사용자가 고른 대비가 깨진다).
+        var fill = theme.Contrast is null ? Color.FromArgb(Math.Clamp(255 * opacityPercent / 100, 30, 255), color) : color;
+        var ink = InkFor(state, color, theme);
         if (theme.Character.Length > 0 && style is BadgeStyle.Pill or BadgeStyle.Box)
             return RenderCharacter(theme.Character, text, mark, fill, ink, scale, theme);
         return style switch
@@ -152,8 +179,9 @@ static class BadgeRenderer
     /// 테두리: 배지색을 같은 색조로 어둡게 한 선(<see cref="ColorHex.EdgeOn"/>). 밝은 배경에서도 윤곽이 보이고, 흰/검 테두리처럼 튀지 않는다.
     /// 불투명도를 낮춰도 <see cref="EdgeMinAlpha"/> 이상으로 남겨 배지가 어디 있는지는 보이게 한다.
     /// </summary>
-    static Pen OutlinePen(Color fill, float width, in BadgeTheme theme)
+    static Pen OutlinePen(Color fill, float width, in BadgeTheme theme, float contrastWidth)
     {
+        if (theme.Contrast is { } hc) return new(hc.Edge, contrastWidth);   // 고대비: 창 글자색 실선
         var edge = Color.FromArgb(ColorHex.EdgeOn(fill.ToArgb(), theme.Finish == BadgeFinish.Soft));
         return new(Color.FromArgb(Math.Max((int)fill.A, EdgeMinAlpha), edge), width);
     }
@@ -179,6 +207,7 @@ static class BadgeRenderer
     /// </summary>
     static void DrawRim(Graphics g, GraphicsPath path, RectangleF bounds, float inset, float width, Color fill, in BadgeTheme theme)
     {
+        if (theme.Contrast is not null) return;   // 고대비: 광택 없음
         int alpha = (theme.Finish == BadgeFinish.Soft ? RimAlphaSoft : RimAlphaFlat) * fill.A / 255;
         if (alpha <= 0 || bounds.Width <= 2 * inset || bounds.Height <= 2 * inset) return;
         using var rim = (GraphicsPath)path.Clone();
@@ -251,6 +280,7 @@ static class BadgeRenderer
     /// </summary>
     static void DrawShadow(Graphics g, GraphicsPath path, float scale, Color fill, in BadgeTheme theme, float penScale = 1f)
     {
+        if (theme.Contrast is not null) return;   // 고대비: 그림자 없음(시스템 색이 아닌 반투명 검정이라)
         using var shadow = (GraphicsPath)path.Clone();
         using var m = new Matrix();
         m.Translate(0, Math.Max(1f, scale) / penScale);
@@ -276,7 +306,7 @@ static class BadgeRenderer
             DrawShadow(g, path, scale, color, theme);
             using var brush = FillBrush(color, rect, theme);
             float line = Math.Max(1f, scale);   // 테두리와 림의 굵기
-            using var pen = OutlinePen(color, line, theme);
+            using var pen = OutlinePen(color, line, theme, 2 * line);
             g.FillPath(brush, path);
             g.DrawPath(pen, path);
             DrawRim(g, path, rect, line, line, color, theme);
@@ -340,7 +370,7 @@ static class BadgeRenderer
             using var path = RoundedRect(rect, rounded ? (h - 1) / 2f : 3 * scale);
             DrawShadow(g, path, scale, color, theme);
             using var brush = FillBrush(color, rect, theme);
-            using var pen = OutlinePen(color, 1f, theme);
+            using var pen = OutlinePen(color, 1f, theme, 2 * Math.Max(1f, scale));
             g.FillPath(brush, path);
             g.DrawPath(pen, path);
             float rimWidth = Math.Max(1f, scale);
@@ -444,20 +474,22 @@ static class BadgeRenderer
 
             DrawShadow(g, body, scale, color, theme, penScale: scale);
             // 테두리를 먼저 굵게 그리고 그 위를 채우면 바깥 절반만 남아, 겹친 원(구름)의 안쪽 선이 보이지 않는다.
-            using (var edge = OutlinePen(color, 1.6f, theme)) { edge.LineJoin = LineJoin.Round; if (star) edge.Width = 4f; g.DrawPath(edge, body); }
+            // 고대비는 바깥으로 보이는 절반이 1.6 단위(배율 1 에서 약 1.6px)가 되게 굵게.
+            bool hc = theme.Contrast is not null;
+            using (var edge = OutlinePen(color, 1.6f, theme, 3.2f)) { edge.LineJoin = LineJoin.Round; if (star) edge.Width = hc ? 5.6f : 4f; g.DrawPath(edge, body); }
             if (star) { using var round = new Pen(brush, 2.4f) { LineJoin = LineJoin.Round }; g.DrawPath(round, body); }
             g.FillPath(brush, body);
 
-            // 귀 장식: 고양이는 안쪽 귀(밝게), 강아지는 늘어진 귀(조금 진하게).
+            // 귀 장식: 고양이는 안쪽 귀(밝게), 강아지는 늘어진 귀(조금 진하게). 고대비는 섞은 색 대신 글자색(팔레트의 짝)으로.
             if (character == BadgeCharacters.Cat)
             {
-                using var inner = new SolidBrush(Color.FromArgb(color.A, Color.FromArgb(ColorHex.Mix(color.ToArgb(), unchecked((int)0xFFFFFFFF), 0.45))));
+                using var inner = new SolidBrush(hc ? ink : Color.FromArgb(color.A, Color.FromArgb(ColorHex.Mix(color.ToArgb(), unchecked((int)0xFFFFFFFF), 0.45))));
                 g.FillPolygon(inner, new PointF[] { new(4.6f, 4f), new(8.4f, 6.6f), new(5.2f, 8.6f) });
                 g.FillPolygon(inner, new PointF[] { new(19.4f, 4f), new(15.6f, 6.6f), new(18.8f, 8.6f) });
             }
             else if (character == BadgeCharacters.Dog)
             {
-                using var ear = new SolidBrush(Color.FromArgb(color.A, Color.FromArgb(ColorHex.Mix(color.ToArgb(), unchecked((int)0xFF000000), 0.16))));
+                using var ear = new SolidBrush(hc ? ink : Color.FromArgb(color.A, Color.FromArgb(ColorHex.Mix(color.ToArgb(), unchecked((int)0xFF000000), 0.16))));
                 foreach (var (cx, angle) in new[] { (4.2f, 18f), (21.8f, -18f) })
                 {
                     var state = g.Save();

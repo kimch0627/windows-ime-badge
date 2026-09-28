@@ -393,8 +393,26 @@ sealed class BadgeForm : Form
         {
             if (_tray.ContextMenuStrip is { } menu) ApplyMenuTheme(menu);   // 밝게/어둡게 전환을 따라간다
             _systemAnimations = Native.AnimationsEnabled();
+
+            // 고대비를 켜고 끄거나 대비 테마를 바꾸면 배지·트레이 색이 바뀐다(BadgeTheme.From 이 시스템 색을 읽는다). 재시작 없이 다시 그린다.
+            var contrast = ContrastSignature();
+            if (contrast != _appliedContrast)
+            {
+                _appliedContrast = contrast;
+                ResetRenderKey();
+                _pulseBase?.Dispose();
+                _pulseBase = null;
+                RefreshTray();
+                Poll();
+            }
         }
     }
+
+    /// <summary>마지막으로 반영한 고대비 상태와 배지가 쓰는 시스템 색. 대비 테마를 바꾸면 켜짐 여부는 그대로고 색만 바뀐다.</summary>
+    (bool on, int window, int windowText, int highlight, int highlightText) _appliedContrast = ContrastSignature();
+
+    static (bool on, int window, int windowText, int highlight, int highlightText) ContrastSignature() =>
+        (SystemInformation.HighContrast, SystemColors.Window.ToArgb(), SystemColors.WindowText.ToArgb(), SystemColors.Highlight.ToArgb(), SystemColors.HighlightText.ToArgb());
 
     // ── 애니메이션 ──
     bool AnimationsOn => _settings.Animate && _systemAnimations;
