@@ -9,11 +9,12 @@ namespace ImeBadge;
 enum ImeState { Unknown, Hangul, English, OtherLang }
 
 /// <summary>한 번 읽은 결과. 배지를 띄우지 않을 이유가 있으면 <see cref="Suppressed"/> 에 적힌다.</summary>
-/// <param name="CapsLock">영문 모드이고 Caps Lock 이 켜져 있는가(설정에서 표시를 껐으면 항상 false).</param>
+/// <param name="CapsLock">한/영 모드이고 Caps Lock 이 켜져 있는가(설정에서 표시를 껐으면 항상 false).</param>
 /// <param name="Corner">caret 을 못 찾았지만 모서리 배지 대상 앱이면 포커스 창의 화면 사각형. 배지를 그 왼쪽 아래 모서리에 둔다.</param>
 /// <param name="ImageTracked">이미지 커서 추적(<see cref="ImageCaret"/>)이 이 창에 대해 돌고 있다.</param>
+/// <param name="Shift">한/영 모드이고 Shift 를 계속 누르고 있는가(<see cref="ShiftHold"/>). 설정에서 표시를 껐으면 항상 false.</param>
 readonly record struct Snapshot(ImeState State, Rectangle? Caret, IntPtr Foreground = default, string? Suppressed = null, bool CapsLock = false,
-                                Rectangle? Corner = null, bool ImageTracked = false);
+                                Rectangle? Corner = null, bool ImageTracked = false, bool Shift = false);
 
 /// <summary>활성 창의 caret 위치와 한/영 상태를 한 번 읽어 <see cref="Snapshot"/> 으로 돌려준다.</summary>
 static class ImeReader
@@ -27,7 +28,8 @@ static class ImeReader
     /// </summary>
     static readonly string[] TsfPreferredProcesses = { "WindowsTerminal", "OpenConsole" };
 
-    public static Snapshot Read(IntPtr selfHandle, Settings settings)
+    /// <param name="shiftHeld">Shift 를 계속 누르고 있는가. 누른 시간은 폴링마다 재야 하므로 부르는 쪽(<see cref="ShiftHold"/>)이 잰다.</param>
+    public static Snapshot Read(IntPtr selfHandle, Settings settings, bool shiftHeld = false)
     {
         var fg = Native.GetForegroundWindow();
         if (fg == IntPtr.Zero || fg == selfHandle) return new(ImeState.Unknown, null);
@@ -102,6 +104,9 @@ static class ImeReader
         // Caps Lock 은 배지 글자로 보여 준다(한 → 꺆, a → A). 한글 모드에서도 켜져 있으면 영문 대문자가 입력되므로 함께 본다.
         bool caps = settings.ShowCapsLock && state is (ImeState.English or ImeState.Hangul) && Native.IsCapsLockOn();
         if (caps) dump?.Append(" caps");
+        // Shift 를 누르고 있는 동안은 지금 입력될 대소문자를 ▲ 와 함께 보여 준다(Caps Lock 표시의 하위 옵션).
+        bool shift = shiftHeld && settings.ShowCapsLock && settings.ShowShiftHold && state is (ImeState.English or ImeState.Hangul);
+        if (shift) dump?.Append(" shift");
 
         if (dump is not null)
         {
@@ -111,7 +116,7 @@ static class ImeReader
             Log.WriteIfChanged($"fg='{Native.ClassName(fg)}' focus='{Native.ClassName(gti.hwndFocus)}' tid={tid} pid={pid} => {state}{dump}");
         }
 
-        return new(state, caret, fg, CapsLock: caps, Corner: corner, ImageTracked: imageTracked);
+        return new(state, caret, fg, CapsLock: caps, Corner: corner, ImageTracked: imageTracked, Shift: shift);
     }
 
     /// <summary>
