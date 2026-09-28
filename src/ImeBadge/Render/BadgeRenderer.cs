@@ -41,12 +41,12 @@ static class BadgeRenderer
 {
     public const string FontFamily = "Malgun Gothic";
 
-    /// <summary>배지 글자와 색. Caps Lock 표시 규칙(한/꺆, a/A, 밑줄)은 <see cref="BadgeText"/> 가 정한다.</summary>
-    public static (string text, Color color, bool capsBar) Look(ImeState s, in BadgeTheme theme, bool capsLock = false)
+    /// <summary>배지 글자와 색. Caps Lock·Shift 표시 규칙(한/꺆, a/A, 밑줄/▲)은 <see cref="BadgeText"/> 가 정한다.</summary>
+    public static (string text, Color color, BadgeMark mark) Look(ImeState s, in BadgeTheme theme, bool capsLock = false, bool shift = false)
     {
-        if (s is not (ImeState.Hangul or ImeState.English)) return ("?", theme.Other, false);
-        var (text, bar) = BadgeText.For(s == ImeState.Hangul, capsLock, theme.ShowCapsLock);
-        return (text, s == ImeState.Hangul ? theme.Hangul : theme.English, bar);
+        if (s is not (ImeState.Hangul or ImeState.English)) return ("?", theme.Other, BadgeMark.None);
+        var (text, mark) = BadgeText.For(s == ImeState.Hangul, capsLock, theme.ShowCapsLock, shift);
+        return (text, s == ImeState.Hangul ? theme.Hangul : theme.English, mark);
     }
 
     /// <summary>트레이 아이콘용 글자와 색. Caps Lock 과 상관없이 항상 "한"/"A"(16px 에서도 읽히는 글자).</summary>
@@ -65,19 +65,20 @@ static class BadgeRenderer
         return ColorHex.PrefersWhiteText(argb) ? Color.White : Color.Black;
     }
 
-    public static Bitmap Render(ImeState state, BadgeStyle style, float scale, in BadgeTheme theme, int opacityPercent = 100, bool capsLock = false)
+    public static Bitmap Render(ImeState state, BadgeStyle style, float scale, in BadgeTheme theme, int opacityPercent = 100, bool capsLock = false,
+                                bool shift = false)
     {
-        var (text, color, bar) = Look(state, theme, capsLock);
+        var (text, color, mark) = Look(state, theme, capsLock, shift);
         var fill = Color.FromArgb(Math.Clamp(255 * opacityPercent / 100, 30, 255), color);
         var ink = TextColorOn(color, theme.Finish);
         if (theme.Character.Length > 0 && style is BadgeStyle.Pill or BadgeStyle.Box)
-            return RenderCharacter(theme.Character, text, bar, fill, ink, scale, theme);
+            return RenderCharacter(theme.Character, text, mark, fill, ink, scale, theme);
         return style switch
         {
             BadgeStyle.Dot => RenderDot(fill, scale, theme),
             BadgeStyle.Underline => RenderUnderline(fill, scale),
-            BadgeStyle.Box => RenderText(text, bar, fill, ink, scale, rounded: false, theme),
-            _ => RenderText(text, bar, fill, ink, scale, rounded: true, theme),   // Pill, DotFlash(글자 단계)
+            BadgeStyle.Box => RenderText(text, mark, fill, ink, scale, rounded: false, theme),
+            _ => RenderText(text, mark, fill, ink, scale, rounded: true, theme),   // Pill, DotFlash(글자 단계)
         };
     }
 
@@ -165,7 +166,14 @@ static class BadgeRenderer
         return probe.MeasureString(text, font);
     }
 
-    static Bitmap RenderText(string text, bool capsBar, Color color, Color ink, float scale, bool rounded, in BadgeTheme theme)
+    /// <summary>
+    /// Shift 표시: 가운데 위를 가리키는 작은 삼각형(Shift 키의 ⇧ 모양). 밑줄(Caps Lock)과 모양이 달라 한눈에 구별된다.
+    /// <paramref name="baseY"/> 는 밑변, <paramref name="height"/> 만큼 위가 꼭짓점.
+    /// </summary>
+    static void DrawShiftMark(Graphics g, Brush brush, float centerX, float baseY, float width, float height) =>
+        g.FillPolygon(brush, new PointF[] { new(centerX - width / 2, baseY), new(centerX + width / 2, baseY), new(centerX, baseY - height) });
+
+    static Bitmap RenderText(string text, BadgeMark mark, Color color, Color ink, float scale, bool rounded, in BadgeTheme theme)
     {
         float fontPx = 13 * scale;
         using var font = new Font(FontFamily, fontPx, FontStyle.Bold, GraphicsUnit.Pixel);   // 없으면 GDI+ 가 기본 글꼴로 대체
@@ -187,12 +195,19 @@ static class BadgeRenderer
             g.DrawPath(pen, path);
             using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
             var textArea = new RectangleF(pad, pad, w, h);
-            if (capsBar)
+            if (mark == BadgeMark.CapsBar)
             {
                 // Caps Lock: 글자를 조금 올리고 그 아래에 짧은 밑줄(키보드의 Caps Lock 표시등을 닮은 모양).
                 float lift = 1.5f * scale, barH = Math.Max(1f, 1.5f * scale), barW = Math.Max(6 * scale, Math.Min(ts.Width * 0.8f, w - 8 * scale));
                 textArea.Offset(0, -lift);
                 g.FillRectangle(textBrush, pad + (w - barW) / 2, pad + h - 4.5f * scale, barW, barH);
+            }
+            else if (mark == BadgeMark.Shift)
+            {
+                // Shift: 삼각형이 밑줄보다 높으므로 글자를 조금 더 올린다(글자와의 틈은 밑줄과 같게).
+                float lift = 2.25f * scale, triH = Math.Max(2f, 2.5f * scale);
+                textArea.Offset(0, -lift);
+                DrawShiftMark(g, textBrush, pad + w / 2f, pad + h - 2.75f * scale, triH * 1.8f, triH);
             }
             g.DrawString(text, font, textBrush, textArea, sf);
         }
@@ -268,7 +283,7 @@ static class BadgeRenderer
         return p;
     }
 
-    static Bitmap RenderCharacter(string character, string text, bool capsBar, Color color, Color ink, float scale, in BadgeTheme theme)
+    static Bitmap RenderCharacter(string character, string text, BadgeMark mark, Color color, Color ink, float scale, in BadgeTheme theme)
     {
         var fig = FigureOf(character);
         int pad = ShadowPad(scale);
@@ -314,11 +329,17 @@ static class BadgeRenderer
             using var textBrush = new SolidBrush(ink);
             using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
             float ty = fig.TextY;
-            if (capsBar)
+            if (mark == BadgeMark.CapsBar)
             {
                 ty -= 1.4f;
                 float barW = fig.FontSize * 0.75f;
                 g.FillRectangle(textBrush, fig.TextX - barW / 2, ty + fig.FontSize * 0.5f + 0.6f, barW, 1.4f);
+            }
+            else if (mark == BadgeMark.Shift)
+            {
+                // 밑변을 Caps Lock 밑줄의 아랫변에 맞춰 몸통 밖으로 더 나가지 않게 하고, 그만큼 글자를 더 올린다.
+                ty -= 2f;
+                DrawShiftMark(g, textBrush, fig.TextX, ty + fig.FontSize * 0.5f + 2.6f, 4.2f, 2.3f);
             }
             g.DrawString(text, font, textBrush, new RectangleF(fig.TextX - fig.Width / 2, ty - fig.FontSize, fig.Width, fig.FontSize * 2), sf);
         }

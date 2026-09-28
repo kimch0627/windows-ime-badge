@@ -31,6 +31,11 @@ public sealed class Settings
     /// 끄면 항상 "한"/"A". 트레이 아이콘은 이 설정과 상관없이 항상 "한"/"A".
     /// </summary>
     public bool ShowCapsLock { get; set; } = true;
+    /// <summary>
+    /// Shift 를 잠깐(<see cref="ShiftHold.ThresholdMs"/>) 이상 누르고 있으면 지금 입력될 대소문자로 글자를 바꾸고 밑줄 대신 ▲ 를 그린다.
+    /// <see cref="ShowCapsLock"/> 이 꺼져 있으면 무시된다.
+    /// </summary>
+    public bool ShowShiftHold { get; set; } = true;
     /// <summary>디자인 테마 id(<see cref="DesignThemes"/>). 문자열이라 구버전이 읽어도 무시될 뿐 설정이 초기화되지 않는다.</summary>
     public string Theme { get; set; } = DesignThemes.ClassicId;
     /// <summary>캐릭터 배지 모양(<see cref="BadgeCharacters"/>). 빈 문자열이면 <see cref="Style"/> 를 따른다. 고르면 Style 은 Pill 로 둔다(구버전 호환).</summary>
@@ -108,6 +113,7 @@ public sealed class Settings
         Style = other.Style; Placement = other.Placement;
         SizePercent = other.SizePercent; OpacityPercent = other.OpacityPercent;
         HangulColor = other.HangulColor; EnglishColor = other.EnglishColor; Animate = other.Animate; ShowCapsLock = other.ShowCapsLock;
+        ShowShiftHold = other.ShowShiftHold;
         Theme = other.Theme; Character = other.Character;
         HideOnFullscreen = other.HideOnFullscreen;
         ExcludedProcesses = new List<string>(other.ExcludedProcesses);

@@ -148,6 +148,17 @@ static class Native
     /// <summary>Caps Lock 이 켜져 있는가. 토글 키는 GetKeyState 의 최하위 비트가 켜짐 상태다(스레드에 상관없이 전역 값).</summary>
     public static bool IsCapsLockOn() => (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
 
+    public const int VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12, VK_LWIN = 0x5B, VK_RWIN = 0x5C;
+
+    static bool IsKeyDown(int vKey) => (GetAsyncKeyState(vKey) & 0x8000) != 0;
+
+    /// <summary>
+    /// 지금 Shift 가 Ctrl·Alt·Win 없이 눌려 있는가. GetKeyState 는 우리 스레드 입력 큐의 상태라 다른 앱에서 누른 키를 못 보므로
+    /// GetAsyncKeyState(실제 키 상태)를 쓴다. Ctrl+Shift·Alt+Shift(언어 전환)·Win+Shift 같은 단축키 조합은 입력이 아니라 제외한다.
+    /// </summary>
+    public static bool IsShiftAloneDown() =>
+        IsKeyDown(VK_SHIFT) && !IsKeyDown(VK_CONTROL) && !IsKeyDown(VK_MENU) && !IsKeyDown(VK_LWIN) && !IsKeyDown(VK_RWIN);
+
     public const int VK_LBUTTON = 0x01, VK_RBUTTON = 0x02, VK_MBUTTON = 0x04;
 
     /// <summary>

@@ -28,7 +28,8 @@ sealed class SettingsForm : Form
     ComboBox _language = null!;
     ColorSwatches _hangulColor = null!, _englishColor = null!;
     Label _hangulHex = null!, _englishHex = null!;
-    ToggleSwitch _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!, _trackImage = null!;
+    ToggleSwitch _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!, _shiftHold = null!,
+        _trackImage = null!;
     HotkeyBox _hotkeyBox = null!;
     ProcessListEditor _excluded = null!, _corner = null!;
     PreviewPanel _preview = null!;
@@ -291,9 +292,14 @@ sealed class SettingsForm : Form
         AddRow(t, null, _animate);
         _tips.SetToolTip(_animate, Strings.Get("look.animate.tip"));
 
-        _capsLock = Toggle(Strings.Get("look.capsLock"), v => { _draft.ShowCapsLock = v; Touch(); });
+        _capsLock = Toggle(Strings.Get("look.capsLock"), v => { _draft.ShowCapsLock = v; _shiftHold.Enabled = v; Touch(); });
         AddRow(t, null, _capsLock);
         _tips.SetToolTip(_capsLock, Strings.Get("look.capsLock.tip"));
+
+        // Caps Lock 표시의 하위 옵션: 대소문자를 글자로 구별할 때만 의미가 있다.
+        _shiftHold = Toggle(Strings.Get("look.shiftHold"), v => { _draft.ShowShiftHold = v; Touch(); });
+        AddRow(t, null, _shiftHold);
+        _tips.SetToolTip(_shiftHold, Strings.Get("look.shiftHold.tip"));
 
         g.Controls.Add(t);
         return g;
@@ -561,6 +567,8 @@ sealed class SettingsForm : Form
         _englishColor.Hex = _draft.EnglishColor; _englishHex.Text = _englishColor.Hex;
         _animate.Checked = _draft.Animate;
         _capsLock.Checked = _draft.ShowCapsLock;
+        _shiftHold.Checked = _draft.ShowShiftHold;
+        _shiftHold.Enabled = _draft.ShowCapsLock;
         _autostartBox.Checked = _autostart;
         _fullscreen.Checked = _draft.HideOnFullscreen;
         _trayStateBox.Checked = _draft.TrayShowsState;

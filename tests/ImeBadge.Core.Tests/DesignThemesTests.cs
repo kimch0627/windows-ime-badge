@@ -92,16 +92,16 @@ public sealed class DesignThemesTests
     public void Characters_Normalize(string? input, string expected) => Assert.Equal(expected, BadgeCharacters.Normalize(input));
 }
 
-/// <summary>배지 글자 규칙: 한/꺆, a/A, Caps Lock 이면 밑줄. 설정을 끄면 예전처럼 한/A.</summary>
+/// <summary>배지 글자 규칙: 한/꺆, a/A, Caps Lock 이면 밑줄, Shift 를 누르고 있으면 반대 대소문자와 ▲. 설정을 끄면 예전처럼 한/A.</summary>
 public sealed class BadgeTextTests
 {
     [Theory]
-    [InlineData(true, false, "한", false)]
-    [InlineData(true, true, "꺆", true)]
-    [InlineData(false, false, "a", false)]
-    [InlineData(false, true, "A", true)]
-    public void ShowCapsLock_On(bool korean, bool caps, string text, bool bar) =>
-        Assert.Equal((text, bar), BadgeText.For(korean, caps, showCapsLock: true));
+    [InlineData(true, false, "한", BadgeMark.None)]
+    [InlineData(true, true, "꺆", BadgeMark.CapsBar)]
+    [InlineData(false, false, "a", BadgeMark.None)]
+    [InlineData(false, true, "A", BadgeMark.CapsBar)]
+    public void ShowCapsLock_On(bool korean, bool caps, string text, BadgeMark mark) =>
+        Assert.Equal((text, mark), BadgeText.For(korean, caps, showCapsLock: true));
 
     [Theory]
     [InlineData(true, false, "한")]
@@ -109,5 +109,22 @@ public sealed class BadgeTextTests
     [InlineData(false, false, "A")]
     [InlineData(false, true, "A")]
     public void ShowCapsLock_Off_KeepsOldLetters(bool korean, bool caps, string text) =>
-        Assert.Equal((text, false), BadgeText.For(korean, caps, showCapsLock: false));
+        Assert.Equal((text, BadgeMark.None), BadgeText.For(korean, caps, showCapsLock: false));
+
+    /// <summary>Shift 는 지금 입력될 글자를 보여 준다: Caps Lock 이 꺼져 있으면 대문자, 켜져 있으면 소문자. 표시는 늘 ▲.</summary>
+    [Theory]
+    [InlineData(true, false, "꺆")]
+    [InlineData(true, true, "한")]
+    [InlineData(false, false, "A")]
+    [InlineData(false, true, "a")]
+    public void ShiftHeld_FlipsCase_WithShiftMark(bool korean, bool caps, string text) =>
+        Assert.Equal((text, BadgeMark.Shift), BadgeText.For(korean, caps, showCapsLock: true, shift: true));
+
+    [Theory]
+    [InlineData(true, false, "한")]
+    [InlineData(true, true, "한")]
+    [InlineData(false, false, "A")]
+    [InlineData(false, true, "A")]
+    public void ShiftHeld_IgnoredWhenCapsLockDisplayOff(bool korean, bool caps, string text) =>
+        Assert.Equal((text, BadgeMark.None), BadgeText.For(korean, caps, showCapsLock: false, shift: true));
 }
