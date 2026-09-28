@@ -6,6 +6,8 @@
   네이티브 vtable 슬롯 번호다. 쓰지 않는 자리표시자(_Slot_*) 메서드를 트리머가 지우면 순서가 당겨져서
   GetFocusedElement()를 부른다는 것이 전혀 다른 함수를 호출하게 된다. 그래서 멤버 전체(preserve="all")를 보존한다.
   중첩 형식은 "바깥형식/안쪽형식" 으로 쓴다.
+
+  보존을 빠뜨려 COM 인터페이스의 메서드가 잘리면 CI 의 tools/ComTrimCheck 가 그 형식 이름을 찍고 실패한다.
 -->
 <linker>
   <assembly fullname="ImeBadge">

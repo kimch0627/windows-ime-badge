@@ -49,10 +49,11 @@ sealed class BadgeForm : Form
 
     ImeState _lastState = ImeState.Unknown;
     bool _lastCaps;
+    readonly ShiftHold _shiftHold = new();   // Shift 를 누른 지 얼마나 됐나. 매 폴링마다 갱신해야 하므로 여기서 잰다
     DateTime _flashUntil = DateTime.MinValue;
-    (ImeState state, bool caps, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character) _renderKey;
+    (ImeState state, bool caps, bool shift, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character) _renderKey;
     Size _bitmapSize;
-    (ImeState state, bool caps, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character) _pulseBaseKey;
+    (ImeState state, bool caps, bool shift, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character) _pulseBaseKey;
     Point _lastPos = new(int.MinValue, int.MinValue);
     IntPtr _lastFg;
     bool _allowShow;
@@ -434,11 +435,11 @@ sealed class BadgeForm : Form
     /// </summary>
     Bitmap PulseFrame(in Snapshot s, BadgeStyle style, float baseScale, float pulse)
     {
-        var baseKey = (s.State, s.CapsLock, style, baseScale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor, _settings.Theme, _settings.Character);
+        var baseKey = (s.State, s.CapsLock, s.Shift, style, baseScale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor, _settings.Theme, _settings.Character);
         if (_pulseBase is null || baseKey != _pulseBaseKey)
         {
             _pulseBase?.Dispose();
-            _pulseBase = BadgeRenderer.Render(s.State, style, baseScale, BadgeTheme.From(_settings), _settings.OpacityPercent, s.CapsLock);
+            _pulseBase = BadgeRenderer.Render(s.State, style, baseScale, BadgeTheme.From(_settings), _settings.OpacityPercent, s.CapsLock, s.Shift);
             _pulseBaseKey = baseKey;
         }
         return BadgeRenderer.ScaleFrame(_pulseBase, pulse);
@@ -575,7 +576,7 @@ sealed class BadgeForm : Form
         if (_aboutForm is { IsDisposed: false }) _aboutForm.Close();
     }
 
-    void ResetRenderKey() => _renderKey = (ImeState.Unknown, false, (BadgeStyle)(-1), 0, -1, "", "", "", "");
+    void ResetRenderKey() => _renderKey = (ImeState.Unknown, false, false, (BadgeStyle)(-1), 0, -1, "", "", "", "");
 
     // ── 일시 중지 / 설정 / 정보 ──
     void TogglePause()
@@ -839,8 +840,10 @@ sealed class BadgeForm : Form
         _polling = true;
         try
         {
+            // 일시 중지 중에도 재야 다시 켰을 때 "예전에 누르기 시작한 Shift" 로 잘못 세지 않는다.
+            bool shift = _shiftHold.Update(Native.IsShiftAloneDown(), Environment.TickCount64);
             if (_paused || _sessionLocked) { HideBadge(); return; }
-            Apply(ImeReader.Read(Handle, _settings));
+            Apply(ImeReader.Read(Handle, _settings, shift));
         }
         catch (Exception ex)
         {
@@ -882,7 +885,8 @@ sealed class BadgeForm : Form
         var caret = s.Caret ?? (corner is { } c ? new Rectangle(c.Left, c.Bottom, 1, 0) : default);
         _lastSnapshot = s;
         bool appearing = !Visible;
-        bool changed = s.State != _lastState || s.CapsLock != _lastCaps;   // Caps Lock 토글도 "바뀜"으로 알린다
+        // Caps Lock 토글도 "바뀜"으로 알린다. Shift 누름은 잠깐의 상태라 펄스·DotFlash·트레이를 건드리지 않고 글자·▲ 만 바꾼다.
+        bool changed = s.State != _lastState || s.CapsLock != _lastCaps;
         if (changed)
         {
             _lastState = s.State; _lastCaps = s.CapsLock;
@@ -908,7 +912,7 @@ sealed class BadgeForm : Form
         float baseScale = Native.DpiScaleAt(caret.Location) * _settings.SizePercent / 100f;
         float scale = baseScale * pulse;
 
-        var key = (s.State, s.CapsLock, style, scale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor, _settings.Theme, _settings.Character);
+        var key = (s.State, s.CapsLock, s.Shift, style, scale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor, _settings.Theme, _settings.Character);
         bool needRender = key != _renderKey || _lastBmp is null;
 
         Size bs = needRender ? Size.Empty : _bitmapSize;
@@ -916,7 +920,7 @@ sealed class BadgeForm : Form
         if (needRender)
         {
             bmp = pulse == 1f
-                ? BadgeRenderer.Render(s.State, style, scale, BadgeTheme.From(_settings), _settings.OpacityPercent, s.CapsLock)
+                ? BadgeRenderer.Render(s.State, style, scale, BadgeTheme.From(_settings), _settings.OpacityPercent, s.CapsLock, s.Shift)
                 : PulseFrame(s, style, baseScale, pulse);
             bs = bmp.Size;
         }

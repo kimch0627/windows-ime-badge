@@ -44,6 +44,7 @@ public sealed class SettingsStoreTests : IDisposable
             TrayShowsState = false,
             Animate = false,
             ShowCapsLock = false,
+            ShowShiftHold = false,
             Language = UiLanguage.English,
             Hotkey = "Ctrl+Shift+F9",
             LastUpdateCheckUtc = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc),
@@ -64,6 +65,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.False(back.TrayShowsState);
         Assert.False(back.Animate);
         Assert.False(back.ShowCapsLock);
+        Assert.False(back.ShowShiftHold);
         Assert.Equal(UiLanguage.English, back.Language);
         Assert.Equal("Ctrl+Shift+F9", back.Hotkey);
         Assert.Equal(s.LastUpdateCheckUtc, back.LastUpdateCheckUtc);
@@ -101,6 +103,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(160, s.SizePercent);
         Assert.True(s.HideOnFullscreen);                 // 새 항목은 기본값
         Assert.True(s.ShowCapsLock);
+        Assert.True(s.ShowShiftHold);
         Assert.Equal(UiLanguage.Auto, s.Language);
         Assert.True(File.Exists(P("new/settings.json"))); // 새 위치에 복사됨
         Assert.True(File.Exists(P("imebadge.settings.json")));
