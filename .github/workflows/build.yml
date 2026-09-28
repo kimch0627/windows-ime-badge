@@ -145,6 +145,33 @@ jobs:
             "::endgroup::"
           }
 
+      # 트리밍이 COM 인터페이스([ComImport]/[InterfaceType])의 메서드를 지웠는지 검사한다(tools/ComTrimCheck).
+      # 메서드 선언 순서가 곧 vtable 이라 하나만 잘려도 뒤 슬롯이 당겨져, 호출하는 순간 "Fatal error. 0x80131506" 으로
+      # 프로세스가 죽는다(try/catch 로 못 잡고 errors.log 에도 안 남는다. "진단 정보 복사" 크래시가 이것이었다).
+      # 단일 파일 exe 는 안을 들여다보기 어려우니 같은 설정으로 폴더 publish 를 한 번 더 해서(트리밍 결과는 같다)
+      # publish 에 쓰인 런타임 팩(버전은 deps.json 에서)과 앱의 빌드 출력을 원본으로 비교한다. COM 인터페이스 선언은
+      # 아키텍처와 무관하므로 x64 만 본다. 실패하면 src/ImeBadge/ILLink.Descriptors.xml 에 그 형식을 보존하도록 추가한다.
+      - name: Check COM interfaces after trimming (트리밍이 vtable 을 깨지 않았는지) — x64
+        shell: pwsh
+        run: |
+          $pub = Join-Path $env:RUNNER_TEMP trimcheck-x64
+          dotnet publish src/ImeBadge/ImeBadge.csproj -c Release -r win-x64 --self-contained true `
+            -p:DebugType=none -p:Version=${{ env.VERSION }} -o $pub
+          if ($LASTEXITCODE -ne 0) { throw "dotnet publish (trimcheck, win-x64) failed ($LASTEXITCODE)" }
+          $nuget = (dotnet nuget locals global-packages --list) -replace '^global-packages:\s*', ''
+          $libs = (Get-Content (Join-Path $pub ImeBadge.deps.json) -Raw | ConvertFrom-Json -AsHashtable).libraries.Keys
+          $originals = @(foreach ($pack in "Microsoft.NETCore.App", "Microsoft.WindowsDesktop.App") {
+            $lib = $libs | Where-Object { $_ -like "runtimepack.$pack.Runtime.win-x64/*" }
+            if (-not $lib) { throw "runtime pack $pack not found in ImeBadge.deps.json" }
+            $root = Join-Path $nuget "$($pack.ToLower()).runtime.win-x64" ($lib -split '/')[1] runtimes win-x64
+            Join-Path $root lib net8.0
+            Join-Path $root native   # System.Private.CoreLib.dll 은 여기 있다
+          })
+          # 앱 자신의 어셈블리: 트리머에 들어가기 전의 ImeBadge.dll, ImeBadge.Core.dll
+          $originals += "src/ImeBadge/obj/Release/net8.0-windows/win-x64", "src/ImeBadge.Core/bin/Release/net8.0"
+          dotnet run --project tools/ComTrimCheck/ComTrimCheck.csproj -c Release -- $pub @originals
+          if ($LASTEXITCODE -ne 0) { throw "ComTrimCheck failed ($LASTEXITCODE)" }
+
       - name: Check signing secrets
         id: sign
         shell: pwsh
