@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-09-28
+
+다른 언어 입력 상태의 "?" 배지가 디자인 테마 색을 따르게 한 릴리스입니다. 클래식 테마는 예전과 똑같고, 설정 변경은 없습니다.
+
 ### 추가
 - CI 가 트리밍된 self-contained 빌드에서 COM 인터페이스의 메서드가 잘렸는지 검사한다(`tools/ComTrimCheck`).
   잘리면 vtable 이 어긋나 `Fatal error. 0x80131506` 으로 죽으므로(1.5.2 에서 고친 "진단 정보 복사" 문제), 그런 빌드는 이제 CI 에서 실패한다.
@@ -273,7 +277,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.2...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.2...v1.6.0
 [1.5.2]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.4.1...v1.5.0
