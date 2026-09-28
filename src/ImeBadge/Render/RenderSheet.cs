@@ -50,12 +50,13 @@ static class RenderSheet
         bool Shift = false);
 
     static readonly Item Han = new("한", ImeState.Hangul), EnA = new("a", ImeState.English),
-        EnCaps = new("A Caps", ImeState.English, Caps: true), HanCaps = new("꺆 Caps", ImeState.Hangul, Caps: true);
+        EnCaps = new("A Caps", ImeState.English, Caps: true), HanCaps = new("꺆 Caps", ImeState.Hangul, Caps: true),
+        Bar = new("밑줄", ImeState.Hangul, BadgeStyle.Underline);
 
     static readonly Item[] Gallery =
     {
         Han, EnA, EnCaps, HanCaps,
-        new("상자", ImeState.Hangul, BadgeStyle.Box), new("점", ImeState.Hangul, BadgeStyle.Dot), new("?", ImeState.OtherLang),
+        new("상자", ImeState.Hangul, BadgeStyle.Box), new("점", ImeState.Hangul, BadgeStyle.Dot), Bar, new("?", ImeState.OtherLang),
         new("고양이", ImeState.Hangul, Character: BadgeCharacters.Cat), new("강아지", ImeState.English, Character: BadgeCharacters.Dog),
         new("하트", ImeState.Hangul, Character: BadgeCharacters.Heart), new("구름 Caps", ImeState.English, Caps: true, Character: BadgeCharacters.Cloud),
         new("별 Caps", ImeState.Hangul, Caps: true, Character: BadgeCharacters.Star),
@@ -106,7 +107,7 @@ static class RenderSheet
         // 3. 크기
         s.Section("3. 크기(배율)", "흰 배경. 마지막 칸은 배율 100% 를 3배로 확대(픽셀 그대로)한 것 — 림·테두리가 뭉개지는지 본다.");
         var scales = new[] { 1f, 1.25f, 1.5f, 2f };
-        var sizeItems = new[] { Han, EnA, HanCaps };
+        var sizeItems = new[] { Han, EnA, HanCaps, Bar };
         var sizeSlots = sizeItems.Select(i => i.Caption).ToArray();
         s.Headers(scales.Select(k => ($"{k * 100:0}%", sizeSlots, 36 * k)).Append(("100% ×3 확대", pairSlots, 110f)).ToArray());
         foreach (var design in themes)

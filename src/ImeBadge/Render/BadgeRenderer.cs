@@ -139,7 +139,7 @@ static class BadgeRenderer
         return style switch
         {
             BadgeStyle.Dot => RenderDot(fill, scale, theme),
-            BadgeStyle.Underline => RenderUnderline(fill, scale),
+            BadgeStyle.Underline => RenderUnderline(fill, scale, theme),
             BadgeStyle.Box => RenderText(text, mark, fill, ink, scale, rounded: false, theme),
             _ => RenderText(text, mark, fill, ink, scale, rounded: true, theme),   // Pill, DotFlash(글자 단계)
         };
@@ -314,15 +314,41 @@ static class BadgeRenderer
         return bmp;
     }
 
-    static Bitmap RenderUnderline(Color color, float scale)
+    /// <summary>
+    /// caret 아래의 짧은 막대(배율 1 에서 16×3px). 막대가 작아 림·그라데이션은 넣지 않고 선명도만 챙긴다(#48):
+    /// 아래 가장자리 1줄을 같은 색조로 진하게(<see cref="ColorHex.EdgeOn"/>) 하고 그림자를 깐다. 둘레 전체에 테두리를 두르면
+    /// 3px 중 2px 가 테두리가 되어 배지색이 사라진다. 고대비는 창 바탕색 막대가 창 위에서 묻히므로 둘레 전체에 창 글자색 선.
+    /// 막대는 캔버스 맨 위에 두고 그림자 여백은 좌우(같은 폭)와 아래에만 둔다. 위치 계산(<see cref="BadgeLayout"/>: 가로 가운데,
+    /// 위쪽 = caret 아래 1px)이 캔버스 기준이라 이렇게 하면 막대 자리가 예전과 같다.
+    /// </summary>
+    static Bitmap RenderUnderline(Color color, float scale, in BadgeTheme theme)
     {
         int w = (int)Math.Round(16 * scale), h = (int)Math.Round(3 * scale);
-        var bmp = NewCanvas(w, h, out var g);
+        int pad = ShadowPad(scale);
+        var bmp = NewCanvas(w + 2 * pad, h + pad, out var g);
         using (g)
         {
+            var rect = new RectangleF(pad, 0, w, h);
+            using var path = RoundedRect(rect, h / 2f);
+            DrawShadow(g, path, scale, color, theme);
             using var brush = new SolidBrush(color);
-            using var path = RoundedRect(new RectangleF(0, 0, w, h), h / 2f);
             g.FillPath(brush, path);
+            float line = Math.Max(1f, MathF.Floor(scale));   // 정수 px 라 흐려지지 않고, 150%(막대 4px)에서도 1px 에 그친다
+            if (theme.Contrast is not null)
+            {
+                using var inner = RoundedRect(RectangleF.Inflate(rect, -line / 2, -line / 2), (h - line) / 2f);
+                using var pen = OutlinePen(color, line, theme, line);
+                g.DrawPath(pen, inner);
+            }
+            else
+            {
+                using var pen = OutlinePen(color, line, theme, line);
+                using var edge = new SolidBrush(pen.Color);
+                var state = g.Save();
+                g.SetClip(path);   // 둥근 양 끝을 따라 자른다
+                g.FillRectangle(edge, rect.X, rect.Bottom - line, rect.Width, line);
+                g.Restore(state);
+            }
         }
         return bmp;
     }
