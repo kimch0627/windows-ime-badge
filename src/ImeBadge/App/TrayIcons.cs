@@ -19,7 +19,7 @@ namespace ImeBadge;
 /// </summary>
 sealed class TrayIcons : IDisposable
 {
-    readonly Dictionary<(ImeState state, bool paused, int size, int hangul, int english, BadgeFinish finish), (Icon icon, IntPtr handle)> _cache = new();
+    readonly Dictionary<(ImeState state, bool paused, int size, int hangul, int english, BadgeFinish finish, bool contrast), (Icon icon, IntPtr handle)> _cache = new();
 
     /// <summary>
     /// 상태에 맞는 아이콘. <paramref name="size"/> 는 트레이가 쓰는 픽셀 크기(SmallIconSize: 100% 에서 16, 150% 에서 24).
@@ -30,7 +30,7 @@ sealed class TrayIcons : IDisposable
     {
         if (!paused && state == ImeState.Unknown) return Icons.App;
 
-        var key = (state, paused, size, theme.Hangul.ToArgb(), theme.English.ToArgb(), theme.Finish);
+        var key = (state, paused, size, theme.Hangul.ToArgb(), theme.English.ToArgb(), theme.Finish, theme.Contrast is not null);
         if (_cache.TryGetValue(key, out var hit)) return hit.icon;
 
         using var bmp = paused ? RenderPaused(size) : RenderState(state, size, theme);
@@ -64,8 +64,11 @@ sealed class TrayIcons : IDisposable
         return bmp;
     }
 
-    /// <summary>배지와 같은 색의 둥근 사각형에 "한"/"A"/"?". 글자색은 배지와 같은 규칙(테마 마감)으로 고른다.</summary>
-    static Bitmap RenderState(ImeState state, int size, in BadgeTheme theme)
+    /// <summary>
+    /// 배지와 같은 색의 둥근 사각형에 "한"/"A"/"?". 글자색·글꼴·가운데 정렬은 배지와 같은 규칙(<see cref="BadgeRenderer"/>)을 따른다.
+    /// 확인용 그림(<see cref="RenderSheet"/>)도 쓴다.
+    /// </summary>
+    internal static Bitmap RenderState(ImeState state, int size, in BadgeTheme theme)
     {
         var (text, color) = BadgeRenderer.TrayLook(state, theme);
         var bmp = NewCanvas(size, out var g);
@@ -75,13 +78,18 @@ sealed class TrayIcons : IDisposable
             using var path = RoundedRect(rect, size * 0.22f);
             using var brush = new SolidBrush(color);
             g.FillPath(brush, path);
+            if (theme.Contrast is { } hc)   // 고대비: 창 글자색 테두리(작은 아이콘이라 1px). 창 바탕색 배지도 작업 표시줄 위에서 윤곽이 보인다
+            {
+                using var edge = new Pen(hc.Edge, 1f);
+                g.DrawPath(edge, path);
+            }
 
             // 글자는 상자의 약 70%. "한"은 획이 많아 "A"보다 조금 작게 그려야 16px 에서 뭉개지지 않는다.
             float px = size * (text == "A" ? 0.78f : 0.68f);
-            using var textBrush = new SolidBrush(BadgeRenderer.TextColorOn(color, theme.Finish));
-            using var font = new Font(BadgeRenderer.FontFamily, px, FontStyle.Bold, GraphicsUnit.Pixel);
-            using var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-            g.DrawString(text, font, textBrush, new RectangleF(0, 0, size, size), sf);
+            using var textBrush = new SolidBrush(BadgeRenderer.InkFor(state, color, theme));
+            using var font = new Font(BadgeFonts.For(text), px, FontStyle.Bold, GraphicsUnit.Pixel);
+            using var glyph = BadgeRenderer.TextPath(text, font);
+            BadgeRenderer.DrawCentered(g, text, font, glyph, size / 2f, size / 2f, snap: true, textBrush);
         }
         return bmp;
     }
