@@ -31,7 +31,7 @@ readonly record struct BadgeTheme(Color Hangul, Color English, Color Other,
         return new(
             ParseOr(s.HangulColor, Settings.DefaultHangulColor),
             ParseOr(s.EnglishColor, Settings.DefaultEnglishColor),
-            Color.DarkOrange,
+            ParseOr(design.OtherColor, DesignThemes.ClassicOtherColor),
             design.Finish, design.Gloss, BadgeCharacters.Normalize(s.Character), s.ShowCapsLock);
     }
 
@@ -45,7 +45,8 @@ readonly record struct BadgeTheme(Color Hangul, Color English, Color Other,
 
     /// <summary>테마 기본색으로 만든 조합(설정 창의 테마 타일, 트레이 메뉴의 테마 항목 미리보기용).</summary>
     public static BadgeTheme Of(DesignTheme d) => new(
-        ParseOr(d.HangulColor, Settings.DefaultHangulColor), ParseOr(d.EnglishColor, Settings.DefaultEnglishColor), Color.DarkOrange,
+        ParseOr(d.HangulColor, Settings.DefaultHangulColor), ParseOr(d.EnglishColor, Settings.DefaultEnglishColor),
+        ParseOr(d.OtherColor, DesignThemes.ClassicOtherColor),
         d.Finish, d.Gloss);
 
     /// <summary>시스템 색(KnownColor)을 지금 값의 불투명한 색으로 굳힌다. 캐시 키 비교가 값으로 되게.</summary>
@@ -98,12 +99,12 @@ static class BadgeRenderer
 {
     public const string FontFamily = "Malgun Gothic";
 
-    /// <summary>배지 글자와 색. Caps Lock 표시 규칙(한/꺆, a/A, 밑줄)은 <see cref="BadgeText"/> 가 정한다.</summary>
-    public static (string text, Color color, bool capsBar) Look(ImeState s, in BadgeTheme theme, bool capsLock = false)
+    /// <summary>배지 글자와 색. Caps Lock·Shift 표시 규칙(한/꺆, a/A, 밑줄/▲)은 <see cref="BadgeText"/> 가 정한다.</summary>
+    public static (string text, Color color, BadgeMark mark) Look(ImeState s, in BadgeTheme theme, bool capsLock = false, bool shift = false)
     {
-        if (s is not (ImeState.Hangul or ImeState.English)) return ("?", theme.Other, false);
-        var (text, bar) = BadgeText.For(s == ImeState.Hangul, capsLock, theme.ShowCapsLock);
-        return (text, s == ImeState.Hangul ? theme.Hangul : theme.English, bar);
+        if (s is not (ImeState.Hangul or ImeState.English)) return ("?", theme.Other, BadgeMark.None);
+        var (text, mark) = BadgeText.For(s == ImeState.Hangul, capsLock, theme.ShowCapsLock, shift);
+        return (text, s == ImeState.Hangul ? theme.Hangul : theme.English, mark);
     }
 
     /// <summary>트레이 아이콘용 글자와 색. Caps Lock 과 상관없이 항상 "한"/"A"(16px 에서도 읽히는 글자).</summary>
@@ -126,20 +127,21 @@ static class BadgeRenderer
     public static Color InkFor(ImeState state, Color background, in BadgeTheme theme) =>
         theme.Contrast is { } hc ? (state == ImeState.Hangul ? hc.HangulInk : hc.OtherInk) : TextColorOn(background, theme.Finish);
 
-    public static Bitmap Render(ImeState state, BadgeStyle style, float scale, in BadgeTheme theme, int opacityPercent = 100, bool capsLock = false)
+    public static Bitmap Render(ImeState state, BadgeStyle style, float scale, in BadgeTheme theme, int opacityPercent = 100, bool capsLock = false,
+                                bool shift = false)
     {
-        var (text, color, bar) = Look(state, theme, capsLock);
+        var (text, color, mark) = Look(state, theme, capsLock, shift);
         // 고대비는 불투명도 설정과 상관없이 늘 불투명(비치면 사용자가 고른 대비가 깨진다).
         var fill = theme.Contrast is null ? Color.FromArgb(Math.Clamp(255 * opacityPercent / 100, 30, 255), color) : color;
         var ink = InkFor(state, color, theme);
         if (theme.Character.Length > 0 && style is BadgeStyle.Pill or BadgeStyle.Box)
-            return RenderCharacter(theme.Character, text, bar, fill, ink, scale, theme);
+            return RenderCharacter(theme.Character, text, mark, fill, ink, scale, theme);
         return style switch
         {
             BadgeStyle.Dot => RenderDot(fill, scale, theme),
             BadgeStyle.Underline => RenderUnderline(fill, scale),
-            BadgeStyle.Box => RenderText(text, bar, fill, ink, scale, rounded: false, theme),
-            _ => RenderText(text, bar, fill, ink, scale, rounded: true, theme),   // Pill, DotFlash(글자 단계)
+            BadgeStyle.Box => RenderText(text, mark, fill, ink, scale, rounded: false, theme),
+            _ => RenderText(text, mark, fill, ink, scale, rounded: true, theme),   // Pill, DotFlash(글자 단계)
         };
     }
 
@@ -248,10 +250,11 @@ static class BadgeRenderer
     /// <summary>
     /// 글자의 잉크 중심을 (<paramref name="cx"/>, <paramref name="cy"/>)에 맞춰 그린다. 글꼴의 줄 높이 기준으로 가운데 맞추면
     /// "한"(꽉 찬 글자)·"a"(x-height)·"A"(대문자 높이)의 눈에 보이는 중심이 제각각이라 윤곽(<paramref name="glyph"/>)으로 위치를 잰다.
-    /// 그리기는 DrawString 이라 힌팅(격자 맞춤)의 선명함은 그대로다. <paramref name="halo"/> 가 있으면 글자(와 밑줄) 둘레를 그 붓으로 먼저 굵게 긋는다.
+    /// 그리기는 DrawString 이라 힌팅(격자 맞춤)의 선명함은 그대로다. <paramref name="mark"/> 는 글자 아래 표시(<see cref="MarkPath"/>).
+    /// <paramref name="halo"/> 가 있으면 글자와 표시 둘레를 그 붓으로 먼저 굵게 긋는다.
     /// </summary>
     public static void DrawCentered(Graphics g, string text, Font font, GraphicsPath glyph, float cx, float cy, bool snap,
-        Brush textBrush, RectangleF? bar = null, Brush? halo = null, float haloWidth = 0)
+        Brush textBrush, GraphicsPath? mark = null, Brush? halo = null, float haloWidth = 0)
     {
         var ink = glyph.GetBounds();
         var origin = new PointF(cx - (ink.X + ink.Width / 2), cy - (ink.Y + ink.Height / 2));
@@ -260,11 +263,11 @@ static class BadgeRenderer
         {
             using var outline = (GraphicsPath)glyph.Clone();
             using (var m = new Matrix()) { m.Translate(origin.X, origin.Y); outline.Transform(m); }
-            if (bar is { } b) outline.AddRectangle(b);
+            if (mark is not null) outline.AddPath(mark, false);
             using var pen = new Pen(halo, haloWidth) { LineJoin = LineJoin.Round };
             g.DrawPath(pen, outline);
         }
-        if (bar is { } r) g.FillRectangle(textBrush, r);
+        if (mark is not null) g.FillPath(textBrush, mark);
         g.DrawString(text, font, textBrush, origin, Typographic);
     }
 
@@ -327,7 +330,30 @@ static class BadgeRenderer
     /// <summary>배지 폭 = 잉크 폭 + 좌우 여백(배율 1 기준 px). 폭이 높이보다 <c>CircleSnap</c> 만큼도 크지 않으면("a", "A") 동그라미로 맞춘다.</summary>
     const float InkSidePad = 7f, CircleSnap = 3f;
 
-    static Bitmap RenderText(string text, bool capsBar, Color color, Color ink, float scale, bool rounded, in BadgeTheme theme)
+    /// <summary>
+    /// 글자 아래 표시의 윤곽. Caps Lock 은 짧은 밑줄(키보드의 Caps Lock 표시등을 닮은 모양), Shift 는 가운데 위를 가리키는
+    /// 작은 삼각형(Shift 키의 ⇧ 모양, 폭 = 높이 × 1.8)이라 한눈에 구별된다. 표시가 없으면 null.
+    /// 글자와 표시를 한 덩어리로 보고 가운데에 두도록 <paramref name="cy"/>(글자 잉크 중심)를 표시 높이와 틈의 절반만큼 올린다.
+    /// </summary>
+    static GraphicsPath? MarkPath(BadgeMark mark, float cx, ref float cy, RectangleF ink, float gap, float barW, float barH, float triH, bool snap)
+    {
+        if (mark == BadgeMark.None) return null;
+        float markH = mark == BadgeMark.Shift ? triH : barH;
+        cy -= (gap + markH) / 2;
+        float top = cy + ink.Height / 2 + gap;
+        if (snap) top = MathF.Round(top);
+        var p = new GraphicsPath();
+        if (mark == BadgeMark.CapsBar)
+            p.AddRectangle(new RectangleF(cx - barW / 2, top, barW, barH));
+        else
+        {
+            float triW = triH * 1.8f;
+            p.AddPolygon(new PointF[] { new(cx - triW / 2, top + triH), new(cx + triW / 2, top + triH), new(cx, top) });
+        }
+        return p;
+    }
+
+    static Bitmap RenderText(string text, BadgeMark mark, Color color, Color ink, float scale, bool rounded, in BadgeTheme theme)
     {
         using var font = new Font(BadgeFonts.For(text), 13 * scale, FontStyle.Bold, GraphicsUnit.Pixel);   // 없으면 GDI+ 가 기본 글꼴로 대체
         using var glyph = TextPath(text, font);
@@ -350,18 +376,13 @@ static class BadgeRenderer
             float rimWidth = Math.Max(1f, scale);
             DrawRim(g, path, rect, 0.5f + rimWidth / 2, rimWidth, color, theme);
 
-            // 글자와 Caps Lock 밑줄(키보드의 Caps Lock 표시등을 닮은 모양)을 한 덩어리로 보고 배지 가운데에 둔다.
+            // 글자와 그 아래 표시(Caps Lock 밑줄·Shift ▲)를 한 덩어리로 보고 배지 가운데에 둔다.
             float cx = pad + w / 2f, cy = pad + h / 2f;
-            RectangleF? bar = null;
-            if (capsBar)
-            {
-                float gap = 1.5f * scale, barH = Math.Max(1f, 1.5f * scale), barW = Math.Max(6 * scale, Math.Min(ib.Width, w - 8 * scale));
-                cy -= (gap + barH) / 2;
-                bar = new RectangleF(cx - barW / 2, MathF.Round(cy + ib.Height / 2 + gap), barW, barH);
-            }
+            using var markPath = MarkPath(mark, cx, ref cy, ib, gap: 1.5f * scale,
+                barW: Math.Max(6 * scale, Math.Min(ib.Width, w - 8 * scale)), barH: Math.Max(1f, 1.5f * scale), triH: Math.Max(2f, 2.5f * scale), snap: true);
             using var textBrush = new SolidBrush(ink);
             using var halo = HaloBrush(color, rect, theme);
-            DrawCentered(g, text, font, glyph, cx, cy, snap: true, textBrush, bar, halo, HaloWidth * scale);
+            DrawCentered(g, text, font, glyph, cx, cy, snap: true, textBrush, markPath, halo, HaloWidth * scale);
         }
         return bmp;
     }
@@ -435,7 +456,7 @@ static class BadgeRenderer
         return p;
     }
 
-    static Bitmap RenderCharacter(string character, string text, bool capsBar, Color color, Color ink, float scale, in BadgeTheme theme)
+    static Bitmap RenderCharacter(string character, string text, BadgeMark mark, Color color, Color ink, float scale, in BadgeTheme theme)
     {
         var fig = FigureOf(character);
         int pad = ShadowPad(scale);
@@ -481,22 +502,16 @@ static class BadgeRenderer
             // 림: 테두리의 바깥 절반(0.8 단위) 안쪽에. 별은 둥근 선(2.4)이 몸통 밖으로 1.2 나와 있어 그만큼 바깥쪽에 긋는다.
             DrawRim(g, body, body.GetBounds(), star ? -0.6f : 0.6f, 1f, color, theme);
 
-            // 글자와 Caps Lock 밑줄의 한 덩어리 중심을 몸통의 글자 자리(TextX, TextY)에.
+            // 글자와 그 아래 표시(Caps Lock 밑줄·Shift ▲)의 한 덩어리 중심을 몸통의 글자 자리(TextX, TextY)에.
             using var font = new Font(BadgeFonts.For(text), fig.FontSize, FontStyle.Bold, GraphicsUnit.Pixel);
             using var glyph = TextPath(text, font);
             var ib = glyph.GetBounds();
             float cy = fig.TextY;
-            RectangleF? bar = null;
-            if (capsBar)
-            {
-                const float Gap = 1.2f, BarH = 1.4f;
-                float barW = Math.Max(fig.FontSize * 0.5f, ib.Width);
-                cy -= (Gap + BarH) / 2;
-                bar = new RectangleF(fig.TextX - barW / 2, cy + ib.Height / 2 + Gap, barW, BarH);
-            }
+            using var markPath = MarkPath(mark, fig.TextX, ref cy, ib, gap: 1.2f,
+                barW: Math.Max(fig.FontSize * 0.5f, ib.Width), barH: 1.4f, triH: 2.3f, snap: false);
             using var textBrush = new SolidBrush(ink);
             using var halo = HaloBrush(color, bounds, theme);
-            DrawCentered(g, text, font, glyph, fig.TextX, cy, snap: false, textBrush, bar, halo, HaloWidth);
+            DrawCentered(g, text, font, glyph, fig.TextX, cy, snap: false, textBrush, markPath, halo, HaloWidth);
         }
         return bmp;
     }

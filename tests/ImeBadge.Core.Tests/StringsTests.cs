@@ -59,8 +59,8 @@ public sealed class StringsTests
     public void SettingsWindow_MnemonicsAreUnique(UiLanguage lang)
     {
         AssertUniqueMnemonics(Strings.Table(lang), "settings.reset", "look.theme", "look.style", "look.placement", "look.size", "look.opacity",
-            "look.hangulColor", "look.englishColor", "look.animate", "look.capsLock", "behavior.autostart", "behavior.fullscreen",
-            "behavior.trayState", "behavior.hotkey", "behavior.updates", "behavior.poll", "behavior.language", "exclude.add", "exclude.remove");
+            "look.hangulColor", "look.englishColor", "look.animate", "look.capsLock", "look.shiftHold", "behavior.autostart",
+            "behavior.fullscreen", "behavior.trayState", "behavior.hotkey", "behavior.updates", "behavior.poll", "behavior.language", "exclude.add", "exclude.remove");
     }
 
     static void AssertUniqueMnemonics(IReadOnlyDictionary<string, string> table, params string[] keys)

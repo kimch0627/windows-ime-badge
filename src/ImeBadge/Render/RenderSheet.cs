@@ -46,7 +46,8 @@ static class RenderSheet
     };
 
     /// <summary>한 칸에 그릴 배지.</summary>
-    readonly record struct Item(string Caption, ImeState State, BadgeStyle Style = BadgeStyle.Pill, bool Caps = false, string Character = "");
+    readonly record struct Item(string Caption, ImeState State, BadgeStyle Style = BadgeStyle.Pill, bool Caps = false, string Character = "",
+        bool Shift = false);
 
     static readonly Item Han = new("한", ImeState.Hangul), EnA = new("a", ImeState.English),
         EnCaps = new("A Caps", ImeState.English, Caps: true), HanCaps = new("꺆 Caps", ImeState.Hangul, Caps: true);
@@ -58,6 +59,7 @@ static class RenderSheet
         new("고양이", ImeState.Hangul, Character: BadgeCharacters.Cat), new("강아지", ImeState.English, Character: BadgeCharacters.Dog),
         new("하트", ImeState.Hangul, Character: BadgeCharacters.Heart), new("구름 Caps", ImeState.English, Caps: true, Character: BadgeCharacters.Cloud),
         new("별 Caps", ImeState.Hangul, Caps: true, Character: BadgeCharacters.Star),
+        new("A Shift", ImeState.English, Shift: true), new("고양이 Shift", ImeState.Hangul, Shift: true, Character: BadgeCharacters.Cat),
     };
 
     static readonly Color Light = Color.White, Dark = Color.FromArgb(0x20, 0x20, 0x20);
@@ -74,7 +76,7 @@ static class RenderSheet
             .Select(f => $"{f} {(BadgeFonts.IsInstalled(f) ? "있음" : "없음")}")));
 
         // 1. 테마별 모양
-        s.Section("1. 테마별 모양", "배율 150%, 불투명도 100%. Caps = Caps Lock 켜짐, ? = 다른 언어.");
+        s.Section("1. 테마별 모양", "배율 150%, 불투명도 100%. Caps = Caps Lock 켜짐(밑줄), Shift = Shift 를 누르고 있음(▲), ? = 다른 언어.");
         float slot = 54;
         var gallerySlots = Gallery.Select(i => i.Caption).ToArray();
         s.Headers(new[] { ("밝은 배경", gallerySlots, slot), ("어두운 배경", gallerySlots, slot) });
@@ -236,7 +238,7 @@ static class RenderSheet
     }
 
     static Bitmap RenderItem(in Item it, BadgeTheme theme, float scale, int opacity) =>
-        BadgeRenderer.Render(it.State, it.Style, scale, theme with { Character = it.Character }, opacity, it.Caps);
+        BadgeRenderer.Render(it.State, it.Style, scale, theme with { Character = it.Character }, opacity, it.Caps, it.Shift);
 
     static SheetPanel Panel(Color bg, float slot, IEnumerable<Item> items, BadgeTheme theme, float scale, int opacity, Color? backdrop = null) =>
         new(bg, slot, items.Select(i => RenderItem(i, theme, scale, opacity)).ToList(), backdrop);
