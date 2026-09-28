@@ -64,6 +64,63 @@ public sealed class DesignThemesTests
         }
     }
 
+    [Fact]
+    public void Classic_OtherColor_IsTheOldOrange() => Assert.Equal("#FF8C00", DesignThemes.Classic.OtherColor);
+
+    /// <summary>"?" 배지 글자도 읽혀야 한다. 클래식은 예전 흰/검 규칙이라 검사하지 않는다.</summary>
+    [Theory]
+    [MemberData(nameof(ThemeIds))]
+    public void SoftTheme_OtherColor_IsReadableAndInSwatches(string id)
+    {
+        var t = DesignThemes.Get(id);
+        if (t.Finish != BadgeFinish.Soft) return;
+        Assert.Contains(t.OtherColor, t.Swatches);
+        ColorHex.TryParse(t.OtherColor, out int fill);
+        double ratio = ColorHex.ContrastRatio(fill, ColorHex.SoftTextOn(fill));
+        Assert.True(ratio >= 4.5, $"{id} {t.OtherColor}: {ratio:0.00}");
+    }
+
+    /// <summary>"?" 배지가 한글·영문 배지와 헷갈리지 않게: 색상(hue)이 40° 이상 떨어지거나 밝기 대비가 2:1 이상.</summary>
+    [Theory]
+    [MemberData(nameof(ThemeIds))]
+    public void OtherColor_IsDistinctFromHangulAndEnglish(string id)
+    {
+        var t = DesignThemes.Get(id);
+        ColorHex.TryParse(t.OtherColor, out int other);
+        foreach (var hex in new[] { t.HangulColor, t.EnglishColor })
+        {
+            ColorHex.TryParse(hex, out int c);
+            bool hueApart = Saturation(c) > 0.1 && HueDistance(other, c) >= 40;
+            bool lumApart = ColorHex.ContrastRatio(other, c) >= 2.0;
+            Assert.True(hueApart || lumApart, $"{id}: {t.OtherColor} vs {hex}");
+        }
+    }
+
+    static (double r, double g, double b) Rgb(int argb) =>
+        (((argb >> 16) & 0xFF) / 255.0, ((argb >> 8) & 0xFF) / 255.0, (argb & 0xFF) / 255.0);
+
+    static double Saturation(int argb)
+    {
+        var (r, g, b) = Rgb(argb);
+        double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b));
+        return max == 0 ? 0 : (max - min) / max;
+    }
+
+    static double Hue(int argb)
+    {
+        var (r, g, b) = Rgb(argb);
+        double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b)), d = max - min;
+        if (d == 0) return 0;
+        double h = max == r ? (g - b) / d % 6 : max == g ? (b - r) / d + 2 : (r - g) / d + 4;
+        return (h * 60 + 360) % 360;
+    }
+
+    static double HueDistance(int a, int b)
+    {
+        double d = Math.Abs(Hue(a) - Hue(b)) % 360;
+        return Math.Min(d, 360 - d);
+    }
+
     /// <summary>설정 창의 확인 버튼(강조색 위 글자)도 읽혀야 한다.</summary>
     [Theory]
     [MemberData(nameof(ThemeIds))]
