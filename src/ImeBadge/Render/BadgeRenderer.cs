@@ -19,13 +19,14 @@ readonly record struct BadgeTheme(Color Hangul, Color English, Color Other,
         return new(
             ParseOr(s.HangulColor, Settings.DefaultHangulColor),
             ParseOr(s.EnglishColor, Settings.DefaultEnglishColor),
-            Color.DarkOrange,
+            ParseOr(design.OtherColor, DesignThemes.ClassicOtherColor),
             design.Finish, design.Gloss, BadgeCharacters.Normalize(s.Character), s.ShowCapsLock);
     }
 
     /// <summary>테마 기본색으로 만든 조합(설정 창의 테마 타일, 트레이 메뉴의 테마 항목 미리보기용).</summary>
     public static BadgeTheme Of(DesignTheme d) => new(
-        ParseOr(d.HangulColor, Settings.DefaultHangulColor), ParseOr(d.EnglishColor, Settings.DefaultEnglishColor), Color.DarkOrange,
+        ParseOr(d.HangulColor, Settings.DefaultHangulColor), ParseOr(d.EnglishColor, Settings.DefaultEnglishColor),
+        ParseOr(d.OtherColor, DesignThemes.ClassicOtherColor),
         d.Finish, d.Gloss);
 
     static Color ParseOr(string text, string fallback) =>
