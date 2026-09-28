@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-09-28
+
+Shift 를 누르고 있으면 배지에 보여 주는 기능을 더하고, "?"(다른 언어) 배지 색이 디자인 테마를 따르게 한 릴리스입니다.
+예전 설정 파일은 그대로 읽힙니다.
+**한 가지 달라 보이는 점**: Shift 를 0.3초 이상 누르고 있으면(기본 켜짐) 배지가 `A` / `꺆` 과 작은 `▲` 로 바뀝니다.
+끄려면 설정 → 모양에서 "Shift 를 누르고 있을 때도 표시" 를 끄세요.
+
 ### 추가
 - **Shift 누름 표시**. Shift 를 0.3초 이상 누르고 있는 동안 배지가 지금 입력될 글자로 바뀐다(`a` → `A`, `한` → `꺆`).
   Caps Lock 과 구별되도록 글자 아래에 밑줄 대신 작은 `▲`(Shift 키 ⇧ 모양)를 그린다. Caps Lock 이 켜진 채로 누르면
@@ -278,7 +285,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.2...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.2...v1.6.0
 [1.5.2]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.4.1...v1.5.0
