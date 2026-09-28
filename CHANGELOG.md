@@ -4,8 +4,10 @@
 
 ## [Unreleased]
 
-배지 모습을 다듬은 변경이 들어 있어 **클래식을 포함한 모든 테마에서 배지 모습이 조금 달라집니다**.
-색은 그대로이고, 벚꽃·캔디의 영문 기본색만 바뀝니다. 설정 파일 형식은 그대로입니다.
+## [1.7.0] - 2026-09-28
+
+Windows **고대비 모드**에서 배지와 트레이 아이콘이 시스템 색을 따르고, 배지 모습(테두리·광택·글자 정렬·영문 글꼴)을 다듬은 릴리스입니다.
+**클래식을 포함한 모든 테마에서 배지 모습이 조금 달라집니다**. 색은 그대로이고, 벚꽃·캔디의 영문 기본색만 바뀝니다. 설정 파일 형식은 그대로입니다.
 
 ### 추가
 - 개발용 `ImeBadge.exe --render-sheet <경로>`: 모든 테마·모양·캐릭터, 불투명도, 배율, 트레이 아이콘, 한/영 색의 흑백 구분을 한 장의 PNG 로 그린다.
@@ -320,7 +322,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.2...v1.6.0
 [1.5.2]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.0...v1.5.1
