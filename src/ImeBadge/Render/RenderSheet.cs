@@ -12,7 +12,8 @@ namespace ImeBadge;
 /// <summary>
 /// 개발용 배지 확인 그림 한 장(PNG). <c>ImeBadge.exe --render-sheet [경로]</c> 로 실행하면 창·트레이 없이 그림만 저장하고 끝낸다.
 /// 렌더러는 GDI+(Windows 전용)라 Linux 에서 도는 단위 테스트로는 모습을 확인할 수 없어, CI 의 Windows 러너가 이 그림을 만들어
-/// 롤링 사전 릴리스에 붙인다(build.yml). 모든 테마·모양·캐릭터, 불투명도, 배율, 트레이 아이콘, 한/영 색의 흑백 구분을 한눈에 본다.
+/// 롤링 사전 릴리스에 붙인다(build.yml). 모든 테마·모양·캐릭터, 불투명도, 배율, 트레이 아이콘, 한/영 색의 흑백 구분,
+/// 한/영 전환 애니메이션 프레임, 고대비 모드를 한눈에 본다.
 /// </summary>
 static class RenderSheet
 {
@@ -169,8 +170,37 @@ static class RenderSheet
                 new SheetPanel(Light, PulseCellSize(1f).Width * 3 + 4, upTimes.Select(t => Zoom(PulseCell(Han, BadgeTheme.Of(DesignThemes.Classic), 1f, PulseAt(t), scaled), 3)).ToList()),
             });
 
+        // 7. 고대비 모드
+        s.Section("7. 고대비 모드 (#46)",
+            "Windows 11 대비 테마 4종의 대표 색(근사값)으로 그렸다. 그 테마의 창 바탕 위, 불투명도 50% 로 지정해도 불투명해야 한다. 광택·그림자 없음.");
+        s.Headers(new[] { ("창 바탕 위", gallerySlots, slot), ("트레이 16px", traySlots, 40f), ("트레이 24px", traySlots, 40f) });
+        foreach (var (name, window, windowText, highlight, highlightText) in ContrastPalettes)
+        {
+            var theme = BadgeTheme.HighContrast(Hex(window), Hex(windowText), Hex(highlight), Hex(highlightText));
+            s.Row(name, new[]
+            {
+                Panel(Hex(window), slot, Gallery, theme, Main, 50),
+                new SheetPanel(Hex(window), 40, trayStates.Select(st => TrayIcons.RenderState(st, 16, theme)).ToList()),
+                new SheetPanel(Hex(window), 40, trayStates.Select(st => TrayIcons.RenderState(st, 24, theme)).ToList()),
+            }, $"창 {window} / 글자 {windowText} · 강조 {highlight} / {highlightText}");
+        }
+
         return s.Finish();
     }
+
+    /// <summary>
+    /// Windows 11 대비 테마 4종(수족관·사막·황혼·밤하늘)의 창 바탕·창 글자·강조·강조 글자색. 근사값이다.
+    /// CI 러너는 고대비를 켤 수 없어 이 값으로 <see cref="BadgeTheme.HighContrast"/> 를 만들어 모습을 본다.
+    /// </summary>
+    static readonly (string Name, string Window, string WindowText, string Highlight, string HighlightText)[] ContrastPalettes =
+    {
+        ("수족관", "#202020", "#FFFFFF", "#8EE3F0", "#263B50"),
+        ("사막", "#FFFAEF", "#3D3D3D", "#903909", "#FFF5E3"),
+        ("황혼", "#2D3236", "#FFFFFF", "#A1BFDE", "#212D3B"),
+        ("밤하늘", "#000000", "#FFFFFF", "#D6B4FD", "#2B2B2B"),
+    };
+
+    static Color Hex(string hex) => Color.FromArgb(ColorHex.TryParse(hex, out int argb) ? argb : unchecked((int)0xFF000000));
 
     static float PulseAt(int ms) => BadgeForm.PulseScale(Math.Clamp(ms / (float)BadgeForm.PulseMs, 0f, 1f));
 

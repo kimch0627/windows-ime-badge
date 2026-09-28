@@ -284,6 +284,8 @@ sealed class SettingsForm : Form
 
         AddRow(t, Strings.Get("look.hangulColor"), Swatches(out _hangulColor, out _hangulHex, v => _draft.HangulColor = v));
         AddRow(t, Strings.Get("look.englishColor"), Swatches(out _englishColor, out _englishHex, v => _draft.EnglishColor = v));
+        if (SystemInformation.HighContrast)   // 배지는 시스템 색(BadgeTheme.From). 견본은 그대로 저장되고 고대비를 끄면 쓰인다
+            AddRow(t, null, Hint(Strings.Get("look.highContrastNote")));
         _tips.SetToolTip(_hangulColor, Strings.Get("look.swatch.tip"));
         _tips.SetToolTip(_englishColor, Strings.Get("look.swatch.tip"));
 
