@@ -122,11 +122,16 @@ public static class BadgeCharacters
     }
 }
 
+/// <summary>배지 글자 아래의 표시. Caps Lock 은 짧은 밑줄, Shift 를 누르고 있으면 작은 ▲(Shift 키 ⇧ 모양).</summary>
+public enum BadgeMark { None, CapsBar, Shift }
+
 /// <summary>
 /// 배지에 쓸 글자. Caps Lock 표시가 켜져 있으면(기본) 글자로 대소문자를 구별한다:
 /// 한글은 평소 "한", Caps Lock 이 켜지면 쌍자음 "꺆"(평소와 다르다는 것이 한눈에 보이게), 영문은 소문자 "a" / 대문자 "A".
 /// Caps Lock 이 켜져 있으면 글자 아래에 짧은 밑줄도 긋는다(언어 공통). 트레이 아이콘은 이 규칙을 쓰지 않고 항상 "한"/"A" 다.
-/// 설정을 끄면 예전처럼 항상 "한"/"A", 밑줄 없음.
+/// Shift 를 누르고 있으면 지금 입력될 글자를 보여 준다(Caps Lock 과 반대: 꺼져 있으면 A/꺆, 켜져 있으면 a/한).
+/// 이때는 밑줄 대신 ▲ 를 그려 Caps Lock 과 구별한다.
+/// 설정을 끄면 예전처럼 항상 "한"/"A", 표시 없음(Shift 도 무시).
 /// </summary>
 public static class BadgeText
 {
@@ -135,10 +140,13 @@ public static class BadgeText
     /// <param name="korean">한글 입력 상태면 true, 영문이면 false.</param>
     /// <param name="capsLock">Caps Lock 이 켜져 있는가.</param>
     /// <param name="showCapsLock">설정 "Caps Lock 표시".</param>
-    public static (string Text, bool CapsBar) For(bool korean, bool capsLock, bool showCapsLock)
+    /// <param name="shift">Shift 를 계속 누르고 있는가(<see cref="ShiftHold"/>).</param>
+    public static (string Text, BadgeMark Mark) For(bool korean, bool capsLock, bool showCapsLock, bool shift = false)
     {
-        if (!showCapsLock) return (korean ? Hangul : EnglishUpper, false);
-        if (korean) return (capsLock ? HangulCaps : Hangul, capsLock);
-        return (capsLock ? EnglishUpper : EnglishLower, capsLock);
+        if (!showCapsLock) return (korean ? Hangul : EnglishUpper, BadgeMark.None);
+        bool upper = capsLock ^ shift;   // 실제 입력 기준: Caps Lock 중에 Shift 를 누르면 소문자
+        var mark = shift ? BadgeMark.Shift : capsLock ? BadgeMark.CapsBar : BadgeMark.None;
+        if (korean) return (upper ? HangulCaps : Hangul, mark);
+        return (upper ? EnglishUpper : EnglishLower, mark);
     }
 }
