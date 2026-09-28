@@ -139,7 +139,7 @@ static class BadgeRenderer
         return style switch
         {
             BadgeStyle.Dot => RenderDot(fill, scale, theme),
-            BadgeStyle.Underline => RenderUnderline(fill, scale),
+            BadgeStyle.Underline => RenderUnderline(fill, scale, theme),
             BadgeStyle.Box => RenderText(text, mark, fill, ink, scale, rounded: false, theme),
             _ => RenderText(text, mark, fill, ink, scale, rounded: true, theme),   // Pill, DotFlash(글자 단계)
         };
@@ -314,15 +314,64 @@ static class BadgeRenderer
         return bmp;
     }
 
-    static Bitmap RenderUnderline(Color color, float scale)
+    /// <summary>밑줄 시안(#48). 확인 그림에서 비교한 뒤 하나만 남긴다.</summary>
+    internal enum UnderlineLook { Flat, BottomEdge, Outline, ShadowOnly }
+
+    /// <summary>
+    /// 밑줄 막대. 막대 위쪽은 캔버스 맨 위에 붙이고 좌우 여백은 대칭으로 둬서, caret 아래 위치(<see cref="BadgeLayout"/>)가 예전과 같다.
+    /// 아래 여백은 그림자 자리. 고대비는 그림자 없이 창 글자색 선(바탕과 같은 색인 영문 밑줄도 보이게).
+    /// </summary>
+    internal static Bitmap RenderUnderline(Color color, float scale, in BadgeTheme theme, UnderlineLook look = UnderlineLook.Flat)
     {
         int w = (int)Math.Round(16 * scale), h = (int)Math.Round(3 * scale);
-        var bmp = NewCanvas(w, h, out var g);
+        if (look == UnderlineLook.Flat)
+        {
+            var flat = NewCanvas(w, h, out var fg);
+            using (fg)
+            {
+                using var brush = new SolidBrush(color);
+                using var path = RoundedRect(new RectangleF(0, 0, w, h), h / 2f);
+                fg.FillPath(brush, path);
+            }
+            return flat;
+        }
+
+        int pad = ShadowPad(scale);
+        var bmp = NewCanvas(w + 2 * pad, h + pad, out var g);
         using (g)
         {
-            using var brush = new SolidBrush(color);
-            using var path = RoundedRect(new RectangleF(0, 0, w, h), h / 2f);
-            g.FillPath(brush, path);
+            var rect = new RectangleF(pad, 0, w, h);
+            using var bar = RoundedRect(rect, h / 2f);
+            DrawShadow(g, bar, scale, color, theme);
+            float line = Math.Max(1f, MathF.Round(scale));
+            using var pen = OutlinePen(color, line, theme, line);
+            bool hc = theme.Contrast is not null;
+            if (look == UnderlineLook.BottomEdge && (h > line || hc))
+            {
+                // 아래쪽 line px 만 테두리색: 세로 그라데이션을 한 지점에서 뚝 끊어 채운다(클립은 계단이 져서).
+                var fill = color;
+                var edge = pen.Color;
+                var box = new RectangleF(rect.X, rect.Y - 1, rect.Width, rect.Height + 2);   // 가장자리 픽셀이 반대편 색으로 감기지 않게 넉넉히
+                float stop = (1 + h - line) / box.Height;
+                using var brush = new LinearGradientBrush(box, fill, edge, LinearGradientMode.Vertical) { WrapMode = WrapMode.TileFlipXY };
+                brush.InterpolationColors = new ColorBlend
+                {
+                    Colors = new[] { fill, fill, edge, edge },
+                    Positions = new[] { 0f, Math.Max(0f, stop - 0.001f), stop, 1f },
+                };
+                g.FillPath(brush, bar);
+            }
+            else
+            {
+                using var brush = new SolidBrush(color);
+                g.FillPath(brush, bar);
+                if (look == UnderlineLook.Outline || hc)
+                {
+                    var inner = RectangleF.Inflate(rect, -line / 2, -line / 2);   // 선이 막대 안쪽에만 오게
+                    using var frame = RoundedRect(inner, inner.Height / 2);
+                    g.DrawPath(pen, frame);
+                }
+            }
         }
         return bmp;
     }

@@ -187,6 +187,39 @@ static class RenderSheet
             }, $"창 {window} / 글자 {windowText} · 강조 {highlight} / {highlightText}");
         }
 
+        // 시안: 밑줄 모양 (#48). 고른 안만 남기고 이 구역은 지운다.
+        s.Section("시안. 밑줄 모양 (#48)",
+            "지금 = 단색 막대, A = 아래 1px 만 같은 색조로 진하게 + 그림자, B = 막대 안쪽 테두리 + 그림자, C = 그림자만. 칸마다 한글·영문 막대. 고대비는 그림자 없이 창 글자색 선이라 C 가 B 와 같다.");
+        var looks = new[] { ("지금", BadgeRenderer.UnderlineLook.Flat), ("A", BadgeRenderer.UnderlineLook.BottomEdge), ("B", BadgeRenderer.UnderlineLook.Outline), ("C", BadgeRenderer.UnderlineLook.ShadowOnly) };
+        var lookSlots = looks.SelectMany(l => new[] { $"{l.Item1} 한", $"{l.Item1} a" }).ToArray();
+        SheetPanel Bars(Color bg, float slotW, BadgeTheme theme, float scale, int opacity = 100, int zoom = 1) => new(bg, slotW, looks
+            .SelectMany(l => new[] { theme.Hangul, theme.English }.Select(c =>
+            {
+                var bar = BadgeRenderer.RenderUnderline(Color.FromArgb(Math.Clamp(255 * opacity / 100, 30, 255), c), scale, theme, l.Item2);
+                return zoom > 1 ? Zoom(bar, zoom) : bar;
+            })).ToList());
+        foreach (var (k, slotW) in new[] { (1.5f, 36f), (1f, 34f), (2f, 44f) })
+        {
+            s.Headers(new[] { ($"{k * 100:0}% 밝은 배경", lookSlots, slotW), ($"{k * 100:0}% 어두운 배경", lookSlots, slotW), ($"{k * 100:0}% 한글 배지와 같은 색 배경", lookSlots, slotW) });
+            foreach (var design in k == 1.5f ? themes : new[] { DesignThemes.Classic, DesignThemes.Get("blossom") })
+            {
+                var theme = BadgeTheme.Of(design);
+                s.Row(ThemeNames[design.Id], new[] { Bars(Light, slotW, theme, k), Bars(Dark, slotW, theme, k), Bars(theme.Hangul, slotW, theme, k) });
+            }
+        }
+        s.Headers(new[] { ("100% ×3 확대, 밝은 배경", lookSlots, 70f), ("150% 불투명도 60%, 밝은 배경", lookSlots, 36f) });
+        foreach (var design in themes)
+        {
+            var theme = BadgeTheme.Of(design);
+            s.Row(ThemeNames[design.Id], new[] { Bars(Light, 70, theme, 1f, zoom: 3), Bars(Light, 36, theme, 1.5f, opacity: 60) });
+        }
+        s.Headers(new[] { ("고대비 150%, 창 바탕 위", lookSlots, 36f), ("고대비 100% ×3 확대", lookSlots, 70f) });
+        foreach (var (name, window, windowText, highlight, highlightText) in ContrastPalettes)
+        {
+            var theme = BadgeTheme.HighContrast(Hex(window), Hex(windowText), Hex(highlight), Hex(highlightText));
+            s.Row(name, new[] { Bars(Hex(window), 36, theme, 1.5f), Bars(Hex(window), 70, theme, 1f, zoom: 3) });
+        }
+
         return s.Finish();
     }
 
