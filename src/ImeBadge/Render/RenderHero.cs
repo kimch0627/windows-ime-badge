@@ -56,7 +56,9 @@ static class RenderHero
         using var g = Graphics.FromImage(bmp);
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-        g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;   // ClearType 는 PNG 에서 색 번짐이 남는다
+        // 설명 글자는 격자 맞춤 없이: 큰 글자에서 격자 맞춤은 한글 자간을 벌린다. ClearType 은 PNG 에서 색 번짐이 남는다.
+        // 배지는 제 비트맵에 앱과 같은 설정으로 그려져 이 값과 상관없다.
+        g.TextRenderingHint = TextRenderingHint.AntiAlias;
         g.Clear(Page);
 
         // 제목
