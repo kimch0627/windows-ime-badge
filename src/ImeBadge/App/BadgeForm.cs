@@ -51,6 +51,10 @@ sealed class BadgeForm : Form
     bool _lastCaps;
     readonly ShiftHold _shiftHold = new();   // Shift 를 누른 지 얼마나 됐나. 매 폴링마다 갱신해야 하므로 여기서 잰다
     DateTime _flashUntil = DateTime.MinValue;
+    // 표시 방식(BadgeVisibility)용 시각(Environment.TickCount64). 타이핑 = caret 이 같은 창 안에서 움직임,
+    // 바뀜 = 한/영·Caps Lock 변경, 배지가 새로 나타남, 활성 창이 바뀜.
+    long _lastTypingMs = long.MinValue, _lastChangeMs = long.MinValue;
+    Rectangle? _lastCaret;
     (ImeState state, bool caps, bool shift, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character) _renderKey;
     Size _bitmapSize;
     (ImeState state, bool caps, bool shift, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character) _pulseBaseKey;
@@ -912,6 +916,11 @@ sealed class BadgeForm : Form
         }
         UpdateTray(s.State, s.CapsLock);
 
+        long now = Environment.TickCount64;
+        if (appearing || changed || s.Foreground != _lastFg) _lastChangeMs = now;
+        else if (s.Caret is { } cr && _lastCaret is { } prev && cr != prev) _lastTypingMs = now;
+        _lastCaret = s.Caret;
+
         // 나타날 때는 페이드인, 보이는 중에 한/영이 바뀌면 펄스. 둘 다 "지금 바뀌었다"를 눈에 띄게 한다.
         if (AnimationsOn)
         {
@@ -920,7 +929,10 @@ sealed class BadgeForm : Form
         }
         float progress = AnimProgress();
         float pulse = _anim == Anim.Pulse ? PulseScale(progress) : 1f;
-        byte alpha = _anim == Anim.FadeIn ? (byte)Math.Round(255 * EaseOut(progress)) : (byte)255;
+        // 표시 방식: 타이핑 중 옅게 / 바뀔 때만 잠깐. 페이드인 알파에 곱한다(창은 그대로 두고 짙기만 바꾼다).
+        float visibility = BadgeVisibility.Factor(_settings.Visibility, now, _lastTypingMs, _lastChangeMs);
+        float fade = _anim == Anim.FadeIn ? EaseOut(progress) : 1f;
+        byte alpha = (byte)Math.Round(255 * fade * visibility);
 
         // DotFlash: 변경 직후 1.5초는 둥근 배지, 그 뒤는 점
         var style = _settings.Style;
@@ -1026,7 +1038,7 @@ sealed class BadgeForm : Form
         else { _raiseFailFg = fg; _raiseFailCount = 1; }
     }
 
-    /// <summary>비트맵을 픽셀별 알파로 창에 올리면서 위치·크기도 함께 지정한다. <paramref name="alpha"/> 는 페이드인용 창 전체 알파.</summary>
+    /// <summary>비트맵을 픽셀별 알파로 창에 올리면서 위치·크기도 함께 지정한다. <paramref name="alpha"/> 는 창 전체 알파(페이드인 × 표시 방식).</summary>
     void Present(Bitmap bmp, Point pos, byte alpha)
     {
         if (Size != bmp.Size) Size = bmp.Size;   // WinForms가 아는 크기와 실제 창 크기를 일치시킨다
@@ -1040,7 +1052,7 @@ sealed class BadgeForm : Form
             var size = new Native.SIZE(bmp.Width, bmp.Height);
             var src = new Native.POINT(0, 0);
             var dst = new Native.POINT(pos.X, pos.Y);
-            // 불투명도는 렌더러가 배경 픽셀의 알파로 이미 반영했다(글자는 또렷하게 유지). 창 전체 알파는 페이드인에만 쓴다.
+            // 불투명도는 렌더러가 배경 픽셀의 알파로 이미 반영했다(글자는 또렷하게 유지). 창 전체 알파는 페이드인과 표시 방식(타이핑 중 옅게·바뀔 때만)에만 쓴다.
             var blend = new Native.BLENDFUNCTION
             {
                 BlendOp = Native.AC_SRC_OVER,

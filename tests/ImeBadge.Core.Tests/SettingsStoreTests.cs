@@ -210,6 +210,70 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(2, a.ExcludedProcesses.Count);
         Assert.Equal(2, a.CornerBadgeProcesses.Count);
         Assert.Equal(50, a.SizePercent);
+
+        b.Visibility = BadgeVisibility.OnChange;
+        a.CopyFrom(b);
+        Assert.Equal(BadgeVisibility.OnChange, a.Visibility);
+    }
+
+    [Fact]
+    public void Load_OldFileWithoutVisibility_IsAlways_AndUnknownFallsBack()
+    {
+        File.WriteAllText(P("old.json"), """{ "Style": "Dot" }""");
+        Assert.Equal(BadgeVisibility.Always, new SettingsStore(P("old.json")).Load().Visibility);
+
+        File.WriteAllText(P("new.json"), """{ "Style": "Dot", "Visibility": "sometimes", "SizePercent": 130 }""");
+        var s = new SettingsStore(P("new.json")).Load();
+        Assert.Equal(BadgeVisibility.Always, s.Visibility);
+        Assert.Equal(130, s.SizePercent);   // 모르는 값 하나 때문에 다른 설정을 잃지 않는다
+    }
+
+    [Fact]
+    public void Export_ThenImport_RoundTrips_WithoutMachineOnlyValues()
+    {
+        var s = new Settings
+        {
+            Theme = "candy",
+            Visibility = BadgeVisibility.DimWhileTyping,
+            SizePercent = 150,
+            ExcludedProcesses = new List<string> { "mstsc" },
+            LastUpdateCheckUtc = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+            SkippedUpdateTag = "v9.9.9",
+        };
+        SettingsStore.Export(s, P("export.json"));
+        var back = SettingsStore.Import(P("export.json"));
+        Assert.Equal("candy", back.Theme);
+        Assert.Equal(BadgeVisibility.DimWhileTyping, back.Visibility);
+        Assert.Equal(150, back.SizePercent);
+        Assert.Equal(new[] { "mstsc" }, back.ExcludedProcesses);
+        Assert.Null(back.LastUpdateCheckUtc);   // 이 PC 의 업데이트 기록은 옮기지 않는다
+        Assert.Null(back.SkippedUpdateTag);
+        Assert.Equal("v9.9.9", s.SkippedUpdateTag);   // 원본은 그대로
+    }
+
+    [Fact]
+    public void Import_NormalizesOutOfRange()
+    {
+        File.WriteAllText(P("wild.json"), """{ "SizePercent": 9999, "Theme": "nope" }""");
+        var s = SettingsStore.Import(P("wild.json"));
+        Assert.Equal(300, s.SizePercent);
+        Assert.Equal(DesignThemes.ClassicId, s.Theme);
+    }
+
+    [Theory]
+    [InlineData("not json at all")]
+    [InlineData("null")]
+    [InlineData("[1, 2, 3]")]
+    public void Import_RejectsNonSettingsFiles(string content)
+    {
+        File.WriteAllText(P("bad.json"), content);
+        Assert.Throws<InvalidDataException>(() => SettingsStore.Import(P("bad.json")));
+    }
+
+    [Fact]
+    public void Import_MissingFile_Throws()
+    {
+        Assert.Throws<FileNotFoundException>(() => SettingsStore.Import(P("nope.json")));
     }
 }
 

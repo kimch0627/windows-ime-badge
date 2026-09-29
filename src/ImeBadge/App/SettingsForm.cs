@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 
@@ -26,6 +27,7 @@ sealed class SettingsForm : Form
     AccentSlider _size = null!, _opacity = null!;
     NumericUpDown _poll = null!;
     ComboBox _language = null!;
+    ComboBox _visibility = null!;
     ColorSwatches _hangulColor = null!, _englishColor = null!;
     Label _hangulHex = null!, _englishHex = null!;
     ToggleSwitch _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!, _shiftHold = null!,
@@ -209,7 +211,14 @@ sealed class SettingsForm : Form
             _draft.CopyFrom(new Settings { Theme = design.Id, HangulColor = design.HangulColor, EnglishColor = design.EnglishColor });
             LoadDraftIntoControls();
         };
-        buttons.Controls.Add(cancel); buttons.Controls.Add(ok); buttons.Controls.Add(reset);
+        // 내보내기·가져오기: 다른 PC 로 설정을 옮긴다. 가져온 값은 초안에만 채우므로 [확인] 해야 저장되고 [취소] 하면 되돌아간다.
+        var import = new AccentButton { Text = Strings.Get("settings.import"), AutoSize = true, Margin = new Padding(8, 0, 0, 0) };
+        var export = new AccentButton { Text = Strings.Get("settings.export"), AutoSize = true, Margin = new Padding(8, 0, 0, 0) };
+        import.Click += (_, _) => ImportSettings();
+        export.Click += (_, _) => ExportSettings();
+        _tips.SetToolTip(import, Strings.Get("settings.import.tip"));
+        _tips.SetToolTip(export, Strings.Get("settings.export.tip"));
+        buttons.Controls.Add(cancel); buttons.Controls.Add(ok); buttons.Controls.Add(reset); buttons.Controls.Add(import); buttons.Controls.Add(export);
 
         AcceptButton = ok; CancelButton = cancel;
         _scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
@@ -217,6 +226,54 @@ sealed class SettingsForm : Form
         // Dock 은 뒤(나중에 추가한 것)부터 자리를 잡는다: 버튼 줄이 먼저 아래를 차지하고, 스크롤 영역이 남은 곳을 채운다.
         Controls.Add(_scroll);
         Controls.Add(buttons);
+    }
+
+    void ExportSettings()
+    {
+        using var dlg = new SaveFileDialog
+        {
+            Filter = Strings.Get("settings.fileFilter"), DefaultExt = "json", AddExtension = true,
+            FileName = "ImeBadge-settings.json", OverwritePrompt = true,
+        };
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+        try
+        {
+            SettingsStore.Export(_draft, dlg.FileName);
+            Log.Write($"settings exported: {dlg.FileName}");
+            Dialogs.Info(Strings.Get("settings.exported"), dlg.FileName);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("settings export failed", ex);
+            Dialogs.Warning(Strings.Get("settings.exportFailed"), ex.Message);
+        }
+    }
+
+    void ImportSettings()
+    {
+        using var dlg = new OpenFileDialog { Filter = Strings.Get("settings.fileFilter"), CheckFileExists = true };
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+        Settings imported;
+        try { imported = SettingsStore.Import(dlg.FileName); }
+        catch (InvalidDataException ex)
+        {
+            Log.Error("settings import: not a settings file", ex);
+            Dialogs.Warning(Strings.Get("settings.importFailed"), Strings.Get("settings.importInvalid"));
+            return;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("settings import failed", ex);
+            Dialogs.Warning(Strings.Get("settings.importFailed"), ex.Message);
+            return;
+        }
+        // 이 PC 의 업데이트 기록은 그대로 둔다(내보낼 때도 빼지만, 손으로 만든 파일일 수도 있다).
+        imported.LastUpdateCheckUtc = _draft.LastUpdateCheckUtc;
+        imported.SkippedUpdateTag = _draft.SkippedUpdateTag;
+        _draft.CopyFrom(imported);
+        LoadDraftIntoControls();
+        Log.Write($"settings imported: {dlg.FileName}");
+        Dialogs.Info(Strings.Get("settings.imported"), Strings.Get("settings.imported.text"));
     }
 
     Control BuildHeader()
@@ -293,6 +350,12 @@ sealed class SettingsForm : Form
         _animate = Toggle(Strings.Get("look.animate"), v => { _draft.Animate = v; Touch(); });
         AddRow(t, null, _animate);
         _tips.SetToolTip(_animate, Strings.Get("look.animate.tip"));
+
+        _visibility = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
+        _visibility.Items.AddRange(Labels.Visibilities.Select(v => (object)v.label).ToArray());
+        _visibility.SelectedIndexChanged += (_, _) => { _draft.Visibility = Labels.Visibilities[Math.Max(0, _visibility.SelectedIndex)].value; Touch(); };
+        AddRow(t, Strings.Get("look.visibility"), _visibility);
+        _tips.SetToolTip(_visibility, Strings.Get("look.visibility.tip"));
 
         _capsLock = Toggle(Strings.Get("look.capsLock"), v => { _draft.ShowCapsLock = v; _shiftHold.Enabled = v; Touch(); });
         AddRow(t, null, _capsLock);
@@ -568,6 +631,7 @@ sealed class SettingsForm : Form
         _hangulColor.Hex = _draft.HangulColor; _hangulHex.Text = _hangulColor.Hex;
         _englishColor.Hex = _draft.EnglishColor; _englishHex.Text = _englishColor.Hex;
         _animate.Checked = _draft.Animate;
+        _visibility.SelectedIndex = Math.Max(0, Array.FindIndex(Labels.Visibilities, v => v.value == _draft.Visibility));
         _capsLock.Checked = _draft.ShowCapsLock;
         _shiftHold.Checked = _draft.ShowShiftHold;
         _shiftHold.Enabled = _draft.ShowCapsLock;
