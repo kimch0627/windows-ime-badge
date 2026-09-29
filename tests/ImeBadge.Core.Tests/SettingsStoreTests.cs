@@ -233,9 +233,12 @@ public sealed class SettingsStoreTests : IDisposable
     {
         var s = new Settings
         {
-            Theme = "candy", Visibility = BadgeVisibility.DimWhileTyping, SizePercent = 150,
+            Theme = "candy",
+            Visibility = BadgeVisibility.DimWhileTyping,
+            SizePercent = 150,
             ExcludedProcesses = new List<string> { "mstsc" },
-            LastUpdateCheckUtc = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), SkippedUpdateTag = "v9.9.9",
+            LastUpdateCheckUtc = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+            SkippedUpdateTag = "v9.9.9",
         };
         SettingsStore.Export(s, P("export.json"));
         var back = SettingsStore.Import(P("export.json"));
