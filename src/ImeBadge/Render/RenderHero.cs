@@ -63,7 +63,7 @@ static class RenderHero
 
     static Bitmap Draw()
     {
-        const float Height = 400;
+        const float Height = 486;
         var bmp = new Bitmap((int)(Width * K), (int)(Height * K), PixelFormat.Format32bppArgb);
         using var g = Graphics.FromImage(bmp);
         g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -87,17 +87,17 @@ static class RenderHero
         Text(g, "한/영 입력 상태 배지", subtitle, Subtle, Margin + titleW + 14, y + 17);
         Text(g, "글자를 치기 전에, 커서 옆 작은 배지로 지금 한글인지 영문인지 알려 줘요. 테마와 캐릭터로 내 취향대로.", tagline, Subtle, Margin, y + 60);
 
-        // 테마 카드 다섯 장: 한글 줄과 영문 줄, 배지는 caret 위-오른쪽(기본 위치)
-        float cardY = 128, cardH = 128, cardW = (Width - 2 * Margin - 4 * CardGap) / 5;
+        // 테마 카드 다섯 장: 한글 줄과 영문 줄, 배지는 caret 위-오른쪽(기본 위치). 줄 간격은 영문 배지가 윗줄 글을 가리지 않을 만큼.
+        float cardY = 128, cardH = 172, cardW = (Width - 2 * Margin - 4 * CardGap) / 5;
         for (int t = 0; t < Themes.Length; t++)
         {
             var design = DesignThemes.Get(Themes[t].Id);
             var theme = BadgeTheme.Of(design);
             float x = Margin + t * (cardW + CardGap);
             Card(g, new RectangleF(x, cardY, cardW, cardH), Color.FromArgb(design.Light.Window), Color.FromArgb(design.Light.Border));
-            Line(g, "안녕하세요", body, x + 16, cardY + 34, ImeState.Hangul, theme, false, area);
-            Line(g, "hello", body, x + 16, cardY + 76, ImeState.English, theme, false, area);
-            Text(g, Themes[t].Name, label, Color.FromArgb(design.Light.Text), x + 16, cardY + cardH - 26);
+            Line(g, "안녕하세요", body, x + 16, cardY + 46, ImeState.Hangul, theme, false, area);
+            Line(g, "hello", body, x + 16, cardY + 110, ImeState.English, theme, false, area);
+            Text(g, Themes[t].Name, label, Color.FromArgb(design.Light.Text), x + 16, cardY + cardH - 28);
         }
 
         // 캐릭터 · Caps Lock 줄
