@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-09-29
+
+배지가 옆 글자를 가리는 게 신경 쓰일 때 고르는 **배지 표시 방식**(타이핑 중 옅게·한/영이 바뀔 때만)과 **설정 내보내기·가져오기**를 더한 릴리스입니다.
+기본값은 예전과 같아 업데이트만으로 달라지는 것은 없습니다. 설정 파일은 새 항목 하나(`"Visibility"`)가 늘 뿐 예전 버전과 호환됩니다.
+
 ### 추가
 - **배지 표시 방식**(설정 창 → 모양): 배지가 옆 글자를 가리는 게 신경 쓰일 때 고른다. 기본은 예전처럼 **늘 보이기**.
   - **타이핑 중에는 옅게**: 글자를 치는 동안(같은 창에서 커서가 움직이는 동안) 배지를 25% 짙기로 옅게 했다가, 0.8초 멈추면 다시 또렷하게.
@@ -354,7 +359,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.7.1...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.5.2...v1.6.0
