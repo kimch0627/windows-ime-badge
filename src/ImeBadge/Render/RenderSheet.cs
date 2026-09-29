@@ -20,21 +20,28 @@ static class RenderSheet
     public const string Switch = "--render-sheet";
 
     /// <summary><see cref="Switch"/> 가 있으면 그림을 저장하고 true. 실패하면 로그를 남기고 종료 코드 1.</summary>
-    public static bool TryRun(string[] args)
+    public static bool TryRun(string[] args) => Run(args, Switch, "badge-sheet.png", Draw);
+
+    /// <summary>
+    /// 개발용 그림 스위치 공통: <paramref name="sw"/> 가 있으면 그 다음 인자(없으면 <paramref name="defaultName"/>)에
+    /// <paramref name="draw"/> 가 그린 PNG 를 저장하고 true. 실패하면 로그를 남기고 종료 코드 1. <see cref="RenderHero"/> 도 쓴다.
+    /// </summary>
+    internal static bool Run(string[] args, string sw, string defaultName, Func<Bitmap> draw)
     {
-        int i = Array.FindIndex(args, a => string.Equals(a, Switch, StringComparison.OrdinalIgnoreCase));
+        int i = Array.FindIndex(args, a => string.Equals(a, sw, StringComparison.OrdinalIgnoreCase));
         if (i < 0) return false;
-        string path = i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal) ? args[i + 1] : "badge-sheet.png";
+        string path = i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal) ? args[i + 1] : defaultName;
+        string name = sw.TrimStart('-');
         try
         {
             path = Path.GetFullPath(path);
-            using var sheet = Draw();
-            sheet.Save(path, ImageFormat.Png);
-            Log.Write($"render-sheet: {path} ({sheet.Width}x{sheet.Height})");
+            using var picture = draw();
+            picture.Save(path, ImageFormat.Png);
+            Log.Write($"{name}: {path} ({picture.Width}x{picture.Height})");
         }
         catch (Exception ex)
         {
-            Log.Error("render-sheet failed", ex);
+            Log.Error($"{name} failed", ex);
             Environment.ExitCode = 1;
         }
         return true;
