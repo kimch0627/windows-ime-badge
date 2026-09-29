@@ -40,6 +40,8 @@ public sealed class Settings
     public string Theme { get; set; } = DesignThemes.ClassicId;
     /// <summary>캐릭터 배지 모양(<see cref="BadgeCharacters"/>). 빈 문자열이면 <see cref="Style"/> 를 따른다. 고르면 Style 은 Pill 로 둔다(구버전 호환).</summary>
     public string Character { get; set; } = BadgeCharacters.None;
+    /// <summary>표시 방식(<see cref="BadgeVisibility"/>): 늘 / 타이핑 중 옅게 / 바뀔 때만. 문자열이라 구버전이 읽어도 무시될 뿐이다.</summary>
+    public string Visibility { get; set; } = BadgeVisibility.Always;
 
     // ── 동작 ──
     /// <summary>활성 창이 모니터 전체를 덮는(게임·전체 화면 동영상) 경우 배지를 숨긴다.</summary>
@@ -93,6 +95,7 @@ public sealed class Settings
         if (!ColorHex.TryParse(EnglishColor, out _)) EnglishColor = DefaultEnglishColor;
         Theme = DesignThemes.Get(Theme).Id;
         Character = BadgeCharacters.Normalize(Character);
+        Visibility = BadgeVisibility.Normalize(Visibility);
         Hotkey = HotkeySpec.TryParse(Hotkey, out var hk) ? hk.ToString() : HotkeySpec.Default.ToString();
         ExcludedProcesses ??= new();
         ExcludedProcesses.RemoveAll(string.IsNullOrWhiteSpace);
@@ -114,7 +117,7 @@ public sealed class Settings
         SizePercent = other.SizePercent; OpacityPercent = other.OpacityPercent;
         HangulColor = other.HangulColor; EnglishColor = other.EnglishColor; Animate = other.Animate; ShowCapsLock = other.ShowCapsLock;
         ShowShiftHold = other.ShowShiftHold;
-        Theme = other.Theme; Character = other.Character;
+        Theme = other.Theme; Character = other.Character; Visibility = other.Visibility;
         HideOnFullscreen = other.HideOnFullscreen;
         ExcludedProcesses = new List<string>(other.ExcludedProcesses);
         CornerBadgeProcesses = new List<string>(other.CornerBadgeProcesses);
@@ -182,6 +185,32 @@ public sealed class SettingsStore
             Log.Error("settings save failed", ex);
             return false;
         }
+    }
+
+    /// <summary>
+    /// 설정을 다른 파일로 내보낸다(다른 PC 로 옮기기용). 이 PC 에만 의미 있는 값(마지막 업데이트 확인 시각, 건너뛴 버전)은 뺀다.
+    /// 실패하면 예외를 그대로 던진다: 사용자가 고른 경로라 이유(권한·경로 없음)를 보여 줘야 한다.
+    /// </summary>
+    public static void Export(Settings settings, string path)
+    {
+        var copy = settings.Clone();
+        copy.LastUpdateCheckUtc = null;
+        copy.SkippedUpdateTag = null;
+        File.WriteAllText(path, JsonSerializer.Serialize(copy, SettingsJsonContext.Default.Settings));
+    }
+
+    /// <summary>
+    /// 내보낸 파일을 읽는다. 빠진 항목은 기본값, 범위를 벗어난 값은 <see cref="Settings.Normalize"/> 가 고친다.
+    /// JSON 이 아니거나 설정 파일이 아니면(객체가 아님) <see cref="InvalidDataException"/>. 파일 오류는 그대로 던진다.
+    /// </summary>
+    public static Settings Import(string path)
+    {
+        Settings? s;
+        try { s = JsonSerializer.Deserialize(File.ReadAllText(path), SettingsJsonContext.Default.Settings); }
+        catch (JsonException ex) { throw new InvalidDataException(ex.Message, ex); }
+        if (s is null) throw new InvalidDataException("empty settings file");
+        s.Normalize();
+        return s;
     }
 
     static Settings? TryRead(string path)

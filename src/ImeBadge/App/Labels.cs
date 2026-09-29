@@ -47,6 +47,14 @@ static class Labels
         (Strings.Get("opacity.100"), 100), (Strings.Get("opacity.85"), 85), (Strings.Get("opacity.70"), 70), (Strings.Get("opacity.50"), 50),
     };
 
+    /// <summary>설정 창의 표시 방식 선택지(<see cref="BadgeVisibility"/>).</summary>
+    public static (string label, string value)[] Visibilities => new[]
+    {
+        (Strings.Get("visibility.always"), BadgeVisibility.Always),
+        (Strings.Get("visibility.dimWhileTyping"), BadgeVisibility.DimWhileTyping),
+        (Strings.Get("visibility.onChange"), BadgeVisibility.OnChange),
+    };
+
     /// <summary>설정 창의 언어 선택지.</summary>
     public static (string label, UiLanguage value)[] Languages => new[]
     {
