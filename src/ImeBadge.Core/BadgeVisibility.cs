@@ -48,25 +48,21 @@ public static class BadgeVisibility
     /// <param name="lastChangeMs">마지막으로 한/영·Caps Lock 이 바뀌었거나 배지가 새로 나타난 시각.</param>
     public static float Factor(string mode, long nowMs, long lastTypingMs, long lastChangeMs)
     {
-        switch (mode)
+        if (mode == DimWhileTyping)
         {
-            case DimWhileTyping:
-            {
-                // 바뀐 직후에는 타이핑 중이어도 또렷하게: 한/영을 바꾸고 바로 치기 시작해도 바뀐 것은 보여야 한다.
-                if (Since(nowMs, lastChangeMs) < ShowMs) return 1f;
-                long quiet = Since(nowMs, lastTypingMs);
-                if (quiet < TypingQuietMs) return TypingFactor;
-                return Lerp(TypingFactor, 1f, (quiet - TypingQuietMs) / (float)RampMs);
-            }
-            case OnChange:
-            {
-                long since = Since(nowMs, lastChangeMs);
-                if (since < ShowMs) return 1f;
-                return Lerp(1f, 0f, (since - ShowMs) / (float)FadeOutMs);
-            }
-            default:
-                return 1f;
+            // 바뀐 직후에는 타이핑 중이어도 또렷하게: 한/영을 바꾸고 바로 치기 시작해도 바뀐 것은 보여야 한다.
+            if (Since(nowMs, lastChangeMs) < ShowMs) return 1f;
+            long quiet = Since(nowMs, lastTypingMs);
+            if (quiet < TypingQuietMs) return TypingFactor;
+            return Lerp(TypingFactor, 1f, (quiet - TypingQuietMs) / (float)RampMs);
         }
+        if (mode == OnChange)
+        {
+            long since = Since(nowMs, lastChangeMs);
+            if (since < ShowMs) return 1f;
+            return Lerp(1f, 0f, (since - ShowMs) / (float)FadeOutMs);
+        }
+        return 1f;
     }
 
     static long Since(long now, long then) => then == long.MinValue ? long.MaxValue : Math.Max(0, now - then);
