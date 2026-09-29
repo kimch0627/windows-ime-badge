@@ -31,6 +31,11 @@ static class Program
             Log.Write("=== exit (render-sheet) ===");
             return;
         }
+        if (RenderHero.TryRun(args))
+        {
+            Log.Write("=== exit (render-hero) ===");
+            return;
+        }
 
         // 이미 떠 있으면 그쪽에 설정 창을 열라고 알리고 끝낸다.
         using var single = new SingleInstance();

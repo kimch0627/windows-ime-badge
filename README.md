@@ -5,7 +5,7 @@ Windows 10/11에서 **글자를 입력하기 전에** 지금 키보드가 한글
 
 ![ImeBadge 테마와 캐릭터 배지 예시](docs/images/hero.png)
 
-<sub>예시 그림입니다. 실제 화면은 Windows 글꼴·배율에 따라 조금 다를 수 있습니다.</sub>
+<sub>앱의 배지 렌더러로 그린 그림입니다(배율 125%). 글자 모양은 Windows 글꼴·배율에 따라 조금 다를 수 있습니다.</sub>
 
 ```
   안녕하세요|한        ← 한글 모드 (파란 배지)
@@ -120,10 +120,13 @@ dotnet test                                  # Core 단위 테스트 (Windows �
 dotnet run --project src/ImeBadge            # 실행
 dotnet run --project src/ImeBadge -- --debug # 디버그 로그 켜고 실행
 dotnet run --project src/ImeBadge -- --render-sheet sheet.png   # 모든 테마·모양의 배지를 한 장의 PNG 로(창 없이)
+dotnet run --project src/ImeBadge -- --render-hero hero.png     # README 소개 그림(docs/images/hero.png)
 ```
 
 배지 렌더러는 GDI+(Windows 전용)라 Linux 에서 도는 단위 테스트로는 모습을 확인할 수 없습니다. 그래서 CI 가 Windows 러너에서
 `--render-sheet` 로 그림을 그려 브랜치의 롤링 사전 릴리스(`dev-<브랜치>`, main 은 `latest`)에 `badge-sheet.png` 로 붙입니다.
+README 소개 그림도 같은 방식으로 `--render-hero` 가 그려 `hero.png` 로 붙습니다. 배지 모습을 바꾸면 그 파일을 받아
+`docs/images/hero.png` 를 바꿔 주세요(글꼴이 있는 Windows 에서 그린 그림이어야 합니다).
 
 배포용 exe·설치 프로그램 만들기, 코드 서명, winget/Store 등록은 [docs/release.md](docs/release.md) 를 보세요.
 릴리스 전 수동 확인 목록은 [docs/test-matrix.md](docs/test-matrix.md) 입니다.
@@ -305,7 +308,7 @@ caret 좌표와 배지 위치가 어긋납니다.
 
 | 단계 | 하는 일 |
 |---|---|
-| 시작 | `--debug` 확인 → 로그 폴더 준비 → (`--apply-update`·`--render-sheet` 면 그 일만 하고 종료) → **뮤텍스**로 중복 실행 확인(두 번째면 기존 인스턴스에 `ImeBadge.ShowSettings` 창 메시지를 broadcast 하고 종료) → 예외 처리기 설치 → 설정 로드(예전 위치 이관) → 자동 시작 경로 갱신 |
+| 시작 | `--debug` 확인 → 로그 폴더 준비 → (`--apply-update`·`--render-sheet`·`--render-hero` 면 그 일만 하고 종료) → **뮤텍스**로 중복 실행 확인(두 번째면 기존 인스턴스에 `ImeBadge.ShowSettings` 창 메시지를 broadcast 하고 종료) → 예외 처리기 설치 → 설정 로드(예전 위치 이관) → 자동 시작 경로 갱신 |
 | 3초 후 | 첫 실행이면 풍선 알림. 마지막 확인이 24시간 전이면 업데이트 확인(개발 빌드 0.0.0 은 건너뜀) |
 | 업그레이드 | 업데이트 창에서 "지금 업그레이드" → 파일 내려받기 → SHA-256 검증 → 적용 → 프로그램 종료(설치 프로그램/새 exe 가 다시 띄움) |
 | 예외 | UI 스레드 예외는 `errors.log` 에 남기고 계속. 20회 넘으면 안내 후 종료. Poll 안의 예외는 처음 5회만 자세히 기록 |
