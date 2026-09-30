@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-09-30
+
+크롬·엣지 주소창에서 배지가 커서를 따라가지 않고 입력칸 맨 앞에 붙어 있던 문제를 고친 릴리스입니다. 설정 변경은 없습니다.
+
 ### 수정
 - 크롬·엣지 주소창에서 배지가 커서를 따라가지 않고 입력칸 맨 앞(왼쪽 아래)에 붙어 있던 문제.
   UI Automation 이 입력칸 사각형만 주고 커서 위치는 주지 않으면 그 모서리를 근사 위치로 썼기 때문이다.
@@ -369,7 +373,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.8.1...HEAD
+[1.8.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.6.0...v1.7.0
