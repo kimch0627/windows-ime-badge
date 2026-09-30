@@ -108,8 +108,11 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{#MyAppName} 지금 실행"; Flags: nowait postinstall skipifsilent
 ; 자동 업그레이드(조용한 설치 + /RESTARTAPP)의 마지막 단계: 새 버전을 다시 띄운다.
-; runasoriginaluser 는 설치가 권한 상승된 경우에도 프로그램이 로그인한 사용자 계정으로 돌게 한다(트레이 아이콘·HKCU 설정 때문).
-Filename: "{app}\{#MyAppExeName}"; Flags: nowait runasoriginaluser; Check: RestartAfterSilentInstall
+; explorer 에 부탁해 로그인 사용자의 보통 권한으로 띄운다(explorer 는 이미 떠 있는 셸에 실행을 넘긴다). 모든 사용자용 설치에서는
+; 프로그램이 이 설치 프로그램을 처음부터 관리자 권한(runas)으로 띄우므로(UAC 를 거부하면 예전 버전이 계속 돌게 하려고),
+; runasoriginaluser 만으로는 돌아갈 "권한 상승 전 사용자"가 없어 새 버전이 관리자 권한으로 떴다(1.9.0 까지).
+; 관리자 권한으로 돌면 트레이·설정·다시 실행 알림이 보통 권한 프로그램과 어긋난다. runasoriginaluser 는 그런 사용자가 있을 때를 위해 둔다.
+Filename: "{win}\explorer.exe"; Parameters: """{app}\{#MyAppExeName}"""; Flags: nowait runasoriginaluser; Check: RestartAfterSilentInstall
 
 [Code]
 // 명령줄에 이 옵션이 있는가. Inno Setup 은 자기가 아는 옵션만 다루므로 우리 옵션(/RESTARTAPP)은 직접 찾는다.
