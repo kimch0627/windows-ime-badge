@@ -84,7 +84,10 @@ if ($archs.Values | Where-Object { -not $_.Sha256 }) {
             [System.Text.Encoding]::UTF8.GetString((Invoke-WebRequest -Uri $asset.url -Headers $h -UseBasicParsing).Content)
         }
         else {
-            [string](Invoke-WebRequest -Uri "https://github.com/$Repo/releases/download/v$Version/SHA256SUMS.txt" -UseBasicParsing).Content
+            # 공개 다운로드 주소도 application/octet-stream 이라 Content 가 byte[] 다. [string] 으로 바꾸면 "98 51 97 ..." 처럼
+            # 숫자가 늘어선 문자열이 되어 해시를 못 찾는다(토큰 없이 로컬에서 돌릴 때). 위와 같이 UTF-8 로 풀어 문자열로 만든다.
+            $content = (Invoke-WebRequest -Uri "https://github.com/$Repo/releases/download/v$Version/SHA256SUMS.txt" -UseBasicParsing).Content
+            if ($content -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($content) } else { [string]$content }
         }
     } 'SHA256SUMS.txt 다운로드'
     $sums = [string]$sums
@@ -105,7 +108,9 @@ foreach ($a in $archs.Values) {
     if ($a.Sha256 -notmatch '^[0-9A-F]{64}$') { throw "SHA256 형식이 아닙니다 ($($a.File)): $($a.Sha256)" }
 }
 
-$dest = Join-Path $root $OutDir 'k' 'kimch0627' 'ImeBadge' $Version
+# -OutDir 는 저장소 루트 기준 상대 경로 또는 절대 경로.
+$base = if ([System.IO.Path]::IsPathRooted($OutDir)) { $OutDir } else { Join-Path $root $OutDir }
+$dest = Join-Path $base 'k' 'kimch0627' 'ImeBadge' $Version
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
 Get-ChildItem $templates -Filter '*.yaml' | ForEach-Object {
