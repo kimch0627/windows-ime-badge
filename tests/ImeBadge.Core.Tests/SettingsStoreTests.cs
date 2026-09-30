@@ -39,7 +39,6 @@ public sealed class SettingsStoreTests : IDisposable
             HangulColor = "#FF0000",
             ExcludedProcesses = new List<string> { "mstsc", "Unreal*" },
             CornerBadgeProcesses = new List<string> { "Xshell*", "SecureCRT" },
-            TrackCursorByImage = true,
             HideOnFullscreen = false,
             TrayShowsState = false,
             Animate = false,
@@ -60,7 +59,6 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal("#FF0000", back.HangulColor);
         Assert.Equal(new[] { "mstsc", "Unreal*" }, back.ExcludedProcesses);
         Assert.Equal(new[] { "Xshell*", "SecureCRT" }, back.CornerBadgeProcesses);
-        Assert.True(back.TrackCursorByImage);
         Assert.False(back.HideOnFullscreen);
         Assert.False(back.TrayShowsState);
         Assert.False(back.Animate);
@@ -226,6 +224,16 @@ public sealed class SettingsStoreTests : IDisposable
         var s = new SettingsStore(P("new.json")).Load();
         Assert.Equal(BadgeVisibility.Always, s.Visibility);
         Assert.Equal(130, s.SizePercent);   // 모르는 값 하나 때문에 다른 설정을 잃지 않는다
+    }
+
+    [Fact]
+    public void Load_OldFileWithRemovedImageTracking_KeepsOtherSettings()
+    {
+        // 1.8.x 까지의 "화면을 분석해 커서를 따라가기"(TrackCursorByImage)는 없어졌다. 그 값이 남은 설정 파일도 나머지는 그대로 읽힌다.
+        File.WriteAllText(P("old.json"), """{ "SizePercent": 130, "TrackCursorByImage": true, "CornerBadgeProcesses": ["Xshell*", "SecureCRT"] }""");
+        var s = new SettingsStore(P("old.json")).Load();
+        Assert.Equal(130, s.SizePercent);
+        Assert.Equal(new[] { "Xshell*", "SecureCRT" }, s.CornerBadgeProcesses);
     }
 
     [Fact]

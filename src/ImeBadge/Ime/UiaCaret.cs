@@ -35,37 +35,47 @@ static class UiaCaret
                     r = sel.GetElement(0);
                     // 크롬 주소창 등은 "문서 처음~커서" 범위를 준다. 시작점을 끝점으로 옮겨 커서 한 점으로 접는다.
                     r.MoveEndpointByRange(Uia.TextPatternRangeEndpoint.Start, r, Uia.TextPatternRangeEndpoint.End);
-                    // 1) 넓이 0인 커서 범위 그대로
-                    if (FirstRect(r) is { } c)
-                    {
-                        dump?.Append($" uia:text({c.Left:F0},{c.Top + c.Height:F0})");
-                        return new Rectangle((int)c.Left, (int)c.Top, 1, (int)c.Height);
-                    }
-                    // 2) 바로 앞 글자의 오른쪽 끝. 커서가 글 끝에 있으면(타이핑 중 대부분) 뒤에 글자가 없어 3)이 실패하거나
-                    //    마지막 글자의 왼쪽(한 칸 앞)을 주므로 이쪽을 먼저 본다. 앞 글자가 줄바꿈이면 윗줄 끝이라 쓰지 않는다.
-                    //    이 호출들을 지원하지 않는 앱도 있으므로(E_NOTIMPL 등) 실패하면 3)으로 넘어간다.
-                    (double Left, double Top, double Width, double Height)? prevRect = null;
+                    // 후보 셋을 모아 TextCaret.Pick 이 고른다.
+                    // 1) 넓이 0인 커서 범위 그대로. 대개 가장 정확하지만 크롬 주소창은 커서가 어디 있든 입력칸 맨 앞을 준다.
+                    var at = FirstRect(r);
+                    // 2) 바로 앞 글자. 1)이 맞는지 대조하는 데 쓰고, 1)이 비었거나 틀렸으면 그 오른쪽 끝을 커서로 쓴다.
+                    //    커서가 글 끝에 있으면(타이핑 중 대부분) 뒤에 글자가 없어 3)이 실패하거나 마지막 글자의 왼쪽(한 칸 앞)을 주므로
+                    //    3)보다 먼저 본다. 앞 글자가 줄바꿈이면 윗줄 끝이라 쓰지 않는다.
+                    //    이 호출들을 지원하지 않는 앱도 있으므로(E_NOTIMPL 등) 실패하면 없는 것으로 본다.
+                    RectangleF? before = null;
                     try
                     {
                         prev = sel.GetElement(0);
                         prev.MoveEndpointByRange(Uia.TextPatternRangeEndpoint.Start, prev, Uia.TextPatternRangeEndpoint.End);
                         if (prev.MoveEndpointByUnit(Uia.TextPatternRangeEndpoint.Start, Uia.TextUnit.Character, -1) != 0
                             && !IsLineBreak(prev.GetText(2)))
-                            prevRect = FirstRect(prev);
+                            before = FirstRect(prev);
                     }
                     catch (Exception ex) { dump?.Append($" uia:prev-EXC 0x{ex.HResult:X8}"); }
-                    if (prevRect is { } p)
+                    // 3) 커서 뒤 글자 한 칸으로 넓혀 그 왼쪽. 1)·2)로 정해지지 않을 때만 묻는다(UIA 호출이 한 번 더 든다).
+                    Uia.IUIAutomationTextRange collapsed = r;
+                    var pick = TextCaret.Pick(at, before, () =>
                     {
-                        double right = p.Left + p.Width;
-                        dump?.Append($" uia:text-prev({right:F0},{p.Top + p.Height:F0})");
-                        return new Rectangle((int)right, (int)p.Top, 1, (int)p.Height);
-                    }
-                    // 3) 커서 뒤 글자 한 칸으로 넓혀 그 왼쪽
-                    r.ExpandToEnclosingUnit(Uia.TextUnit.Character);
-                    if (FirstRect(r) is { } n)
+                        try
+                        {
+                            collapsed.ExpandToEnclosingUnit(Uia.TextUnit.Character);
+                            return FirstRect(collapsed);
+                        }
+                        catch (Exception ex) { dump?.Append($" uia:next-EXC 0x{ex.HResult:X8}"); return null; }
+                    });
+                    if (pick.From != TextCaretSource.None)
                     {
-                        dump?.Append($" uia:text-next({n.Left:F0},{n.Top + n.Height:F0})");
-                        return new Rectangle((int)n.Left, (int)n.Top, 1, (int)n.Height);
+                        // 버린 커서 사각형도 남긴다: "uia:caret-off(300,38) uia:text-prev(372,38)" 이면 1)이 엉뚱한 자리를 줬던 것.
+                        if (pick.CaretRejected && at is { } off) dump?.Append($" uia:caret-off({off.Left:F0},{off.Bottom:F0})");
+                        var c = pick.Rect;
+                        string from = pick.From switch
+                        {
+                            TextCaretSource.Caret => "text",
+                            TextCaretSource.Prev => "text-prev",
+                            _ => "text-next",
+                        };
+                        dump?.Append($" uia:{from}({c.Left:F0},{c.Bottom:F0})");
+                        return new Rectangle((int)c.Left, (int)c.Top, 1, (int)c.Height);
                     }
                 }
             }
@@ -99,11 +109,11 @@ static class UiaCaret
     }
 
     /// <summary>텍스트 범위의 첫 사각형(화면 좌표). 없거나 높이가 0이면 null.</summary>
-    static (double Left, double Top, double Width, double Height)? FirstRect(Uia.IUIAutomationTextRange range)
+    static RectangleF? FirstRect(Uia.IUIAutomationTextRange range)
     {
         var rects = range.GetBoundingRectangles();   // [l, t, w, h, l, t, w, h, ...]
         if (rects is null || rects.Length < 4 || rects[3] <= 0) return null;
-        return (rects[0], rects[1], rects[2], rects[3]);
+        return new RectangleF((float)rects[0], (float)rects[1], (float)rects[2], (float)rects[3]);
     }
 
     static bool IsLineBreak(string? s) => s is "\n" or "\r" or "\r\n";

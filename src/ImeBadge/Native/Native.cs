@@ -63,6 +63,7 @@ static class Native
     public static extern int GetClassName(IntPtr hWnd, StringBuilder sb, int max);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string? className, string? windowName);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
     [DllImport("user32.dll")]
     public static extern IntPtr SetWinEventHook(
         uint eventMin, uint eventMax, IntPtr hmodWinEventProc, WinEventProc proc,
@@ -81,8 +82,6 @@ static class Native
     [DllImport("gdi32.dll")] public static extern IntPtr CreateCompatibleDC(IntPtr hDC);
     [DllImport("gdi32.dll")] public static extern IntPtr CreateCompatibleBitmap(IntPtr hDC, int w, int h);
     [DllImport("gdi32.dll")] public static extern bool DeleteDC(IntPtr hDC);
-    // 이미지 기반 커서 추적용. 대상 창을 직접 렌더링하므로(PW_RENDERFULLCONTENT) 위에 겹친 우리 배지·다른 창이 섞이지 않는다.
-    [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint flags);
     [DllImport("gdi32.dll")] public static extern IntPtr SelectObject(IntPtr hDC, IntPtr hObj);
     [DllImport("gdi32.dll")] public static extern bool DeleteObject(IntPtr hObj);
     [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr hIcon);
@@ -163,7 +162,7 @@ static class Native
 
     /// <summary>
     /// 지금 마우스 버튼이 눌려 있는가(드래그·텍스트 선택 중). GetAsyncKeyState 의 최상위 비트가 "눌림"이며 스레드와 무관한 실제 상태다.
-    /// 이때 다른 스레드의 입력 큐에 붙거나(AttachThreadInput) 창을 강제로 다시 그리게 하면(PrintWindow) 진행 중인 드래그가 끊길 수 있다.
+    /// 이때 다른 스레드의 입력 큐에 붙으면(AttachThreadInput) 진행 중인 드래그가 끊길 수 있다.
     /// </summary>
     public static bool IsMouseButtonDown() =>
         (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 || (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0
@@ -218,13 +217,6 @@ static class Native
         if (hwnd == IntPtr.Zero || ClassName(hwnd) != "ApplicationFrameWindow") return IntPtr.Zero;
         return FindWindowEx(hwnd, IntPtr.Zero, "Windows.UI.Core.CoreWindow", null);
     }
-
-    /// <summary>
-    /// 대화상자·보조 창인가: 표준 대화상자 클래스(#32770)이거나 다른 창이 소유한(owned) 창. 설정 창·속성 창처럼
-    /// 본 작업 화면(터미널 뷰 등)이 아닌 창을 가려낼 때 쓴다.
-    /// </summary>
-    public static bool IsDialogLike(IntPtr hwnd) =>
-        hwnd != IntPtr.Zero && (ClassName(hwnd) == "#32770" || GetWindow(hwnd, GW_OWNER) != IntPtr.Zero);
 
     public static bool IsTopmost(IntPtr hwnd) =>
         hwnd != IntPtr.Zero && ((long)GetWindowLongPtr(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
