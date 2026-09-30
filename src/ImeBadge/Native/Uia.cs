@@ -102,9 +102,9 @@ static class Uia
         /// <summary>사각형마다 (left, top, width, height) 4개씩 이어진 double 배열.</summary>
         [return: MarshalAs(UnmanagedType.SafeArray, SafeArraySubType = VarEnum.VT_R8)] double[] GetBoundingRectangles();
         void _Slot_GetEnclosingElement();
-        void _Slot_GetText();
+        [return: MarshalAs(UnmanagedType.BStr)] string GetText(int maxLength);
         void _Slot_Move();
-        void _Slot_MoveEndpointByUnit();
+        int MoveEndpointByUnit(TextPatternRangeEndpoint endpoint, TextUnit unit, int count);
         void MoveEndpointByRange(TextPatternRangeEndpoint srcEndPoint, IUIAutomationTextRange range, TextPatternRangeEndpoint targetEndPoint);
         // 이후 메서드는 쓰지 않으므로 생략
     }

@@ -71,6 +71,19 @@ static class ImeReader
         {
             if (gti.hwndCaret != IntPtr.Zero) dump?.Append(" caret:win32-empty");   // caret 창은 있지만 높이 0
             caret = UiaCaret.Find(dump);
+            // UIA 가 입력칸 사각형만 줬으면(높이 0 = 근사 위치, 크롬·엣지 주소창 등) MSAA 가상 caret 으로 정확한 위치를 찾아본다.
+            // 입력칸이 아닐 때(null)는 묻지 않는다. 가상 caret 에는 다른 곳에 있던 옛 위치가 남아 있을 수 있다.
+            if (caret is { Height: 0 } && AccCaret.Find(gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target, dump) is { } acc)
+                caret = acc;
+        }
+
+        // "커서를 못 찾는 앱" 목록의 앱이면 근사 위치(입력칸 왼쪽 아래)는 못 찾은 것으로 본다. 그래야 목록에 넣은 앱에서
+        // 모서리 고정·이미지 추적이 동작한다. (근사 위치로 두면 입력칸 맨 앞에 붙어 커서를 따라가지 않는다)
+        bool cornerApp = settings.CornerBadgeProcesses.Count > 0 && ProcessFilter.IsExcluded(settings.CornerBadgeProcesses, process);
+        if (cornerApp && caret is { Height: 0 })
+        {
+            caret = null;
+            dump?.Append(" approx->corner");
         }
 
         // caret 을 못 찾았고 "모서리에 표시할 앱"(자체 커서를 그리는 Xshell 등)이면: 이미지 추적이 켜져 있으면 화면을 캡처해 커서를
@@ -78,7 +91,7 @@ static class ImeReader
         // IMM 조합 창 위치도 노출하지 않아 API 로는 커서를 알 수 없다.
         Rectangle? corner = null;
         bool imageTracked = false;
-        if (caret is null && settings.CornerBadgeProcesses.Count > 0 && ProcessFilter.IsExcluded(settings.CornerBadgeProcesses, process))
+        if (caret is null && cornerApp)
         {
             var host = gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target;
             if (Native.GetWindowRect(host, out var wr) && wr.Right > wr.Left && wr.Bottom > wr.Top)

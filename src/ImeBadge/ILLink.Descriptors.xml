@@ -19,6 +19,10 @@
     <type fullname="ImeBadge.Uia/IUIAutomationTextPattern" preserve="all" />
     <type fullname="ImeBadge.Uia/IUIAutomationTextRangeArray" preserve="all" />
     <type fullname="ImeBadge.Uia/IUIAutomationTextRange" preserve="all" />
+    <!-- MSAA(oleacc) IAccessible 도 같은 이유로 통째로 보존한다. Variant 는 VARIANT 와 크기가 같아야 하므로 필드도 모두 남긴다. -->
+    <type fullname="ImeBadge.Acc" preserve="all" />
+    <type fullname="ImeBadge.Acc/IAccessible" preserve="all" />
+    <type fullname="ImeBadge.Acc/Variant" preserve="all" />
     <!-- TSF(msctf) COM 인터페이스도 같은 이유로 통째로 보존한다. -->
     <type fullname="ImeBadge.Tsf" preserve="all" />
     <type fullname="ImeBadge.Tsf/TfThreadMgr" preserve="all" />
