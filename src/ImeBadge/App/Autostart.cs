@@ -41,7 +41,10 @@ static class Autostart
         }
     }
 
-    /// <summary>켜져 있는데 exe 가 다른 곳으로 옮겨졌으면(업데이트·재설치) 경로를 현재 exe 로 고쳐 둔다.</summary>
+    /// <summary>
+    /// 켜져 있는데 exe 가 다른 곳으로 옮겨졌으면(업데이트·재설치) 경로를 현재 exe 로 고쳐 둔다.
+    /// 개발 빌드에서는 부르지 않는다(Program). 설치본을 쓰는 개발자가 개발 빌드를 한 번 띄우기만 해도 경로가 바뀌기 때문이다.
+    /// </summary>
     public static void RefreshIfEnabled()
     {
         try

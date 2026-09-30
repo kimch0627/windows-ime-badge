@@ -57,7 +57,9 @@ static class Program
             bool firstRun = !File.Exists(store.FilePath) && !(store.LegacyFilePath is { } legacy && File.Exists(legacy));
             var settings = store.Load();
             Strings.Setting = settings.Language;   // 그 전(중복 실행 안내·치명적 오류)에는 Windows 표시 언어를 따른다
-            Autostart.RefreshIfEnabled();
+            // 개발 빌드(0.0.0)는 자동 시작 경로를 제 자리(bin\Debug 등)로 바꾸지 않는다. 바꾸면 다음 로그인 때 설치본 대신
+            // 개발 빌드가 뜬다. (자동 업그레이드도 같은 이유로 개발 빌드에서는 하지 않는다)
+            if (!AppVersion.IsDevBuild) Autostart.RefreshIfEnabled();
 
             Application.Run(new BadgeForm(settings, store, paths, firstRun));
         }
