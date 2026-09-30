@@ -48,17 +48,6 @@ public sealed class Settings
     public bool HideOnFullscreen { get; set; } = true;
     /// <summary>배지를 띄우지 않을 프로세스 이름 목록. 확장자 없이("mstsc"), 끝에 * 허용("Unreal*").</summary>
     public List<string> ExcludedProcesses { get; set; } = new();
-    /// <summary>
-    /// caret 을 못 찾아도(자체 커서를 그리는 터미널 등) 포커스 창의 왼쪽 아래 모서리에 배지를 띄울 프로세스 목록.
-    /// 모든 앱에 적용하면 작업 표시줄처럼 글자를 입력하지 않는 곳에도 배지가 뜨므로 목록으로 고른다. 형식은 <see cref="ExcludedProcesses"/> 와 같다.
-    /// </summary>
-    public List<string> CornerBadgeProcesses { get; set; } = new(DefaultCornerBadgeProcesses);
-
-    /// <summary>
-    /// Xshell 은 Win32 caret 도 UI Automation 텍스트 정보도 없다. Xshell 8 은 커서 창(ImeBadge 의 CursorWindow)으로 찾지만,
-    /// 스크롤백을 올려 커서가 화면 밖에 있으면 그 창을 숨기므로 그때를 위해 기본 목록에 둔다.
-    /// </summary>
-    public static readonly string[] DefaultCornerBadgeProcesses = { "Xshell*" };
     /// <summary>단축키로 일시 중지를 켜고 끈다.</summary>
     public bool HotkeyEnabled { get; set; } = true;
     /// <summary>일시 중지 단축키. "Ctrl+Alt+H" 형식(<see cref="HotkeySpec"/>). 읽을 수 없으면 기본값으로 돌아간다.</summary>
@@ -97,15 +86,12 @@ public sealed class Settings
         Hotkey = HotkeySpec.TryParse(Hotkey, out var hk) ? hk.ToString() : HotkeySpec.Default.ToString();
         ExcludedProcesses ??= new();
         ExcludedProcesses.RemoveAll(string.IsNullOrWhiteSpace);
-        CornerBadgeProcesses ??= new();
-        CornerBadgeProcesses.RemoveAll(string.IsNullOrWhiteSpace);
     }
 
     public Settings Clone()
     {
         var c = (Settings)MemberwiseClone();
         c.ExcludedProcesses = new List<string>(ExcludedProcesses);
-        c.CornerBadgeProcesses = new List<string>(CornerBadgeProcesses);
         return c;
     }
 
@@ -118,7 +104,6 @@ public sealed class Settings
         Theme = other.Theme; Character = other.Character; Visibility = other.Visibility;
         HideOnFullscreen = other.HideOnFullscreen;
         ExcludedProcesses = new List<string>(other.ExcludedProcesses);
-        CornerBadgeProcesses = new List<string>(other.CornerBadgeProcesses);
         HotkeyEnabled = other.HotkeyEnabled; Hotkey = other.Hotkey; PollIntervalMs = other.PollIntervalMs; TrayShowsState = other.TrayShowsState;
         Language = other.Language;
         CheckForUpdates = other.CheckForUpdates; LastUpdateCheckUtc = other.LastUpdateCheckUtc;

@@ -23,7 +23,6 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(100, s.SizePercent);
         Assert.True(s.CheckForUpdates);
         Assert.Empty(s.ExcludedProcesses);
-        Assert.Equal(new[] { "Xshell*" }, s.CornerBadgeProcesses);   // 기본값: 자체 커서를 그리는 터미널
     }
 
     [Fact]
@@ -38,7 +37,6 @@ public sealed class SettingsStoreTests : IDisposable
             OpacityPercent = 70,
             HangulColor = "#FF0000",
             ExcludedProcesses = new List<string> { "mstsc", "Unreal*" },
-            CornerBadgeProcesses = new List<string> { "Xshell*", "SecureCRT" },
             HideOnFullscreen = false,
             TrayShowsState = false,
             Animate = false,
@@ -58,7 +56,6 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(70, back.OpacityPercent);
         Assert.Equal("#FF0000", back.HangulColor);
         Assert.Equal(new[] { "mstsc", "Unreal*" }, back.ExcludedProcesses);
-        Assert.Equal(new[] { "Xshell*", "SecureCRT" }, back.CornerBadgeProcesses);
         Assert.False(back.HideOnFullscreen);
         Assert.False(back.TrayShowsState);
         Assert.False(back.Animate);
@@ -127,23 +124,13 @@ public sealed class SettingsStoreTests : IDisposable
     [Fact]
     public void Load_ClampsOutOfRangeValues()
     {
-        File.WriteAllText(P("settings.json"), """{ "SizePercent": 9999, "OpacityPercent": 1, "PollIntervalMs": 5, "HangulColor": "red", "ExcludedProcesses": ["", "  ", "mstsc"], "CornerBadgeProcesses": [" "] }""");
+        File.WriteAllText(P("settings.json"), """{ "SizePercent": 9999, "OpacityPercent": 1, "PollIntervalMs": 5, "HangulColor": "red", "ExcludedProcesses": ["", "  ", "mstsc"] }""");
         var s = new SettingsStore(P("settings.json")).Load();
         Assert.Equal(300, s.SizePercent);
         Assert.Equal(30, s.OpacityPercent);
         Assert.Equal(50, s.PollIntervalMs);
         Assert.Equal(Settings.DefaultHangulColor, s.HangulColor);
         Assert.Equal(new[] { "mstsc" }, s.ExcludedProcesses);
-        Assert.Empty(s.CornerBadgeProcesses);   // 사용자가 비운 목록은 기본값(Xshell*)으로 되돌리지 않는다
-    }
-
-    [Fact]
-    public void Load_OldFileWithoutCornerList_GetsDefault()
-    {
-        File.WriteAllText(P("settings.json"), """{ "Style": "Box" }""");   // 1.1.0 이전 파일
-        var s = new SettingsStore(P("settings.json")).Load();
-        Assert.Equal(BadgeStyle.Box, s.Style);
-        Assert.Equal(Settings.DefaultCornerBadgeProcesses, s.CornerBadgeProcesses);
     }
 
     [Fact]
@@ -192,13 +179,11 @@ public sealed class SettingsStoreTests : IDisposable
     [Fact]
     public void Clone_And_CopyFrom_AreIndependent()
     {
-        var a = new Settings { ExcludedProcesses = new List<string> { "x" }, CornerBadgeProcesses = new List<string> { "c" } };
+        var a = new Settings { ExcludedProcesses = new List<string> { "x" } };
         var b = a.Clone();
         b.ExcludedProcesses.Add("y");
-        b.CornerBadgeProcesses.Add("d");
         b.SizePercent = 50;
         Assert.Single(a.ExcludedProcesses);
-        Assert.Single(a.CornerBadgeProcesses);
         Assert.Equal(100, a.SizePercent);
 
         b.Theme = "mint"; b.Character = BadgeCharacters.Star;
@@ -206,7 +191,6 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal("mint", a.Theme);
         Assert.Equal(BadgeCharacters.Star, a.Character);
         Assert.Equal(2, a.ExcludedProcesses.Count);
-        Assert.Equal(2, a.CornerBadgeProcesses.Count);
         Assert.Equal(50, a.SizePercent);
 
         b.Visibility = BadgeVisibility.OnChange;
@@ -227,13 +211,14 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
-    public void Load_OldFileWithRemovedImageTracking_KeepsOtherSettings()
+    public void Load_OldFileWithRemovedSettings_KeepsOtherSettings()
     {
-        // 1.8.x 까지의 "화면을 분석해 커서를 따라가기"(TrackCursorByImage)는 없어졌다. 그 값이 남은 설정 파일도 나머지는 그대로 읽힌다.
-        File.WriteAllText(P("old.json"), """{ "SizePercent": 130, "TrackCursorByImage": true, "CornerBadgeProcesses": ["Xshell*", "SecureCRT"] }""");
+        // 없어진 설정("화면을 분석해 커서를 따라가기" TrackCursorByImage, "커서를 못 찾는 앱" CornerBadgeProcesses)이
+        // 남은 예전 설정 파일도 나머지는 그대로 읽힌다.
+        File.WriteAllText(P("old.json"), """{ "SizePercent": 130, "TrackCursorByImage": true, "CornerBadgeProcesses": ["Xshell*", "SecureCRT"], "ExcludedProcesses": ["mstsc"] }""");
         var s = new SettingsStore(P("old.json")).Load();
         Assert.Equal(130, s.SizePercent);
-        Assert.Equal(new[] { "Xshell*", "SecureCRT" }, s.CornerBadgeProcesses);
+        Assert.Equal(new[] { "mstsc" }, s.ExcludedProcesses);
     }
 
     [Fact]

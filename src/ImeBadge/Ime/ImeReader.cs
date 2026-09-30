@@ -10,12 +10,11 @@ enum ImeState { Unknown, Hangul, English, OtherLang }
 
 /// <summary>한 번 읽은 결과. 배지를 띄우지 않을 이유가 있으면 <see cref="Suppressed"/> 에 적힌다.</summary>
 /// <param name="CapsLock">한/영 모드이고 Caps Lock 이 켜져 있는가(설정에서 표시를 껐으면 항상 false).</param>
-/// <param name="Corner">caret 을 못 찾았지만 모서리 배지 대상 앱이면 포커스 창의 화면 사각형. 배지를 그 왼쪽 아래 모서리에 둔다.</param>
 /// <param name="Shift">한/영 모드이고 Shift 를 계속 누르고 있는가(<see cref="ShiftHold"/>). 설정에서 표시를 껐으면 항상 false.</param>
 /// <param name="CaretWindow">커서를 자식 창으로 그리는 앱(Xshell)에서 찾은 그 커서 창(<see cref="CursorWindow"/>). 없으면 0.
 /// BadgeForm 이 이 창의 위치 변경 이벤트를 받아 타이머를 기다리지 않고 배지를 옮긴다.</param>
 readonly record struct Snapshot(ImeState State, Rectangle? Caret, IntPtr Foreground = default, string? Suppressed = null, bool CapsLock = false,
-                                Rectangle? Corner = null, bool Shift = false, IntPtr CaretWindow = default);
+                                bool Shift = false, IntPtr CaretWindow = default);
 
 /// <summary>활성 창의 caret 위치와 한/영 상태를 한 번 읽어 <see cref="Snapshot"/> 으로 돌려준다.</summary>
 static class ImeReader
@@ -88,29 +87,8 @@ static class ImeReader
                     caret = acc;
             }
         }
-
-        // "커서를 못 찾는 앱" 목록의 앱이면 근사 위치(입력칸 왼쪽 아래)는 못 찾은 것으로 본다. 그래야 목록에 넣은 앱에서
-        // 모서리 고정·이미지 추적이 동작한다. (근사 위치로 두면 입력칸 맨 앞에 붙어 커서를 따라가지 않는다)
-        bool cornerApp = settings.CornerBadgeProcesses.Count > 0 && ProcessFilter.IsExcluded(settings.CornerBadgeProcesses, process);
-        if (cornerApp && caret is { Height: 0 })
-        {
-            caret = null;
-            dump?.Append(" approx->corner");
-        }
-
-        // caret 을 못 찾았고 "모서리에 표시할 앱"(자체 커서를 그리는 터미널)이면 포커스 창의 왼쪽 아래 모서리에 고정한다.
-        // 이런 터미널은 Win32 caret 도 UI Automation 텍스트도 IMM 조합 창 위치도 노출하지 않아 API 로는 커서를 알 수 없다.
-        // (Xshell 8 은 위의 커서 창으로 찾으므로 보통 여기까지 오지 않는다. 커서가 스크롤백 밖에 있거나 커서 창이 없는 버전일 때의 대비다.)
-        Rectangle? corner = null;
-        if (caret is null && cornerApp)
-        {
-            var host = gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target;
-            if (Native.GetWindowRect(host, out var wr) && wr.Right > wr.Left && wr.Bottom > wr.Top)
-            {
-                corner = wr.ToRectangle();
-                dump?.Append(" corner");
-            }
-        }
+        // 셋 다 못 찾으면(caret == null) 배지를 띄우지 않는다. 작업 표시줄·버튼처럼 글자를 입력하지 않는 곳에 뜨지 않게 하기 위해서다.
+        // 한/영 상태는 트레이 아이콘이 계속 보여 준다.
 
         bool preferTsf = core != IntPtr.Zero || Array.IndexOf(TsfPreferredProcesses, process) >= 0;
         var state = ReadImeState(target, gti.hwndFocus, tid, preferTsf, dump);
@@ -129,7 +107,7 @@ static class ImeReader
             Log.WriteIfChanged($"fg='{Native.ClassName(fg)}' focus='{Native.ClassName(gti.hwndFocus)}' tid={tid} pid={pid} => {state}{dump}");
         }
 
-        return new(state, caret, fg, CapsLock: caps, Corner: corner, Shift: shift, CaretWindow: caretWindow);
+        return new(state, caret, fg, CapsLock: caps, Shift: shift, CaretWindow: caretWindow);
     }
 
     /// <summary>
