@@ -12,7 +12,7 @@ caret 탐색·IME 판정·창 z-order 는 실제 앱에서만 확인할 수 있�
 | 메모장 (Win11) | 본문 | Win32 | ⬜ | ⬜ | |
 | Word | 본문 | Win32 | ⬜ | ⬜ | |
 | Excel | 셀 편집 | Win32 | ⬜ | ⬜ | 셀 선택 상태에서는 caret 없음 |
-| Chrome | 주소창 | UIA text | ⬜ | ⬜ | "문서 처음~커서" 범위 접기 |
+| Chrome | 주소창 | UIA text | ⬜ | ⬜ | "문서 처음~커서" 범위 접기. 커서가 끝·중간·맨 앞·한글 조합 중일 때 배지가 따라가는지. Chrome 154 는 커서 범위로 입력칸 맨 앞을 줘 로그에 `uia:caret-off(...) uia:text-prev(...)` |
 | Chrome | 웹 페이지 textarea | UIA text | ⬜ | ⬜ | |
 | Edge | 주소창 / 본문 | UIA text | ⬜ | ⬜ | |
 | VS Code | 편집기 | UIA text | ⬜ | ⬜ | Electron |
@@ -20,7 +20,7 @@ caret 탐색·IME 판정·창 z-order 는 실제 앱에서만 확인할 수 있�
 | Windows Terminal | 셸 | UIA | ⬜ | ⬜ | TSF 전역 compartment 우선. `--debug` 로그에 `tsf(open=… conv=…)` 확인 |
 | 설정(UWP) | 검색창 | UIA | ⬜ | ⬜ | CoreWindow 스레드 조사 + TSF 우선. 로그에 `uwp` 표시 |
 | 메모장(Win11, IMM 창 없는 상태) | 본문 | Win32 | ⬜ | ⬜ | IMM 이 `imeWnd=0` 이면 TSF 로 넘어가는지(로그) |
-| Xshell | 터미널 | 모서리 / 이미지 | ⬜ | ⬜ | 기본: 로그에 `corner`, 배지가 창 왼쪽 아래 고정. "화면을 분석해 커서를 따라가기" 켜면 로그에 `caret:img(...)`, 배지가 커서를 따라가는지(타이핑·Enter 뒤). `top` 처럼 출력이 쏟아질 때 모서리로 되돌아가고 CPU 가 과하지 않은지. 목록에서 Xshell* 을 빼면 숨겨지는지 |
+| Xshell | 터미널 | 커서 창 / 모서리 | ⬜ | ⬜ | 로그에 `caret:wnd(...)`, 배지가 커서를 따라가는지(타이핑·한글 조합·Enter 뒤·새 탭). 스크롤백을 올려 커서가 화면 밖이면 `wnd:hidden … corner` 로 창 왼쪽 아래 고정, 내리면 다시 커서로. 목록에서 Xshell* 을 빼면 스크롤백에서 숨겨지는지 |
 | FlowLauncher / PowerToys Run | 입력창 | ⬜ | ⬜ | ⬜ | TopMost 창 위로 올라가는지 |
 | 원격 데스크톱(mstsc) 안 | 원격 앱 | ⬜ | ⬜ | ⬜ | 제외 목록에 mstsc 넣으면 숨김 |
 | 전체 화면 게임 | - | ⬜ | - | - | "전체 화면 숨김" 켜면 안 보여야 함 |

@@ -11,10 +11,11 @@ enum ImeState { Unknown, Hangul, English, OtherLang }
 /// <summary>한 번 읽은 결과. 배지를 띄우지 않을 이유가 있으면 <see cref="Suppressed"/> 에 적힌다.</summary>
 /// <param name="CapsLock">한/영 모드이고 Caps Lock 이 켜져 있는가(설정에서 표시를 껐으면 항상 false).</param>
 /// <param name="Corner">caret 을 못 찾았지만 모서리 배지 대상 앱이면 포커스 창의 화면 사각형. 배지를 그 왼쪽 아래 모서리에 둔다.</param>
-/// <param name="ImageTracked">이미지 커서 추적(<see cref="ImageCaret"/>)이 이 창에 대해 돌고 있다.</param>
 /// <param name="Shift">한/영 모드이고 Shift 를 계속 누르고 있는가(<see cref="ShiftHold"/>). 설정에서 표시를 껐으면 항상 false.</param>
+/// <param name="CaretWindow">커서를 자식 창으로 그리는 앱(Xshell)에서 찾은 그 커서 창(<see cref="CursorWindow"/>). 없으면 0.
+/// BadgeForm 이 이 창의 위치 변경 이벤트를 받아 타이머를 기다리지 않고 배지를 옮긴다.</param>
 readonly record struct Snapshot(ImeState State, Rectangle? Caret, IntPtr Foreground = default, string? Suppressed = null, bool CapsLock = false,
-                                Rectangle? Corner = null, bool ImageTracked = false, bool Shift = false);
+                                Rectangle? Corner = null, bool Shift = false, IntPtr CaretWindow = default);
 
 /// <summary>활성 창의 caret 위치와 한/영 상태를 한 번 읽어 <see cref="Snapshot"/> 으로 돌려준다.</summary>
 static class ImeReader
@@ -58,6 +59,7 @@ static class ImeReader
         long t0 = Environment.TickCount64;
 
         Rectangle? caret = null;
+        IntPtr caretWindow = IntPtr.Zero;
         if (gti.hwndCaret != IntPtr.Zero && gti.rcCaret.Bottom > gti.rcCaret.Top)
         {
             var tl = new Native.POINT(gti.rcCaret.Left, gti.rcCaret.Top);
@@ -70,11 +72,21 @@ static class ImeReader
         else
         {
             if (gti.hwndCaret != IntPtr.Zero) dump?.Append(" caret:win32-empty");   // caret 창은 있지만 높이 0
-            caret = UiaCaret.Find(dump);
-            // UIA 가 입력칸 사각형만 줬으면(높이 0 = 근사 위치, 크롬·엣지 주소창 등) MSAA 가상 caret 으로 정확한 위치를 찾아본다.
-            // 입력칸이 아닐 때(null)는 묻지 않는다. 가상 caret 에는 다른 곳에 있던 옛 위치가 남아 있을 수 있다.
-            if (caret is { Height: 0 } && AccCaret.Find(gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target, dump) is { } acc)
-                caret = acc;
+            // 커서를 자식 창으로 그리는 터미널(Xshell 8): 포커스 창의 "CURSOR" 자식 창이 곧 커서다.
+            // 창 관리자에게만 묻는 싼 호출이라 대상 앱과 주고받는 UIA 보다 먼저 본다.
+            if (CursorWindow.Find(gti.hwndFocus, dump) is { } cw)
+            {
+                caret = cw.Rect;
+                caretWindow = cw.Hwnd;
+            }
+            else
+            {
+                caret = UiaCaret.Find(dump);
+                // UIA 가 입력칸 사각형만 줬으면(높이 0 = 근사 위치) MSAA 가상 caret 으로 정확한 위치를 찾아본다.
+                // 입력칸이 아닐 때(null)는 묻지 않는다. 가상 caret 에는 다른 곳에 있던 옛 위치가 남아 있을 수 있다.
+                if (caret is { Height: 0 } && AccCaret.Find(gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target, dump) is { } acc)
+                    caret = acc;
+            }
         }
 
         // "커서를 못 찾는 앱" 목록의 앱이면 근사 위치(입력칸 왼쪽 아래)는 못 찾은 것으로 본다. 그래야 목록에 넣은 앱에서
@@ -86,29 +98,17 @@ static class ImeReader
             dump?.Append(" approx->corner");
         }
 
-        // caret 을 못 찾았고 "모서리에 표시할 앱"(자체 커서를 그리는 Xshell 등)이면: 이미지 추적이 켜져 있으면 화면을 캡처해 커서를
-        // 찾아 따라가고(실험적), 못 찾으면 포커스 창의 왼쪽 아래 모서리에 고정한다. Xshell 은 Win32 caret 도 UI Automation 텍스트도
-        // IMM 조합 창 위치도 노출하지 않아 API 로는 커서를 알 수 없다.
+        // caret 을 못 찾았고 "모서리에 표시할 앱"(자체 커서를 그리는 터미널)이면 포커스 창의 왼쪽 아래 모서리에 고정한다.
+        // 이런 터미널은 Win32 caret 도 UI Automation 텍스트도 IMM 조합 창 위치도 노출하지 않아 API 로는 커서를 알 수 없다.
+        // (Xshell 8 은 위의 커서 창으로 찾으므로 보통 여기까지 오지 않는다. 커서가 스크롤백 밖에 있거나 커서 창이 없는 버전일 때의 대비다.)
         Rectangle? corner = null;
-        bool imageTracked = false;
         if (caret is null && cornerApp)
         {
             var host = gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target;
             if (Native.GetWindowRect(host, out var wr) && wr.Right > wr.Left && wr.Bottom > wr.Top)
             {
-                // 이미지 추적은 본 작업 화면(터미널 뷰)에만 쓴다. 같은 앱의 설정·속성 대화상자(#32770 또는 소유된 창)는
-                // 깜빡이는 커서가 없고, 자식 컨트롤은 PrintWindow 가 빈 화면을 줘 화면 캡처로 넘어가며 배지 흔적을 커서로 오인하기 쉽다.
-                if (settings.TrackCursorByImage && Native.IsDialogLike(fg)) dump?.Append(" img:skip-dialog");
-                else if (settings.TrackCursorByImage)
-                {
-                    imageTracked = true;
-                    caret = ImageCaret.Find(host, Native.DpiScaleAt(new Point(wr.Left, wr.Top)), dump);
-                }
-                if (caret is null)
-                {
-                    corner = wr.ToRectangle();
-                    dump?.Append(" corner");
-                }
+                corner = wr.ToRectangle();
+                dump?.Append(" corner");
             }
         }
 
@@ -129,7 +129,7 @@ static class ImeReader
             Log.WriteIfChanged($"fg='{Native.ClassName(fg)}' focus='{Native.ClassName(gti.hwndFocus)}' tid={tid} pid={pid} => {state}{dump}");
         }
 
-        return new(state, caret, fg, CapsLock: caps, Corner: corner, ImageTracked: imageTracked, Shift: shift);
+        return new(state, caret, fg, CapsLock: caps, Corner: corner, Shift: shift, CaretWindow: caretWindow);
     }
 
     /// <summary>

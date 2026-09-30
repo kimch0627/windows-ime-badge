@@ -120,7 +120,7 @@ sealed class BadgeForm : Form
         _hooks[1] = Hook(Native.EVENT_SYSTEM_FOREGROUND, "foreground");
         _hooks[2] = Hook(Native.EVENT_OBJECT_FOCUS, "focus");
         // caret 이 움직이면(타이핑·화살표 키·창 이동) 다음 틱을 기다리지 않고 배지를 따라 옮긴다.
-        // LOCATIONCHANGE 는 마우스 포인터·모든 창의 이동에도 오므로 OnWinEvent 에서 caret 것만 골라낸다.
+        // LOCATIONCHANGE 는 마우스 포인터·모든 창의 이동에도 오므로 OnWinEvent 에서 caret(과 Xshell 의 커서 창) 것만 골라낸다.
         _hooks[3] = Hook(Native.EVENT_OBJECT_LOCATIONCHANGE, "location change");
         _hooks[4] = Hook(Native.EVENT_OBJECT_TEXTSELECTIONCHANGED, "text selection");
 
@@ -139,12 +139,14 @@ sealed class BadgeForm : Form
     /// <summary>
     /// WinEvent 콜백(OUTOFCONTEXT 라 우리 UI 스레드에서 불린다). 위치 변경 이벤트는 caret 것만 받고, 그마저도 배지가 보이는 동안
     /// 활성 창에서 온 것만 받는다. 타이핑 중에는 글자마다 이벤트가 오므로 15ms 안에 몰린 것은 건너뛴다(타이머가 곧 따라잡는다).
+    /// 커서를 자식 창으로 그리는 터미널(Xshell)은 caret 이벤트가 없고 그 커서 창의 창 위치 변경(OBJID_WINDOW)만 오므로,
+    /// 지난번에 찾은 커서 창(<see cref="Snapshot.CaretWindow"/>)의 것도 받는다.
     /// </summary>
     void OnWinEvent(IntPtr hHook, uint evt, IntPtr hwnd, int idObject, int idChild, uint idEventThread, uint dwmsEventTime)
     {
         if (evt is Native.EVENT_OBJECT_LOCATIONCHANGE or Native.EVENT_OBJECT_TEXTSELECTIONCHANGED)
         {
-            if (evt == Native.EVENT_OBJECT_LOCATIONCHANGE && idObject != Native.OBJID_CARET) return;
+            if (evt == Native.EVENT_OBJECT_LOCATIONCHANGE && idObject != Native.OBJID_CARET && !IsCaretWindow(idObject, hwnd)) return;
             if (!Visible || _paused) return;   // 숨겨진 동안은 포커스·활성 창 이벤트와 타이머만으로 충분하다
             long now = Environment.TickCount64;
             if (now - _lastEventPoll < EventPollMinGapMs) return;
@@ -152,6 +154,9 @@ sealed class BadgeForm : Form
         }
         Poll();
     }
+
+    bool IsCaretWindow(int idObject, IntPtr hwnd) =>
+        idObject == Native.OBJID_WINDOW && hwnd != IntPtr.Zero && hwnd == _lastSnapshot.CaretWindow;
 
     protected override void OnHandleCreated(EventArgs e)
     {
@@ -878,7 +883,6 @@ sealed class BadgeForm : Form
     void HideBadge()
     {
         if (Visible) { Hide(); _hiddenSince = Environment.TickCount64; }
-        ImageCaret.Ignore = Rectangle.Empty;   // 숨겨진 배지는 화면 캡처에 없다
         StopAnim();
         UpdateTray(ImeState.Unknown);
         AdjustIdleInterval();
@@ -959,7 +963,6 @@ sealed class BadgeForm : Form
         var pos = corner is { } win
             ? BadgeLayout.Corner(win, bs, scale, area)
             : BadgeLayout.Compute(new LayoutInput(caret, bs, style, _settings.Placement, scale, area));
-        ImageCaret.Ignore = new Rectangle(pos, bs);   // 이미지 커서 추적이 화면 캡처에서 우리 배지를 빼도록
 
         // FlowLauncher처럼 자기도 최상위(TopMost)인 창은 나중에 뜬 쪽이 위에 온다. 배지가 처음 보일 때,
         // 활성 창이 바뀌었을 때, 위치가 바뀌었을 때마다 최상위 창들 중에서도 맨 위로 다시 올린다.
@@ -994,7 +997,7 @@ sealed class BadgeForm : Form
         // 활성 창이 자기도 최상위(TopMost)라면(FlowLauncher 등) 매 틱 실제 z-order를 확인한다. 활성 창이 뒤늦게
         // 활성화되며 다시 위로 올라오거나, 백그라운드 프로세스의 z-order 변경이 활성 창 아래로 제한되는 경우가 있다.
         if (Native.IsTopmost(s.Foreground) && Native.IsAbove(s.Foreground, Handle))
-            RaiseAbove(s.Foreground, allowAttach: !s.ImageTracked);
+            RaiseAbove(s.Foreground);
 
         _lastPos = pos;
         _lastFg = s.Foreground;
@@ -1010,13 +1013,11 @@ sealed class BadgeForm : Form
     /// 프로세스가 활성 창 위로 창을 올리는 것을 막는다) 활성 창 스레드의 입력 큐에 잠깐 붙어 그 권한을 빌린 뒤 바로 떼어 낸다.
     /// 안전장치: 응답 없는 창에는 붙지 않고(같이 멈출 수 있음), 같은 창에 세 번 실패하면 그 창에 대해서는 포기한다.
     /// 마우스 버튼이 눌려 있으면(드래그 중) 붙지 않는다. 입력 큐를 붙였다 떼면 그 스레드의 마우스 캡처가 풀려 드래그가 끊긴다.
-    /// <paramref name="allowAttach"/> 가 false 면(이미지 커서 추적 중: 배지가 자주 움직여 매 틱 붙게 된다) 일반 올리기만 한다.
     /// </summary>
-    void RaiseAbove(IntPtr fg, bool allowAttach)
+    void RaiseAbove(IntPtr fg)
     {
         RaiseToTop();
         if (!Native.IsAbove(fg, Handle)) return;
-        if (!allowAttach) return;
         if (Native.IsMouseButtonDown()) { Log.WriteIfChanged($"raise: skip attach while mouse button down fg='{Native.ClassName(fg)}'"); return; }
         if (_raiseFailFg == fg && _raiseFailCount >= 3) return;
         if (Native.IsHungAppWindow(fg)) { Log.WriteIfChanged($"raise: skip hung fg='{Native.ClassName(fg)}'"); return; }
@@ -1095,7 +1096,6 @@ sealed class BadgeForm : Form
             _trayIcons.Dispose();
             foreach (var bmp in _glyphImages.Values) bmp.Dispose();
             _statusImage?.Dispose();
-            ImageCaret.Clear();
         }
         base.Dispose(disposing);
     }
