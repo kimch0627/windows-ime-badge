@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-09-30
+
+더는 필요 없어진 **"커서를 못 찾는 앱 (창 모서리에 표시)"** 설정을 없애고, 다시 실행해도 설정 창이 열리지 않던 문제와
+자동 업그레이드 뒤 관리자 권한으로 뜨던 문제를 고친 릴리스입니다. 설정 파일은 예전 버전과 그대로 호환됩니다(없어진 설정 값만 무시).
+관리자 권한 문제는 이 버전의 설치 프로그램이 고치므로, 모든 사용자용으로 설치한 경우 이번 업그레이드부터 보통 권한으로 다시 뜹니다.
+
 ### 수정
 - 개발 빌드(버전 0.0.0: 직접 빌드했거나 사전 릴리스에서 받은 exe)를 한 번 실행하기만 해도 "로그인 시 자동 시작" 경로가 그 exe 로
   바뀌던 문제. 다음 로그인부터 설치본 대신 개발 빌드가 떴다. 이제 개발 빌드는 경로를 고치지 않는다.
@@ -420,7 +426,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.8.1...v1.9.0
 [1.8.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.7.1...v1.8.0
