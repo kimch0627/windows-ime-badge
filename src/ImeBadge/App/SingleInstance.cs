@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using System.Threading;
 
 namespace ImeBadge;
@@ -22,9 +23,30 @@ sealed class SingleInstance : IDisposable
         IsFirst = createdNew;
     }
 
-    /// <summary>이미 떠 있는 인스턴스에게 설정 창을 열라고 알린다.</summary>
-    public static void NotifyExisting() =>
-        Native.PostMessage(Native.HWND_BROADCAST, ShowSettingsMessage, IntPtr.Zero, IntPtr.Zero);
+    /// <summary>
+    /// 이미 떠 있는 인스턴스에게 설정 창을 열라고 알린다.
+    /// 배지 창(BadgeForm)은 작업 표시줄에 뜨지 않도록 WinForms 가 다른 숨은 창의 "소유 창"으로 만든다. HWND_BROADCAST 는
+    /// 숨겨진 소유 창에는 메시지를 보내지 않아서, 배지가 숨어 있는 동안(글자를 입력하지 않는 대부분의 시간)은 알림이 닿지 않았다.
+    /// 그래서 최상위 창을 돌며 이름이 "ImeBadge" 인 WinForms 창(다른 프로세스의 배지 창)을 찾아 직접 보낸다. 못 찾으면 예전처럼 broadcast.
+    /// </summary>
+    public static void NotifyExisting()
+    {
+        int sent = 0;
+        uint self = (uint)Environment.ProcessId;
+        var title = new StringBuilder(64);
+        Native.EnumWindows((h, _) =>
+        {
+            title.Clear();
+            if (Native.GetWindowText(h, title, title.Capacity) > 0 && title.ToString() == AppInfo.ProductName
+                && Native.ClassName(h).StartsWith("WindowsForms10.", StringComparison.Ordinal)
+                && Native.GetWindowThreadProcessId(h, out uint pid) != 0 && pid != self
+                && Native.PostMessage(h, ShowSettingsMessage, IntPtr.Zero, IntPtr.Zero))
+                sent++;
+            return true;
+        }, IntPtr.Zero);
+        Log.Write($"notify existing: posted to {sent} window(s)");
+        if (sent == 0) Native.PostMessage(Native.HWND_BROADCAST, ShowSettingsMessage, IntPtr.Zero, IntPtr.Zero);
+    }
 
     public void Dispose()
     {

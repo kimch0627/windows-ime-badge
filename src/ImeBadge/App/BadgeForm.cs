@@ -161,6 +161,9 @@ sealed class BadgeForm : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
+        // 관리자 권한으로 떠 있어도 일반 권한으로 다시 실행한 두 번째 인스턴스의 "설정 창 열기"를 받는다.
+        // (UIPI 는 낮은 권한 프로세스가 높은 권한 창에 보내는 메시지를 막는다. 이 메시지 하나만 연다.)
+        Native.ChangeWindowMessageFilterEx(Handle, SingleInstance.ShowSettingsMessage, Native.MSGFLT_ALLOW, IntPtr.Zero);
         ApplyHotkey();
         // 첫 실행 안내와 업데이트 확인은 창이 준비된 뒤 잠깐 있다가. (핸들이 다시 만들어져도 한 번만)
         if (_startupScheduled) return;
