@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-09-30
+
+크롬 주소창과 Xshell 에서 배지가 커서를 따라가도록 고치고, 더는 필요 없어진 실험 기능 **"화면을 분석해 커서를 따라가기"** 를 없앤 릴리스입니다.
+설정 파일은 예전 버전과 그대로 호환됩니다(없어진 설정 값만 무시). 이 기능을 켜 두지 않았다면 업데이트로 달라지는 설정은 없습니다.
+
 ### 수정
 - 크롬 주소창에서 배지가 여전히 입력칸 맨 앞에 붙어 커서를 따라가지 않던 문제.
   Chrome 154 의 주소창은 UI Automation 커서 범위의 사각형으로, 커서가 어디에 있든 입력칸 맨 앞의 1px 막대를 준다.
@@ -394,7 +399,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.8.1...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.8.1...v1.9.0
 [1.8.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.7.0...v1.7.1
