@@ -20,7 +20,7 @@ caret 탐색·IME 판정·창 z-order 는 실제 앱에서만 확인할 수 있�
 | Windows Terminal | 셸 | UIA | ⬜ | ⬜ | TSF 전역 compartment 우선. `--debug` 로그에 `tsf(open=… conv=…)` 확인 |
 | 설정(UWP) | 검색창 | UIA | ⬜ | ⬜ | CoreWindow 스레드 조사 + TSF 우선. 로그에 `uwp` 표시 |
 | 메모장(Win11, IMM 창 없는 상태) | 본문 | Win32 | ⬜ | ⬜ | IMM 이 `imeWnd=0` 이면 TSF 로 넘어가는지(로그) |
-| Xshell | 터미널 | 커서 창 / 모서리 | ⬜ | ⬜ | 로그에 `caret:wnd(...)`, 배지가 커서를 따라가는지(타이핑·한글 조합·Enter 뒤·새 탭). 스크롤백을 올려 커서가 화면 밖이면 `wnd:hidden … corner` 로 창 왼쪽 아래 고정, 내리면 다시 커서로. 목록에서 Xshell* 을 빼면 스크롤백에서 숨겨지는지 |
+| Xshell | 터미널 | 커서 창 | ⬜ | ⬜ | 로그에 `caret:wnd(...)`, 배지가 커서를 따라가는지(타이핑·한글 조합·Enter 뒤·새 탭). 스크롤백을 올려 커서가 화면 밖이면 로그에 `wnd:hidden` 과 함께 배지가 숨겨지고, 내리거나 다시 입력하면 커서로 돌아오는지 |
 | FlowLauncher / PowerToys Run | 입력창 | ⬜ | ⬜ | ⬜ | TopMost 창 위로 올라가는지 |
 | 원격 데스크톱(mstsc) 안 | 원격 앱 | ⬜ | ⬜ | ⬜ | 제외 목록에 mstsc 넣으면 숨김 |
 | 전체 화면 게임 | - | ⬜ | - | - | "전체 화면 숨김" 켜면 안 보여야 함 |

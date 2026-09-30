@@ -32,7 +32,7 @@ sealed class SettingsForm : Form
     Label _hangulHex = null!, _englishHex = null!;
     ToggleSwitch _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!, _shiftHold = null!;
     HotkeyBox _hotkeyBox = null!;
-    ProcessListEditor _excluded = null!, _corner = null!;
+    ProcessListEditor _excluded = null!;
     PreviewPanel _preview = null!;
     readonly ToolTip _tips = new() { AutoPopDelay = 12000 };
     // "점, 바뀔 때 1.5초 글자" 미리보기용. 실제 배지처럼 설정이 바뀐 직후 1.5초는 글자 배지를, 그 뒤엔 점을 보여 준다.
@@ -184,11 +184,10 @@ sealed class SettingsForm : Form
         left.Controls.Add(BuildBehaviorGroup());
         root.Controls.Add(left, 0, 1);
 
-        // 오른쪽: 미리보기 + 제외 앱 + 모서리 배지 앱
+        // 오른쪽: 미리보기 + 제외 앱
         var right = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false };
         right.Controls.Add(BuildPreviewGroup());
         right.Controls.Add(BuildExcludeGroup());
-        right.Controls.Add(BuildCornerGroup());
         root.Controls.Add(right, 1, 1);
 
         // 아래: 버튼. 오른쪽 끝에 확인·취소, 왼쪽으로 떨어져 기본값 복원. 창 아래에 붙어 스크롤과 상관없이 늘 보인다.
@@ -436,18 +435,6 @@ sealed class SettingsForm : Form
         return g;
     }
 
-    /// <summary>caret 을 못 찾는 앱(Xshell 등)의 앱 목록. 제외 목록과 같은 편집기를 쓴다.</summary>
-    GroupBox BuildCornerGroup()
-    {
-        var g = NewGroup(Strings.Get("group.corner"), Strings.Get("group.corner.desc"));
-        _corner = new ProcessListEditor(() => _draft.CornerBadgeProcesses, InnerWidth, _tips,
-            Strings.Get("corner.add"), Strings.Get("corner.remove"), Strings.Get("exclude.new.tip"), Strings.Get("corner.note"))
-        { Location = g.ContentOrigin };
-        _corner.Changed += Touch;
-        g.Controls.Add(_corner);
-        return g;
-    }
-
     // ── 타일 그리기 ──
     static string ShortStyle(BadgeStyle s) => Strings.Get(s switch
     {
@@ -631,7 +618,6 @@ sealed class SettingsForm : Form
         _updates.Checked = _draft.CheckForUpdates;
         _language.SelectedIndex = Math.Max(0, Array.FindIndex(Labels.Languages, l => l.value == _draft.Language));
         _excluded.Reload();
-        _corner.Reload();
     }
 
     /// <summary>테마를 고르면 배지 색도 그 테마의 기본색으로, 견본도 그 테마의 것으로 바꾼다. 창은 <see cref="Touch"/> 에서 다시 칠한다.</summary>

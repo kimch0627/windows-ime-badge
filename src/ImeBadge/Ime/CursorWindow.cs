@@ -30,7 +30,7 @@ static class CursorWindow
         }
         var r = cr.ToRectangle();
         // 이름만 같은 다른 창을 커서로 오인하지 않도록 커서 한 칸 크기(글자 두어 칸 넓이, 한 줄 높이)이고 포커스 창 안에 보이는지 본다.
-        // 스크롤백을 거슬러 올라가 커서가 화면 밖으로 나가면 창도 뷰 밖에 놓인다. 그때는 못 찾은 것으로 보고 모서리 배지에 맡긴다.
+        // 스크롤백을 거슬러 올라가 커서가 화면 밖으로 나가면 창도 뷰 밖에 놓인다. 그때는 못 찾은 것으로 본다(배지를 숨긴다).
         if (r.Width < 1 || r.Height < 4 || r.Height > 200 || r.Width > r.Height * 3 || !fr.ToRectangle().IntersectsWith(r))
         {
             dump?.Append($" wnd:odd({r.X},{r.Y},{r.Width}x{r.Height})");
