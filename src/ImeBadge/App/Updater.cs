@@ -124,7 +124,9 @@ static class Updater
         string log = Path.Combine(paths.LogDir, "update-setup.log");
         string args = $"/SILENT /SUPPRESSMSGBOXES /NOCANCEL /NORESTART /RESTARTAPP " +
                       $"{(site.AllUsers ? "/ALLUSERS" : "/CURRENTUSER")} /DIR=\"{site.Dir}\" /TASKS=\"{CurrentTasks()}\" /LOG=\"{log}\"";
-        // 모든 사용자용 설치는 Program Files 를 건드리므로 권한 상승이 필요하다(UAC 창이 뜬다).
+        // 모든 사용자용 설치는 Program Files 를 건드리므로 권한 상승이 필요하다(UAC 창이 뜬다). 여기서 runas 로 띄워야 UAC 를
+        // 거부했을 때 Process.Start 가 실패해 예전 버전이 계속 돈다(설치 프로그램이 스스로 권한을 올리게 하면 우리는 이미 끝난 뒤다).
+        // 그 대신 설치 프로그램은 새 버전을 explorer 를 거쳐 보통 권한으로 띄운다(installer\ImeBadge.iss 의 [Run]).
         var psi = new ProcessStartInfo(setupPath, args) { UseShellExecute = true };
         if (site.AllUsers) psi.Verb = "runas";
         Log.Write($"running installer: {setupPath} {args}");
@@ -273,7 +275,7 @@ static class Updater
     /// <summary>
     /// 새 버전을 띄운다. 권한 상승된 상태(쓸 수 없는 폴더의 exe 를 바꾸느라 UAC 를 거친 경우)에서 그냥 실행하면
     /// 새 프로그램도 관리자 권한으로 돌아간다. 그럴 때는 explorer 에 부탁해 로그인 사용자의 보통 권한으로 띄운다
-    /// (설치본 쪽은 설치 프로그램의 runasoriginaluser 가 같은 일을 한다).
+    /// (설치본 쪽은 설치 프로그램의 [Run] 이 같은 방법으로 한다).
     /// </summary>
     static void Start(string exe)
     {
