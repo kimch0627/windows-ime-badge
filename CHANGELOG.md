@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-10-01
+
+설정 창을 Windows 11 설정 앱처럼 **왼쪽 메뉴 + 페이지별 카드**로 새로 구성하고, 따로 열리던 정보 창을 설정 창의 "정보" 페이지로 합친 릴리스입니다.
+[확인]/[취소] 방식과 설정 항목은 그대로이고, 설정 파일도 예전 버전과 그대로 호환됩니다.
+
 ### 변경
 - **설정 창을 Windows 11 설정 앱처럼 새로 구성했습니다.** 한 화면에 모든 항목이 몰려 세로로 화면을 거의 다 차지하던 창을,
   왼쪽 메뉴(모양 · 표시 · 일반 · 제외 앱 · 정보)에서 페이지를 고르고 항목마다 아이콘·이름·설명이 붙은 카드로 보여 주는 창으로 바꿨습니다.
@@ -444,7 +449,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.10.0...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.8.1...v1.9.0
 [1.8.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.8.0...v1.8.1
