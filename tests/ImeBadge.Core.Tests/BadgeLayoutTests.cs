@@ -50,6 +50,28 @@ public sealed class BadgeLayoutTests
     }
 
     [Fact]
+    public void Above_CentersBadgeOverCaret()
+    {
+        var p = BadgeLayout.Compute(In(Caret, place: BadgePlacement.Above));
+        Assert.Equal(new Point(500 + 1 - 12, 300 - 20 - 3), p);
+    }
+
+    [Fact]
+    public void Below_CentersBadgeUnderCaret()
+    {
+        var p = BadgeLayout.Compute(In(Caret, place: BadgePlacement.Below));
+        Assert.Equal(new Point(500 + 1 - 12, 320 + 3), p);
+    }
+
+    [Fact]
+    public void Above_NoRoomAbove_FallsBackBelow_StaysCentered()
+    {
+        var top = new Rectangle(500, 5, 2, 20);
+        var p = BadgeLayout.Compute(In(top, place: BadgePlacement.Above));
+        Assert.Equal(new Point(500 + 1 - 12, 25 + 3), p);
+    }
+
+    [Fact]
     public void GapScalesWithDpi()
     {
         var p = BadgeLayout.Compute(In(Caret, scale: 2f));
@@ -82,10 +104,23 @@ public sealed class BadgeLayoutTests
     [Fact]
     public void ClampedToWorkArea_RightAndBottom()
     {
+        // 밑줄은 caret 에 붙은 막대라 아래 자리가 없어도 위로 옮기지 않고 작업 영역 안으로 밀어 넣는다.
         var edge = new Rectangle(1915, 1030, 2, 20);
-        var p = BadgeLayout.Compute(In(edge, place: BadgePlacement.BelowRight));
+        var p = BadgeLayout.Compute(In(edge, style: BadgeStyle.Underline));
         Assert.Equal(1920 - 24, p.X);
         Assert.Equal(1040 - 20, p.Y);
+    }
+
+    [Theory]
+    [InlineData(BadgePlacement.Below, 500 + 1 - 12)]
+    [InlineData(BadgePlacement.BelowRight, 502 + 3)]
+    [InlineData(BadgePlacement.BelowLeft, 500 - 3 - 24)]
+    public void NoRoomBelow_FallsBackAbove(BadgePlacement place, int x)
+    {
+        // 작업 영역 아래 끝에 붙은 caret(예: 최대화한 터미널의 마지막 줄). 밀어 올리면 배지가 caret 을 가린다.
+        var bottom = new Rectangle(500, 1015, 2, 20);   // Bottom=1035, 아래 남은 자리 5px
+        var p = BadgeLayout.Compute(In(bottom, place: place));
+        Assert.Equal(new Point(x, 1015 - 20 - 3), p);
     }
 
     [Fact]

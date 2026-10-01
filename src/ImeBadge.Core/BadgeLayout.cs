@@ -22,20 +22,25 @@ public static class BadgeLayout
         var caret = i.Caret;
         var bs = i.Badge;
         bool approx = caret.Height == 0;   // 근사 위치면 항상 아래쪽(위쪽은 입력창 내부라 글자를 가림)
+        bool center = i.Placement is BadgePlacement.Above or BadgePlacement.Below;
         bool left = i.Placement is BadgePlacement.AboveLeft or BadgePlacement.BelowLeft;
-        bool above = i.Placement is BadgePlacement.AboveRight or BadgePlacement.AboveLeft;
-        int x = left ? caret.Left - gap - bs.Width : caret.Right + gap;
+        bool above = i.Placement is BadgePlacement.AboveRight or BadgePlacement.AboveLeft or BadgePlacement.Above;
+        int centerX = caret.Left + caret.Width / 2 - bs.Width / 2;
+        int x = center ? centerX : left ? caret.Left - gap - bs.Width : caret.Right + gap;
 
         Point pos;
         if (i.Style == BadgeStyle.Underline)
-            pos = new Point(caret.Left + caret.Width / 2 - bs.Width / 2, caret.Bottom + 1);
+            pos = new Point(centerX, caret.Bottom + 1);
         else if (above && !approx)
             pos = new Point(x, caret.Top - bs.Height - gap);
         else
             pos = new Point(x, caret.Bottom + gap);
 
         var area = i.WorkArea;
+        int aboveY = caret.Top - bs.Height - gap;
         if (pos.Y < area.Top) pos.Y = caret.Bottom + gap;                // 위에 자리가 없으면 아래로
+        else if (pos.Y + bs.Height > area.Bottom && !approx && i.Style != BadgeStyle.Underline && aboveY >= area.Top)
+            pos.Y = aboveY;                                              // 아래에 자리가 없으면 위로(밀어 올리면 caret 을 가린다)
         if (left && pos.X < area.Left) pos.X = caret.Right + gap;        // 왼쪽에 자리가 없으면 오른쪽으로
         pos.X = Math.Max(area.Left, Math.Min(pos.X, area.Right - bs.Width));
         pos.Y = Math.Max(area.Top, Math.Min(pos.Y, area.Bottom - bs.Height));

@@ -7,7 +7,13 @@ using System.Text.Json.Serialization;
 namespace ImeBadge;
 
 public enum BadgeStyle { Box, Pill, Dot, Underline, DotFlash }
-public enum BadgePlacement { AboveRight, BelowRight, AboveLeft, BelowLeft }
+
+/// <summary>
+/// caret 기준 배지 자리. <see cref="Above"/>/<see cref="Below"/> 는 caret 바로 위·아래 가운데.
+/// 이 둘은 설정 파일의 "Placement" 에 그대로 쓰지 않는다(<see cref="Settings.Placement"/>): 구버전(1.11.0 까지)은
+/// 모르는 enum 이름을 읽으면 설정 파일 전체를 버린다.
+/// </summary>
+public enum BadgePlacement { AboveRight, BelowRight, AboveLeft, BelowLeft, Above, Below }
 
 /// <summary>
 /// 사용자 설정. JSON 으로 저장된다(<see cref="SettingsStore"/>).
@@ -16,8 +22,39 @@ public enum BadgePlacement { AboveRight, BelowRight, AboveLeft, BelowLeft }
 public sealed class Settings
 {
     // ── 모양 ──
+    [JsonConverter(typeof(LenientEnumConverter<BadgeStyle>))]
     public BadgeStyle Style { get; set; } = BadgeStyle.Pill;
-    public BadgePlacement Placement { get; set; } = BadgePlacement.AboveRight;
+
+    /// <summary>
+    /// 배지 자리. 설정 파일에는 <see cref="StoredPlacement"/>("Placement", 구버전도 아는 네 값)와
+    /// <see cref="PlacementCenter"/>(가운데 위치면 "above"/"below")로 나눠 저장한다. 구버전은 PlacementCenter 를 모르는 항목으로 무시하므로,
+    /// 되돌리면 "위"는 오른쪽 위, "아래"는 오른쪽 아래로 보이고 나머지 설정은 그대로 남는다(<see cref="Character"/> 와 같은 방식).
+    /// </summary>
+    [JsonIgnore]
+    public BadgePlacement Placement
+    {
+        get => PlacementCenter switch
+        {
+            CenterAbove => BadgePlacement.Above,
+            CenterBelow => BadgePlacement.Below,
+            _ => StoredPlacement,
+        };
+        set
+        {
+            PlacementCenter = value switch { BadgePlacement.Above => CenterAbove, BadgePlacement.Below => CenterBelow, _ => null };
+            StoredPlacement = value switch { BadgePlacement.Above => BadgePlacement.AboveRight, BadgePlacement.Below => BadgePlacement.BelowRight, _ => value };
+        }
+    }
+
+    /// <summary>설정 파일의 "Placement". 코드에서는 <see cref="Placement"/> 를 쓴다.</summary>
+    [JsonPropertyName("Placement"), JsonConverter(typeof(LenientEnumConverter<BadgePlacement>))]
+    public BadgePlacement StoredPlacement { get; set; } = BadgePlacement.AboveRight;
+
+    /// <summary>설정 파일의 "PlacementCenter": 커서 가운데 위치면 "above"/"below", 아니면 없음. 코드에서는 <see cref="Placement"/> 를 쓴다.</summary>
+    public string? PlacementCenter { get; set; }
+
+    const string CenterAbove = "above", CenterBelow = "below";
+
     public int SizePercent { get; set; } = 100;
     public int OpacityPercent { get; set; } = 100;
     /// <summary>한글 상태 배지 색. "#RRGGBB".</summary>
@@ -57,6 +94,7 @@ public sealed class Settings
     /// <summary>트레이 아이콘에 현재 한/영 상태를 보여 준다("한"/"A"). 끄면 항상 기본 아이콘.</summary>
     public bool TrayShowsState { get; set; } = true;
     /// <summary>설정 창·트레이 메뉴·알림의 언어. Auto 면 Windows 표시 언어를 따른다(<see cref="Strings"/>).</summary>
+    [JsonConverter(typeof(LenientEnumConverter<UiLanguage>))]
     public UiLanguage Language { get; set; } = UiLanguage.Auto;
 
     // ── 업데이트 ──
@@ -76,7 +114,10 @@ public sealed class Settings
         OpacityPercent = Math.Clamp(OpacityPercent, 30, 100);
         PollIntervalMs = Math.Clamp(PollIntervalMs, 50, 1000);
         if (!Enum.IsDefined(Style)) Style = BadgeStyle.Pill;
-        if (!Enum.IsDefined(Placement)) Placement = BadgePlacement.AboveRight;
+        var center = PlacementCenter?.Trim().ToLowerInvariant();
+        PlacementCenter = center is CenterAbove or CenterBelow ? center : null;
+        var placement = Placement;
+        Placement = Enum.IsDefined(placement) ? placement : BadgePlacement.AboveRight;   // 다시 넣어 저장 형식(Placement + PlacementCenter)을 맞춘다
         if (!Enum.IsDefined(Language)) Language = UiLanguage.Auto;
         if (!ColorHex.TryParse(HangulColor, out _)) HangulColor = DefaultHangulColor;
         if (!ColorHex.TryParse(EnglishColor, out _)) EnglishColor = DefaultEnglishColor;
@@ -120,6 +161,33 @@ public sealed class Settings
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(Settings))]
 public sealed partial class SettingsJsonContext : JsonSerializerContext { }
+
+/// <summary>
+/// 열거형 설정을 이름 문자열로 읽고 쓴다. 모르는 이름(나중 버전이 더한 값, 손으로 고친 오타)을 만나도 예외를 내지 않고
+/// 정의되지 않은 값(-1)으로 읽는다. 그러면 <see cref="Settings.Normalize"/> 가 그 항목만 기본값으로 되돌린다.
+/// 기본 변환기는 예외를 내고, 그러면 설정 파일 전체가 버려져 크기·색·제외 앱까지 모두 초기화된다.
+/// </summary>
+public sealed class LenientEnumConverter<T> : JsonConverter<T> where T : struct, Enum
+{
+    /// <summary>모르는 값. 설정 열거형에는 음수 값이 없다.</summary>
+    static readonly T Unknown = (T)Enum.ToObject(typeof(T), -1);
+
+    public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        switch (reader.TokenType)
+        {
+            case JsonTokenType.String:
+                return Enum.TryParse(reader.GetString(), ignoreCase: true, out T named) && Enum.IsDefined(named) ? named : Unknown;
+            case JsonTokenType.Number:
+                return reader.TryGetInt32(out int n) && Enum.IsDefined(typeof(T), n) ? (T)Enum.ToObject(typeof(T), n) : Unknown;
+            default:
+                reader.Skip();   // 객체·배열이면 끝까지 건너뛴다
+                return Unknown;
+        }
+    }
+
+    public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options) => writer.WriteStringValue(value.ToString());
+}
 
 /// <summary>설정 파일을 읽고 쓴다. 예전 위치(exe 옆)의 파일이 있으면 첫 실행 때 새 위치로 옮겨 온다.</summary>
 public sealed class SettingsStore

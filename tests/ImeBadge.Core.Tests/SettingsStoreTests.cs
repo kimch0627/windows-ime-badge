@@ -86,6 +86,56 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(UiLanguage.Auto, s.Language);
     }
 
+    [Theory]
+    [InlineData(BadgePlacement.Above, "AboveRight", "above")]
+    [InlineData(BadgePlacement.Below, "BelowRight", "below")]
+    public void Save_CenterPlacement_WritesValueOldVersionsCanRead(BadgePlacement place, string stored, string center)
+    {
+        // 1.11.0 까지는 모르는 enum 이름이 있으면 설정 파일 전체를 버린다. "Placement" 에는 그 버전들이 아는 값만 쓴다.
+        var store = new SettingsStore(P("settings.json"));
+        Assert.True(store.Save(new Settings { Placement = place, SizePercent = 130 }));
+        string json = File.ReadAllText(P("settings.json"));
+        Assert.Contains($"\"Placement\": \"{stored}\"", json);
+        Assert.Contains($"\"PlacementCenter\": \"{center}\"", json);
+
+        var back = store.Load();
+        Assert.Equal(place, back.Placement);
+        Assert.Equal(130, back.SizePercent);
+    }
+
+    [Fact]
+    public void Save_CornerPlacement_OmitsPlacementCenter()
+    {
+        var store = new SettingsStore(P("settings.json"));
+        var s = new Settings { Placement = BadgePlacement.Above };
+        s.Placement = BadgePlacement.BelowLeft;
+        Assert.True(store.Save(s));
+        Assert.DoesNotContain("PlacementCenter", File.ReadAllText(P("settings.json")));
+        Assert.Equal(BadgePlacement.BelowLeft, store.Load().Placement);
+    }
+
+    [Fact]
+    public void Load_UnknownEnumNames_ResetOnlyThoseSettings()
+    {
+        // 나중 버전이 더한 값이나 손으로 고친 오타. 그 항목만 기본값이 되고 나머지 설정은 그대로 남는다.
+        File.WriteAllText(P("settings.json"), """{ "Style": "Hexagon", "Placement": "Sideways", "Language": "Klingon", "SizePercent": 150, "ExcludedProcesses": ["mstsc"] }""");
+        var s = new SettingsStore(P("settings.json")).Load();
+        Assert.Equal(BadgeStyle.Pill, s.Style);
+        Assert.Equal(BadgePlacement.AboveRight, s.Placement);
+        Assert.Equal(UiLanguage.Auto, s.Language);
+        Assert.Equal(150, s.SizePercent);
+        Assert.Equal(new[] { "mstsc" }, s.ExcludedProcesses);
+    }
+
+    [Fact]
+    public void Load_UnknownPlacementCenter_UsesStoredPlacement()
+    {
+        File.WriteAllText(P("settings.json"), """{ "Placement": "BelowLeft", "PlacementCenter": "middle" }""");
+        var s = new SettingsStore(P("settings.json")).Load();
+        Assert.Equal(BadgePlacement.BelowLeft, s.Placement);
+        Assert.Null(s.PlacementCenter);
+    }
+
     [Fact]
     public void Load_MigratesLegacyFile_AndKeepsLegacy()
     {
@@ -247,10 +297,11 @@ public sealed class SettingsStoreTests : IDisposable
     [Fact]
     public void Import_NormalizesOutOfRange()
     {
-        File.WriteAllText(P("wild.json"), """{ "SizePercent": 9999, "Theme": "nope" }""");
+        File.WriteAllText(P("wild.json"), """{ "SizePercent": 9999, "Theme": "nope", "Placement": "Sideways" }""");
         var s = SettingsStore.Import(P("wild.json"));
         Assert.Equal(300, s.SizePercent);
         Assert.Equal(DesignThemes.ClassicId, s.Theme);
+        Assert.Equal(BadgePlacement.AboveRight, s.Placement);
     }
 
     [Theory]
