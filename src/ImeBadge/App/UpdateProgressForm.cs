@@ -31,7 +31,7 @@ sealed class UpdateProgressForm : Form
         AutoSize = true; AutoSizeMode = AutoSizeMode.GrowAndShrink;
         Padding = new Padding(24);
 
-        // AutoSize 폼에서는 Dock 을 쓰지 않는다(AboutForm 의 설명 참고).
+        // AutoSize 폼에서는 Dock 을 쓰지 않는다. AutoSize 부모는 자식 크기로, Dock 된 자식은 부모 크기로 자기 크기를 정해 서로를 기다리다 폭 0 으로 접힌다.
         var root = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Location = new Point(24, 24) };
         _status = new Label { Text = Strings.Get("update.preparing"), AutoSize = true, Margin = new Padding(0, 0, 0, 12), MaximumSize = new Size(380, 0) };
         _bar = new ProgressStrip { Width = 380, Margin = new Padding(0, 0, 0, 16) };

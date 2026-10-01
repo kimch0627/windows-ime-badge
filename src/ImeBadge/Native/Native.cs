@@ -115,6 +115,8 @@ static class Native
 
     // ── 창 꾸밈(DWM): 어두운 제목 표시줄, 둥근 모서리 ──
     [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+    /// <summary>창의 비주얼 스타일을 바꾼다. "DarkMode_Explorer" 를 주면 Windows 10 1809 이상에서 스크롤바가 어두운 모양으로 그려진다.</summary>
+    [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)] public static extern int SetWindowTheme(IntPtr hwnd, string? subAppName, string? subIdList);
     public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;          // Windows 10 20H1+ (그 전 빌드는 19)
     public const int DWMWA_USE_IMMERSIVE_DARK_MODE_OLD = 19;
     public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;         // Windows 11

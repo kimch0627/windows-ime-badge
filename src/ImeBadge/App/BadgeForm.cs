@@ -69,7 +69,6 @@ sealed class BadgeForm : Form
     UpdateInfo? _pendingUpdate;
     CancellationTokenSource? _updateCts;
     SettingsForm? _settingsForm;
-    AboutForm? _aboutForm;
     UpdateProgressForm? _updateProgress;
 
     ToolStripMenuItem _pauseItem = null!, _autostartItem = null!;
@@ -280,7 +279,7 @@ sealed class BadgeForm : Form
         var update = new ToolStripMenuItem(Strings.Get("menu.checkUpdates"), null, (_, _) => CheckForUpdates(manual: true));
         _glyphs[update] = MenuIcons.Update;
         menu.Items.Add(update);
-        var about = new ToolStripMenuItem(Strings.Get("menu.about"), null, (_, _) => OpenAbout());
+        var about = new ToolStripMenuItem(Strings.Get("menu.about"), null, (_, _) => OpenSettings(SettingsPage.About));
         _glyphs[about] = MenuIcons.Info;
         menu.Items.Add(about);
         menu.Items.Add(new ToolStripSeparator());
@@ -603,7 +602,6 @@ sealed class BadgeForm : Form
         old?.Dispose();
         ApplyHotkey();                           // 새 메뉴의 "일시 중지" 항목에 단축키 표시
         UpdateTray(_trayState, _trayCaps, force: true);
-        if (_aboutForm is { IsDisposed: false }) _aboutForm.Close();
     }
 
     void ResetRenderKey() => _renderKey = (ImeState.Unknown, false, false, (BadgeStyle)(-1), 0, -1, "", "", "", "");
@@ -617,10 +615,17 @@ sealed class BadgeForm : Form
         Poll();
     }
 
-    void OpenSettings()
+    /// <summary>설정 창을 연다. 이미 열려 있으면 앞으로 가져오고, 페이지를 정했으면(트레이 메뉴의 "정보") 그 페이지로 옮긴다.</summary>
+    void OpenSettings(SettingsPage? page = null)
     {
-        if (_settingsForm is { IsDisposed: false }) { _settingsForm.Activate(); return; }
-        ShowSettings(new SettingsForm(_settings));
+        if (_settingsForm is { IsDisposed: false } open)
+        {
+            if (page is { } p) open.ShowPage(p);
+            if (open.WindowState == FormWindowState.Minimized) open.WindowState = FormWindowState.Normal;
+            open.Activate();
+            return;
+        }
+        ShowSettings(new SettingsForm(_settings, _paths, () => CheckForUpdates(manual: true), page ?? SettingsPage.Appearance));
     }
 
     void ShowSettings(SettingsForm form)
@@ -640,15 +645,6 @@ sealed class BadgeForm : Form
         });
         form.Show();
         form.Activate();
-    }
-
-    void OpenAbout()
-    {
-        if (_aboutForm is { IsDisposed: false }) { _aboutForm.Activate(); return; }
-        _aboutForm = new AboutForm(_paths, _settings, () => CheckForUpdates(manual: true));
-        _aboutForm.FormClosed += (_, _) => { _aboutForm?.Dispose(); _aboutForm = null; };
-        _aboutForm.Show();
-        _aboutForm.Activate();
     }
 
     // ── 업데이트 확인 ──
@@ -696,7 +692,7 @@ sealed class BadgeForm : Form
         // 개발 빌드(0.0.0)는 자기 자리(bin\Debug 등)를 릴리스 파일로 덮어쓰지 않는다. 다운로드 페이지만 안내한다.
         if (!AppVersion.IsDevBuild)
             actions.Add((Strings.Get("update.upgrade"), Strings.Get("update.upgrade.note"), () => StartAutoUpdate(info)));
-        actions.Add((Strings.Get("update.open"), Strings.Get("update.open.note"), () => AboutForm.Open(info.Url)));
+        actions.Add((Strings.Get("update.open"), Strings.Get("update.open.note"), () => AboutInfo.Open(info.Url)));
         actions.Add((Strings.Get("update.later"), Strings.Get("update.later.note"), () => { }));
         actions.Add((Strings.Get("update.skip"), Strings.Format("update.skip.note", info.Tag), () =>
         {
@@ -803,7 +799,7 @@ sealed class BadgeForm : Form
             string.IsNullOrWhiteSpace(detail) ? text : detail + "\n\n" + text, TaskDialogIcon.Warning,
             (Strings.Get("update.open"), Strings.Get("update.open.note")),
             (Strings.Get("dialog.close"), null));
-        if (choice == 0) AboutForm.Open(info.Url);
+        if (choice == 0) AboutInfo.Open(info.Url);
     }
 
     /// <summary>바이트를 "12.3"(MB) 로. 진행 표시에만 쓴다.</summary>
@@ -1087,7 +1083,6 @@ sealed class BadgeForm : Form
             _lastBmp?.Dispose();
             _pulseBase?.Dispose();
             _settingsForm?.Dispose();
-            _aboutForm?.Dispose();
             _updateProgress?.Dispose();
             _tray.Visible = false;
             _tray.Icon = Icons.App;   // 캐시한 아이콘을 해제하기 전에 참조를 끊는다

@@ -49,6 +49,10 @@ static class Theme
         get
         {
             if (SystemInformation.HighContrast) return false;
+#if DEBUG
+            // 개발 빌드 전용: IMEBADGE_THEME=light|dark 로 Windows 설정(다른 앱까지 바뀐다)을 건드리지 않고 밝게/어둡게를 확인한다.
+            switch (Environment.GetEnvironmentVariable("IMEBADGE_THEME")) { case "light": return false; case "dark": return true; }
+#endif
             try
             {
                 using var k = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
@@ -63,10 +67,31 @@ static class Theme
     /// <summary>대화상자 글꼴. 시스템 설정(한국어 Windows 는 맑은 고딕 9pt, 영어는 Segoe UI 9pt)을 따른다.</summary>
     public static Font DialogFont => SystemFonts.MessageBoxFont ?? new Font(BadgeRenderer.FontFamily, 9f);
 
-    // ── 타이포 위계: 창 제목 > 카드 제목 > 본문 > 힌트 ──
-    public static Font TitleFont(Font body) => new(body.FontFamily, body.Size * 1.55f, FontStyle.Bold);
-    public static Font CardTitleFont(Font body) => new(body.FontFamily, body.Size * 1.1f, FontStyle.Bold);
+    // ── 타이포 위계: 페이지 제목 > 소제목 > 본문 > 힌트 ──
+    public static Font PageTitleFont(Font body) => new(body.FontFamily, body.Size * 1.9f, FontStyle.Bold);
+    public static Font SectionFont(Font body) => new(body.FontFamily, body.Size, FontStyle.Bold);
     public static Font HintFont(Font body) => new(body.FontFamily, body.Size * 0.92f);
+
+    /// <summary>
+    /// 아이콘 글꼴 이름. Windows 11 은 Segoe Fluent Icons, Windows 10 은 Segoe MDL2 Assets 이고 두 글꼴은 같은 코드에 같은 뜻의 모양이 있다.
+    /// 둘 다 없으면(드묾) null 이고, 아이콘 없이 글자만 보인다.
+    /// </summary>
+    public static readonly string? IconFontName = PickFont("Segoe Fluent Icons", "Segoe MDL2 Assets");
+
+    public static bool HasIconFont => IconFontName is not null;
+
+    /// <summary>아이콘 글꼴을 픽셀 크기로. 쓰는 쪽이 Dispose 한다. 아이콘 글꼴이 없으면 null.</summary>
+    public static Font? IconFont(int px) => IconFontName is null ? null : new Font(IconFontName, Math.Max(1, px), FontStyle.Regular, GraphicsUnit.Pixel);
+
+    static string? PickFont(params string[] names)
+    {
+        foreach (var n in names)
+        {
+            try { using var f = new Font(n, 10f); if (string.Equals(f.Name, n, StringComparison.OrdinalIgnoreCase)) return n; }
+            catch { }
+        }
+        return null;
+    }
 
     /// <summary>창과 그 안의 모든 컨트롤에 테마 색을 입힌다. 고대비 모드면 시스템 색을 그대로 둔다.</summary>
     public static void Apply(Form form)
@@ -84,10 +109,18 @@ static class Theme
     {
         switch (c)
         {
-            case CardGroupBox card:
+            case SettingsCard card:   // Panel 보다 먼저: 카드 안쪽은 카드 표면색
                 card.Palette = p;
                 card.BackColor = p.Card; card.ForeColor = p.Text;
                 bg = p.Card;
+                break;
+            case InputFrame frame:    // Panel 보다 먼저: 안쪽 입력칸은 테두리 없이 틀이 칠한다
+                frame.Palette = p;
+                frame.BackColor = bg;
+                return;
+            case CardStack stack:
+                stack.BackColor = bg;
+                stack.DarkScrollBars = p.Dark;
                 break;
             case ThemedControl themed:
                 themed.Palette = p;
@@ -172,71 +205,6 @@ static class Theme
     /// <summary>트레이 메뉴 렌더러. 그라데이션 없는 평면(Windows 11 풍)이며 테마 색을 따른다.</summary>
     public static ToolStripRenderer CreateMenuRenderer() =>
         SystemInformation.HighContrast ? new ToolStripSystemRenderer() : new FlatMenuRenderer(Current);
-}
-
-/// <summary>
-/// Windows 11 "카드" 모양의 그룹 상자. 제목(굵게)과 한 줄 설명(보조색)을 위에 쓰고 그 아래에 둥근 테두리 상자를 그린다.
-/// 기본 GroupBox 는 테마 엔진이 밝은 회색 선을 그려 어두운 배경에서 어색하고, 제목이 선 위에 걸쳐 있는 옛 모양이다.
-/// 자식 컨트롤은 <see cref="ContentOrigin"/> 에서 시작하도록 놓는다.
-/// </summary>
-sealed class CardGroupBox : GroupBox
-{
-    public Theme.Palette Palette { get; set; } = Theme.Palette.Light;
-    public string Description { get; set; } = "";
-
-    const int Inset = 16;
-
-    /// <summary>제목(과 설명)이 차지하는 높이. 테두리 상자는 이 아래에서 시작한다.</summary>
-    int HeaderHeight => Description.Length > 0 ? 44 : 26;
-
-    /// <summary>자식 컨트롤이 시작해야 하는 위치(상자 안쪽 여백 포함).</summary>
-    public Point ContentOrigin => new(Inset, HeaderHeight + Inset);
-
-    public CardGroupBox()
-    {
-        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
-    }
-
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        var g = e.Graphics;
-        var p = Palette;
-        var outside = Parent?.BackColor ?? p.Window;
-        g.Clear(outside);
-        g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
-
-        using var titleFont = Theme.CardTitleFont(Font);
-        TextRenderer.DrawText(g, Text, titleFont, new Rectangle(2, 0, Width - 4, 24), ForeColor,
-            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
-        if (Description.Length > 0)
-        {
-            using var hintFont = Theme.HintFont(Font);
-            TextRenderer.DrawText(g, Description, hintFont, new Rectangle(2, 22, Width - 4, 20), p.SubtleText,
-                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
-        }
-
-        var box = new Rectangle(0, HeaderHeight, Width - 1, Height - HeaderHeight - 1);
-        if (box.Width <= 0 || box.Height <= 0) return;
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        using var path = Rounded(box, p.Radius);
-        using var fill = new SolidBrush(BackColor);
-        // 고대비 모드에서는 테마 색을 입히지 않으므로 테두리도 시스템 색으로.
-        using var pen = new Pen(SystemInformation.HighContrast ? SystemColors.ControlDark : p.Border);
-        g.FillPath(fill, path);
-        g.DrawPath(pen, path);
-    }
-
-    static GraphicsPath Rounded(Rectangle r, int radius)
-    {
-        var path = new GraphicsPath();
-        int d = Math.Min(radius * 2, Math.Min(r.Width, r.Height));
-        path.AddArc(r.Left, r.Top, d, d, 180, 90);
-        path.AddArc(r.Right - d, r.Top, d, d, 270, 90);
-        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
-        path.AddArc(r.Left, r.Bottom - d, d, d, 90, 90);
-        path.CloseFigure();
-        return path;
-    }
 }
 
 /// <summary>평면 메뉴 렌더러. 색 표(<see cref="FlatColorTable"/>)로 배경·선택·구분선을 정하고, 글자·화살표·체크 표시 색을 테마에 맞춘다.</summary>
@@ -354,17 +322,7 @@ static class MenuIcons
     public const string Pause = "", Play = "", Settings = "", Shape = "", Place = "", Size = "",
         Opacity = "", Autostart = "", Update = "", Info = "", Exit = "";
 
-    static readonly string? FontName = Pick("Segoe Fluent Icons", "Segoe MDL2 Assets");
-
-    static string? Pick(params string[] names)
-    {
-        foreach (var n in names)
-        {
-            try { using var f = new Font(n, 10f); if (string.Equals(f.Name, n, StringComparison.OrdinalIgnoreCase)) return n; }
-            catch { }
-        }
-        return null;
-    }
+    static string? FontName => ImeBadge.Theme.IconFontName;   // 이 클래스의 Theme 는 글리프 상수라 전체 이름으로
 
     public static Bitmap? Glyph(string glyph, Color color, Size size)
     {
