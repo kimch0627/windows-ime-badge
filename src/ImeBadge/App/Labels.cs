@@ -33,6 +33,8 @@ static class Labels
         (Strings.Get("place.belowRight"), BadgePlacement.BelowRight),
         (Strings.Get("place.aboveLeft"), BadgePlacement.AboveLeft),
         (Strings.Get("place.belowLeft"), BadgePlacement.BelowLeft),
+        (Strings.Get("place.above"), BadgePlacement.Above),
+        (Strings.Get("place.below"), BadgePlacement.Below),
     };
 
     /// <summary>트레이 메뉴의 크기 프리셋. 설정 창에서는 50~300% 어느 값이든 고를 수 있다.</summary>

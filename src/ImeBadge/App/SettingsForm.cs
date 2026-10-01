@@ -675,7 +675,8 @@ sealed class SettingsForm : Form
     static string ShortPlacement(BadgePlacement p) => Strings.Get(p switch
     {
         BadgePlacement.AboveRight => "place.short.aboveRight", BadgePlacement.BelowRight => "place.short.belowRight",
-        BadgePlacement.AboveLeft => "place.short.aboveLeft", _ => "place.short.belowLeft",
+        BadgePlacement.AboveLeft => "place.short.aboveLeft", BadgePlacement.BelowLeft => "place.short.belowLeft",
+        BadgePlacement.Above => "place.short.above", _ => "place.short.below",
     });
 
     /// <summary>테마 타일: 그 테마의 창 바탕 위에 한글·영문 배지를 나란히(테마 기본색, 실제 렌더러).</summary>
@@ -722,14 +723,23 @@ sealed class SettingsForm : Form
         g.DrawImage(bmp, new Rectangle(pos, bmp.Size), new Rectangle(Point.Empty, bmp.Size), GraphicsUnit.Pixel);
     }
 
-    /// <summary>위치 타일: 가운데 caret 을 두고 그 위치에 점 배지를 놓는다. 어디에 뜨는지 한눈에 보인다.</summary>
+    /// <summary>
+    /// 위치 타일: 가운데 caret 을 두고 그 위치에 점 배지를 놓는다. 어디에 뜨는지 한눈에 보인다.
+    /// 타일 그림 칸은 낮아서 타일 안에서 자리를 정하면 "위에 자리가 없으면 아래로" 가 끼어들어 위·아래 타일이 똑같아진다.
+    /// 그래서 넓은 영역에서 자리를 정한 뒤 caret 과 배지를 묶어 타일 세로 가운데로 옮긴다.
+    /// </summary>
     void DrawPlacementTile(Graphics g, RectangleF r, Theme.Palette p, BadgePlacement placement)
     {
         float dpi = DeviceDpi / 96f;
-        var caret = new Rectangle((int)(r.Left + r.Width / 2), (int)(r.Top + r.Height / 2 - 8 * dpi), 1, (int)(16 * dpi));
-        using (var pen = new Pen(p.Text, Math.Max(1f, dpi))) g.DrawLine(pen, caret.Left, caret.Top, caret.Left, caret.Bottom);
         using var bmp = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Dot, dpi, BadgeTheme.From(_draft) with { Character = BadgeCharacters.None }, 100);
-        var pos = BadgeLayout.Compute(new LayoutInput(caret, bmp.Size, BadgeStyle.Dot, placement, dpi, Rectangle.Round(r)));
+        var caret = new Rectangle((int)(r.Left + r.Width / 2), 0, 1, (int)(12 * dpi));
+        var room = Rectangle.Inflate(caret, 1000, 1000);
+        var pos = BadgeLayout.Compute(new LayoutInput(caret, bmp.Size, BadgeStyle.Dot, placement, dpi, room));
+        int top = Math.Min(caret.Top, pos.Y), bottom = Math.Max(caret.Bottom, pos.Y + bmp.Height);
+        int dy = (int)Math.Round(r.Top + (r.Height - (bottom - top)) / 2f) - top;
+        caret.Offset(0, dy);
+        pos.Offset(0, dy);
+        using (var pen = new Pen(p.Text, Math.Max(1f, dpi))) g.DrawLine(pen, caret.Left, caret.Top, caret.Left, caret.Bottom);
         g.DrawImage(bmp, new Rectangle(pos, bmp.Size), new Rectangle(Point.Empty, bmp.Size), GraphicsUnit.Pixel);
     }
 
