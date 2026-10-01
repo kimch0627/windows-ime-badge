@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-10-01
+
+배지 위치에 커서 바로 **위·아래**를 더하고, 화면 가장자리에서 배지가 커서를 가리거나 반대쪽으로 튀던 문제를 고친 릴리스입니다.
+설정 파일은 예전 버전과 그대로 호환되고, 1.11.0 이하로 되돌려도 설정이 남습니다.
+
 ### 추가
 - 배지 위치에 **"위" / "아래"**. 배지를 커서 바로 위나 바로 아래 가운데에 놓습니다. 위나 아래에 자리가 없으면 반대쪽으로 옮깁니다.
   설정 창의 위치 타일과 트레이 메뉴의 "위치" 에서 고를 수 있습니다.
@@ -468,7 +473,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.11.0...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.12.0...HEAD
+[1.12.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.8.1...v1.9.0
