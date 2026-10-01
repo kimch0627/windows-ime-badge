@@ -40,6 +40,11 @@ sealed class SettingsForm : Form
     ToggleSwitch _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!, _shiftHold = null!;
     HotkeyBox _hotkeyBox = null!;
     PreviewPanel _preview = null!;
+    SettingsCard _previewCard = null!;
+    AccentButton _previewToggle = null!;
+    PinnedCardHost _previewHost = null!;
+    /// <summary>미리보기를 접었는가. 앱이 도는 동안 기억해 설정 창을 다시 열어도(언어를 바꿔 새로 열 때 포함) 그대로다.</summary>
+    static bool _previewCollapsed;
     SettingsCard _updateCard = null!, _diagCard = null!;
     SectionHeader _excludeHeader = null!;
     CardStack _excludePage = null!;
@@ -48,6 +53,7 @@ sealed class SettingsForm : Form
     NavList _nav = null!;
     PageHeader _header = null!;
     CommandBar _commands = null!;
+    Panel _content = null!;
     readonly CardStack[] _pages = new CardStack[Pages.Length];
 
     readonly ToolTip _tips = new() { AutoPopDelay = 12000 };
@@ -170,6 +176,7 @@ sealed class SettingsForm : Form
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
+        PlacePreview();   // 창 크기가 정해지고 모든 컨트롤이 보이게 된 뒤에 다시 정한다
         if (_restoreScroll > 0) CurrentStack.AutoScrollPosition = new Point(0, _restoreScroll);
         if (_focusLanguage) _language.Focus();
     }
@@ -256,7 +263,7 @@ sealed class SettingsForm : Form
         ok.Click += (_, _) => { Apply(); DialogResult = DialogResult.OK; Close(); };
         cancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
         AcceptButton = ok; CancelButton = cancel;
-        _commands = new CommandBar(Strings.Get("settings.hint.clean"), cancel, ok) { Dock = DockStyle.Bottom, Height = CommandHeight, TabIndex = 1 };
+        _commands = new CommandBar(Strings.Get("settings.hint.clean"), cancel, ok) { Dock = DockStyle.Bottom, Height = CommandHeight, TabIndex = 2 };
 
         _pages[(int)SettingsPage.Appearance] = BuildAppearancePage();
         _pages[(int)SettingsPage.Display] = BuildDisplayPage();
@@ -265,12 +272,16 @@ sealed class SettingsForm : Form
         _pages[(int)SettingsPage.About] = BuildAboutPage();
 
         _header = new PageHeader { Dock = DockStyle.Top };
-        var content = new Panel { Dock = DockStyle.Fill, TabIndex = 1 };
-        foreach (var p in _pages) { p.Dock = DockStyle.Fill; p.Visible = false; p.TabIndex = 0; content.Controls.Add(p); }
-        content.Controls.Add(_header);
-        content.Controls.Add(_commands);
+        _content = new Panel { Dock = DockStyle.Fill, TabIndex = 1 };
+        foreach (var p in _pages) { p.Dock = DockStyle.Fill; p.Visible = false; p.TabIndex = 1; _content.Controls.Add(p); }
+        // 고정 미리보기는 페이지(Fill)보다 나중에, 제목보다 먼저 넣는다: 제목 바로 아래에 붙고 페이지가 그만큼 줄어든다.
+        _previewHost.TabIndex = 0;
+        _content.Controls.Add(_previewHost);
+        _content.Controls.Add(_header);
+        _content.Controls.Add(_commands);
+        _content.Resize += (_, _) => PlacePreview();
 
-        Controls.Add(content);
+        Controls.Add(_content);
         Controls.Add(navPane);
 
         _nav.SelectedIndex = (int)page;
@@ -290,6 +301,7 @@ sealed class SettingsForm : Form
         var page = _pages[index];
         page.Visible = true;
         page.ScrollToTop();
+        PlacePreview();
         page.PerformLayout();
         if (index == (int)SettingsPage.About) RefreshUpdateCard();
     }
@@ -298,14 +310,20 @@ sealed class SettingsForm : Form
     {
         var page = new CardStack();
 
+        // 미리보기: 모양 설정은 모두 미리보기에 바로 반영되므로, 아래 카드를 스크롤해도 보이도록 페이지 제목 아래에 고정한다.
+        // 창이 낮아 카드 자리가 모자라면 예전처럼 카드들 맨 위에 두고 함께 스크롤한다(PlacePreview). [접기]로 제목 줄만 남길 수 있다.
         _preview = new PreviewPanel { Height = PreviewHeight, Tag = "custom-paint" };
         _preview.Paint += (_, e) => PaintPreview(e.Graphics);
         _tips.SetToolTip(_preview, Strings.Get("preview.tip"));
-        page.Controls.Add(new SettingsCard
+        _previewToggle = new AccentButton { AutoSize = true };
+        _previewToggle.Click += (_, _) => { _previewCollapsed = !_previewCollapsed; ApplyPreviewCollapsed(); PlacePreview(); };
+        _previewCard = new SettingsCard
         {
-            Glyph = Glyphs.Preview, Title = Strings.Get("group.preview"), Description = Strings.Get("group.preview.desc"),
-            StretchBody = true, Body = _preview,
-        });
+            Glyph = Glyphs.Preview, Title = Strings.Get("group.preview"), CompactHeader = true, StretchBody = true, Action = _previewToggle,
+        };
+        ApplyPreviewCollapsed();
+        _previewHost = new PinnedCardHost { Dock = DockStyle.Top };
+        _previewHost.Controls.Add(_previewCard);
 
         page.Controls.Add(Section("section.themeShape"));
         // 테마: 배지 색·질감과 이 창의 색을 한 벌로 바꾼다. 타일에는 그 테마의 한/영 배지를 실제 렌더러로 그린다.
@@ -930,14 +948,19 @@ sealed class SettingsForm : Form
     // ── 미리보기 ──
     // 작은 편집기처럼 여러 줄의 글을 놓고, 그중 두 줄(한글·영문) 끝에 caret 과 배지를 그린다.
     // 옆줄 글자가 있어야 배지가 무엇을 얼마나 가리는지(위치)와 얼마나 비치는지(불투명도)가 눈에 보인다.
+    // 페이지 제목 아래에 고정하므로 칸을 낮게 두고, 편집기의 일부만 보여 준다(PreviewOffset 이 caret 줄과 배지가 보이게 글을 옮긴다).
     // 아래 값은 96 DPI 기준 픽셀이고 그릴 때 배율을 곱한다.
-    const int PreviewHeight = 240;
+    const int PreviewHeight = 140;
     const int PreviewRowPitch = 28;      // 줄 간격. 100% 배지(약 26px)가 caret 줄과 옆줄 사이에 놓이며 옆줄 글자를 덮는다
-    const int PreviewTopMargin = 26, PreviewLeftMargin = 18;   // 위쪽은 캡션("밝은 배경") 자리
+    const int PreviewLeftMargin = 18;
+    const int PreviewEdge = 4;           // 배지가 칸 위아래 끝에 붙지 않게 남기는 여백
+    /// <summary>미리보기를 고정한 뒤에도 아래 카드가 이만큼은 보여야 고정한다. 이보다 낮은 창에서는 미리보기도 함께 스크롤한다.</summary>
+    const int MinCardRoom = 240;
 
     /// <summary>
     /// 미리보기 줄. 상태가 있는 줄은 글자 끝에 caret 과 그 상태의 배지를 그리고, 나머지는 옅은 색 채움 글이다.
-    /// caret 줄 위아래로 두 줄씩 두어 200% 크기까지는 배지가 잘리지 않고 고른 위치("위"·"아래")에 그대로 놓인다.
+    /// 두 caret 줄 사이와 위아래에 채움 줄을 두어 "위"·"아래" 어느 위치든 배지가 덮는 옆줄 글자가 있다.
+    /// 칸보다 줄이 많아 위아래 줄은 잘려 보인다.
     /// </summary>
     static readonly (string text, ImeState? state)[] PreviewRows =
     {
@@ -945,7 +968,6 @@ sealed class SettingsForm : Form
         ("over the lazy dog", null),
         ("안녕하세요", ImeState.Hangul),
         ("다람쥐 헌 쳇바퀴에", null),
-        ("타고파 abc def ghi", null),
         ("hello world", ImeState.English),
         ("가나다라 마바사아", null),
         ("abcd efgh ijkl mnop", null),
@@ -958,6 +980,39 @@ sealed class SettingsForm : Form
     /// <summary>미리보기에 그릴 모양. DotFlash 는 바뀐 직후엔 글자 배지, 1.5초 뒤엔 점(<see cref="_flashing"/>).</summary>
     BadgeStyle PreviewStyle => _draft.Style == BadgeStyle.DotFlash ? (_flashing ? BadgeStyle.Pill : BadgeStyle.Dot) : _draft.Style;
 
+    /// <summary>미리보기 카드를 접거나 편다. 접으면 그림을 빼고 제목 줄과 [펼치기]만 남는다.</summary>
+    void ApplyPreviewCollapsed()
+    {
+        bool collapsed = _previewCollapsed;
+        // 글자를 먼저 바꾼다: 몸통을 바꿀 때 카드가 단추 크기를 다시 재어 자리를 잡는다.
+        _previewToggle.Text = Strings.Get(collapsed ? "preview.expand" : "preview.collapse");
+        _previewToggle.AccessibleName = Strings.Get(collapsed ? "preview.expand.name" : "preview.collapse.name");
+        _previewCard.Body = collapsed ? null : _preview;
+    }
+
+    /// <summary>
+    /// 미리보기를 모양 페이지 제목 아래에 고정할지, 카드들 맨 위에 두고 함께 스크롤할지 정한다. 창 크기가 바뀌거나 접고 펼 때 부른다.
+    /// 고정하면 아래 카드가 보이는 높이가 그만큼 줄어든다. 남는 높이가 <see cref="MinCardRoom"/> 보다 작으면(낮은 창) 고정하지 않는다.
+    /// 접은 미리보기는 낮아서 거의 늘 고정된다.
+    /// </summary>
+    void PlacePreview()
+    {
+        if (_previewCard is null || _content is null) return;
+        int room = _content.ClientSize.Height - _header.Height - _commands.Height;
+        bool pin = room - _previewHost.HeightFor(_previewCard, _content.ClientSize.Width) >= LogicalToDeviceUnits(MinCardRoom);
+        var stack = _pages[(int)SettingsPage.Appearance];
+        Control target = pin ? _previewHost : stack;
+        if (_previewCard.Parent != target)
+        {
+            bool focused = _previewCard.ContainsFocus;
+            _previewCard.Parent?.Controls.Remove(_previewCard);
+            target.Controls.Add(_previewCard);
+            target.Controls.SetChildIndex(_previewCard, 0);   // 함께 스크롤할 때는 카드들 맨 위
+            if (focused) _previewToggle.Focus();
+        }
+        _previewHost.Visible = pin && CurrentPage == SettingsPage.Appearance;
+    }
+
     /// <summary>
     /// 왼쪽 절반은 밝은 배경, 오른쪽 절반은 어두운 배경이라 어느 편집기에서 써도 어떻게 보일지 한 번에 확인할 수 있다.
     /// 배지는 실제 렌더러·위치 계산을 그대로 써서 창 밖 배지와 똑같이 보인다. 전체는 둥근 모서리 안에 그린다.
@@ -969,69 +1024,122 @@ sealed class SettingsForm : Form
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(_preview.Parent?.BackColor ?? Theme.Current.Card);
 
-        using var clip = RoundedPath(new RectangleF(0.5f, 0.5f, client.Width - 1, client.Height - 1), 6 * dpi);
-        var saved = g.Save();
-        g.SetClip(clip);
-        int half = client.Width / 2;
-        PaintPreviewHalf(g, new Rectangle(client.Left, client.Top, half, client.Height), LightBg, LightText, LightCaption, Strings.Get("preview.light"), dpi);
-        PaintPreviewHalf(g, new Rectangle(client.Left + half, client.Top, client.Width - half, client.Height), DarkBg, DarkText, DarkCaption, Strings.Get("preview.dark"), dpi);
-        g.Restore(saved);
-        using var border = new Pen(Theme.Current.Border);
-        g.DrawPath(border, clip);
-    }
+        using var font = new Font(BadgeRenderer.FontFamily, 11f);
+        // 기본 StringFormat 은 글자 양옆에 여백을 더해 caret 이 마지막 글자에서 떨어져 보인다(배지가 왼쪽인지 오른쪽인지 헷갈림).
+        using var fmt = new StringFormat(StringFormat.GenericTypographic);
+        int lineH = (int)Math.Ceiling(font.GetHeight(g));
+        float left = PreviewLeftMargin * dpi, pitch = PreviewRowPitch * dpi;
 
-    void PaintPreviewHalf(Graphics g, Rectangle area, Color bg, Color fg, Color caption, string title, float dpi)
-    {
-        var saved = g.Save();
-        g.SetClip(area, CombineMode.Intersect);   // 큰 배지가 반대쪽 배경으로 넘어가지 않게
+        // 1) 줄과 caret 자리. 반쪽의 왼쪽 위, 첫 줄 위를 y=0 으로 잰다(두 반쪽이 같은 자리를 쓴다).
+        //    Caps Lock 표시를 켰으면 영문 줄을 대문자 예시로 바꿔 "A + 밑줄" 배지도 미리 보여 준다(한글 줄은 평소 모습).
+        var lines = new string[PreviewRows.Length];
+        var widths = new float[PreviewRows.Length];
+        var carets = new List<(ImeState state, bool caps, Rectangle caret)>();
+        for (int r = 0; r < PreviewRows.Length; r++)
+        {
+            var (text, state) = PreviewRows[r];
+            bool caps = state == ImeState.English && _draft.ShowCapsLock;
+            lines[r] = caps ? text.ToUpperInvariant() : text;
+            widths[r] = g.MeasureString(lines[r], font, PointF.Empty, fmt).Width;
+            if (state is null) continue;
+            carets.Add((state.Value, caps, new Rectangle((int)Math.Round(left + widths[r] + dpi), (int)Math.Round(r * pitch), 1, lineH)));
+        }
+
+        // 2) 배지. 미리보기에서는 화면 가장자리 대피(위에 자리가 없으면 아래로, 왼쪽에 없으면 오른쪽으로)를 하지 않는다.
+        //    고른 위치를 그대로 지켜야 위/아래·왼쪽/오른쪽 차이가 보인다.
+        float scale = dpi * _draft.SizePercent / 100f;
+        var theme = BadgeTheme.From(_draft);
+        var style = PreviewStyle;
+        var room = new Rectangle(-4096, -4096, 8192, 8192);
+        var badges = new List<(Bitmap bmp, Rectangle bounds)>();
         try
         {
-            using (var bgBrush = new SolidBrush(bg)) g.FillRectangle(bgBrush, area);
-            using (var capFont = Theme.HintFont(Font))
-                TextRenderer.DrawText(g, title, capFont, new Rectangle(area.Left, area.Top + (int)(6 * dpi), area.Width - (int)(10 * dpi), (int)(16 * dpi)), caption,
-                    TextFormatFlags.Right | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
-
-            using var font = new Font(BadgeRenderer.FontFamily, 11f);
-            // 기본 StringFormat 은 글자 양옆에 여백을 더해 caret 이 마지막 글자에서 떨어져 보인다(배지가 왼쪽인지 오른쪽인지 헷갈림).
-            using var fmt = new StringFormat(StringFormat.GenericTypographic);
-            using var textBrush = new SolidBrush(fg);
-            using var fillerBrush = new SolidBrush(Mix(fg, bg, 0.55f));
-            using var caretPen = new Pen(fg, Math.Max(1f, (float)Math.Round(dpi)));
-            int lineH = (int)Math.Ceiling(font.GetHeight(g));
-
-            // 1) 글과 caret 을 먼저 모두 그린다. 배지는 그 위에 얹혀야 하므로(실제로도 배지는 최상위 창이다) 나중에 그린다.
-            //    Caps Lock 표시를 켰으면 영문 줄을 대문자 예시로 바꿔 "A + 밑줄" 배지도 미리 보여 준다(한글 줄은 평소 모습).
-            var carets = new List<(ImeState state, bool caps, Rectangle caret)>();
-            for (int r = 0; r < PreviewRows.Length; r++)
-            {
-                var (text, state) = PreviewRows[r];
-                float x = area.Left + PreviewLeftMargin * dpi, y = area.Top + (PreviewTopMargin + r * PreviewRowPitch) * dpi;
-                if (state is null) { g.DrawString(text, font, fillerBrush, x, y, fmt); continue; }
-
-                bool caps = state == ImeState.English && _draft.ShowCapsLock;
-                if (caps) text = text.ToUpperInvariant();
-                g.DrawString(text, font, textBrush, x, y, fmt);
-                float w = g.MeasureString(text, font, PointF.Empty, fmt).Width;
-                var caret = new Rectangle((int)Math.Round(x + w + dpi), (int)Math.Round(y), 1, lineH);
-                g.DrawLine(caretPen, caret.Left, caret.Top, caret.Left, caret.Bottom);
-                carets.Add((state.Value, caps, caret));
-            }
-
-            // 2) 배지. 미리보기에서는 화면 가장자리 대피(위에 자리가 없으면 아래로, 왼쪽에 없으면 오른쪽으로)를 하지 않는다.
-            //    고른 위치를 그대로 지켜야 위/아래·왼쪽/오른쪽 차이가 보인다. 아주 크면(300%) 가장자리에서 잘려 보일 수 있다.
-            float scale = dpi * _draft.SizePercent / 100f;
-            var theme = BadgeTheme.From(_draft);
-            var style = PreviewStyle;
-            var room = Rectangle.Inflate(area, 4096, 4096);
             foreach (var (state, caps, caret) in carets)
             {
-                using var bmp = BadgeRenderer.Render(state, style, scale, theme, _draft.OpacityPercent, caps);
+                var bmp = BadgeRenderer.Render(state, style, scale, theme, _draft.OpacityPercent, caps);
                 var pos = BadgeLayout.Compute(new LayoutInput(caret, bmp.Size, style, _draft.Placement, scale, room));
+                badges.Add((bmp, new Rectangle(pos, bmp.Size)));
+            }
+            int dy = PreviewOffset(carets.Select(c => c.caret).ToList(), badges.Select(b => b.bounds).ToList(), client.Height, (int)Math.Round(PreviewEdge * dpi));
+
+            using var clip = RoundedPath(new RectangleF(0.5f, 0.5f, client.Width - 1, client.Height - 1), 6 * dpi);
+            var saved = g.Save();
+            g.SetClip(clip);
+            int half = client.Width / 2;
+            PaintHalf(new Rectangle(client.Left, client.Top, half, client.Height), LightBg, LightText, LightCaption, Strings.Get("preview.light"));
+            PaintHalf(new Rectangle(client.Left + half, client.Top, client.Width - half, client.Height), DarkBg, DarkText, DarkCaption, Strings.Get("preview.dark"));
+            g.Restore(saved);
+            using var border = new Pen(Theme.Current.Border);
+            g.DrawPath(border, clip);
+
+            void PaintHalf(Rectangle area, Color bg, Color fg, Color caption, string title)
+            {
+                var state = g.Save();
+                g.SetClip(area, CombineMode.Intersect);   // 큰 배지가 반대쪽 배경으로 넘어가지 않게
+                using (var bgBrush = new SolidBrush(bg)) g.FillRectangle(bgBrush, area);
+
+                // 글과 caret 을 먼저 모두 그린다. 배지는 그 위에 얹혀야 하므로(실제로도 배지는 최상위 창이다) 나중에 그린다.
+                using var textBrush = new SolidBrush(fg);
+                using var fillerBrush = new SolidBrush(Mix(fg, bg, 0.55f));
+                using var caretPen = new Pen(fg, Math.Max(1f, (float)Math.Round(dpi)));
+                int top = area.Top + dy;
+                var taken = new List<Rectangle>();   // 글·배지가 차지한 곳. 캡션은 여기와 겹치지 않게 놓는다
+                // 칸 위아래 끝에 반도 안 걸치는 줄은 그리지 않는다. 몇 px 만 보이면 글자가 아니라 얼룩처럼 보인다.
+                bool Shown(float y) => Math.Min(y + lineH, area.Bottom) - Math.Max(y, area.Top) >= lineH / 2f;
+                for (int r = 0; r < lines.Length; r++)
+                {
+                    float y = top + r * pitch;
+                    if (!Shown(y)) continue;
+                    g.DrawString(lines[r], font, PreviewRows[r].state is null ? fillerBrush : textBrush, area.Left + left, y, fmt);
+                    taken.Add(new Rectangle((int)(area.Left + left), (int)y, (int)Math.Ceiling(widths[r] + 3 * dpi), lineH));
+                }
+                foreach (var (_, _, caret) in carets)
+                    if (Shown(top + caret.Top))
+                        g.DrawLine(caretPen, area.Left + caret.Left, top + caret.Top, area.Left + caret.Left, top + caret.Bottom);
                 // 픽셀 크기를 명시한다. Point 만 주는 오버로드는 비트맵의 DPI(96)와 화면 DPI 차이만큼 확대해 버린다.
-                g.DrawImage(bmp, new Rectangle(pos, bmp.Size), new Rectangle(Point.Empty, bmp.Size), GraphicsUnit.Pixel);
+                foreach (var (bmp, b) in badges)
+                {
+                    var at = new Rectangle(area.Left + b.X, top + b.Y, b.Width, b.Height);
+                    g.DrawImage(bmp, at, new Rectangle(Point.Empty, bmp.Size), GraphicsUnit.Pixel);
+                    taken.Add(at);
+                }
+
+                // 캡션("밝은 배경")은 글·배지를 가리지 않는 구석에: 오른쪽 위, 막히면 오른쪽 아래. 둘 다 막히면(좁은 창에 큰 배지) 생략한다.
+                using var capFont = Theme.HintFont(Font);
+                const TextFormatFlags capFlags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix;
+                var cap = TextRenderer.MeasureText(g, title, capFont, Size.Empty, capFlags);
+                int capX = area.Right - (int)(10 * dpi) - cap.Width, margin = (int)(5 * dpi);
+                foreach (var spot in new[] { new Rectangle(capX, area.Top + margin, cap.Width, cap.Height), new Rectangle(capX, area.Bottom - margin - cap.Height, cap.Width, cap.Height) })
+                {
+                    var clearance = Rectangle.Inflate(spot, (int)(10 * dpi), (int)(2 * dpi));   // 배지 바로 옆이면 "한 밝은 배경" 처럼 붙어 읽힌다
+                    if (taken.Any(clearance.IntersectsWith)) continue;
+                    TextRenderer.DrawText(g, title, capFont, spot, caption, capFlags);
+                    break;
+                }
+                g.Restore(state);
             }
         }
-        finally { g.Restore(saved); }
+        finally
+        {
+            foreach (var (bmp, _) in badges) bmp.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 미리보기 글의 세로 자리(첫 줄 위의 y). caret 줄들을 칸 가운데에 두고, 배지가 칸 위나 아래로 넘치면 그만큼 글을 밀어 넣는다.
+    /// 그래서 크기를 키우거나 위치를 위↔아래로 바꾸면 글이 몇 px 움직인다. caret 줄은 늘 다 보이게 하므로, 배지가 아주 커서
+    /// (250% 넘게) 다 들어가지 않으면 배지 바깥쪽이 잘린다.
+    /// </summary>
+    static int PreviewOffset(List<Rectangle> carets, List<Rectangle> badges, int height, int edge)
+    {
+        int caretTop = carets.Min(c => c.Top), caretBottom = carets.Max(c => c.Bottom);
+        int dy = (height - (caretBottom - caretTop)) / 2 - caretTop;
+        int top = Math.Min(caretTop, badges.Min(b => b.Top)) + dy;
+        int bottom = Math.Max(caretBottom, badges.Max(b => b.Bottom)) + dy;
+        if (top < edge) dy += edge - top;
+        else if (bottom > height - edge) dy -= bottom - (height - edge);
+        int min = edge - caretTop, max = height - edge - caretBottom;
+        return max < min ? min : Math.Clamp(dy, min, max);
     }
 
     /// <summary><paramref name="a"/> 에서 <paramref name="b"/> 쪽으로 <paramref name="t"/>(0~1)만큼 섞은 색.</summary>
@@ -1071,7 +1179,11 @@ sealed class SettingsForm : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { _flashTimer.Dispose(); _copiedTimer.Dispose(); _tips.Dispose(); _sectionFont.Dispose(); _hintFont.Dispose(); _appsMenu?.Dispose(); }
+        if (disposing)
+        {
+            _flashTimer.Dispose(); _copiedTimer.Dispose(); _tips.Dispose(); _sectionFont.Dispose(); _hintFont.Dispose(); _appsMenu?.Dispose();
+            _preview?.Dispose();   // 접혀 있으면 카드에서 빠져 있어 창과 함께 정리되지 않는다
+        }
         base.Dispose(disposing);
     }
 }
