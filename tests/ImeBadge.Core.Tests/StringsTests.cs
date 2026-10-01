@@ -52,16 +52,25 @@ public sealed class StringsTests
             "menu.opacity", "menu.autostart", "menu.checkUpdates", "menu.about", "menu.exit");
     }
 
-    /// <summary>설정 창은 한 창에 모든 항목이 있으므로 창 전체에서 니모닉이 겹치면 안 된다.</summary>
+    /// <summary>
+    /// 설정 창은 페이지마다 보이는 항목이 다르고, Alt+글자는 지금 보이는 페이지의 항목만 움직인다(숨은 페이지는 니모닉을 받지 않는다).
+    /// 그래서 한 페이지 안에서만 겹치지 않으면 된다. 아래 [확인]/[취소] 는 니모닉 없이 Enter/Esc 로 누른다.
+    /// </summary>
     [Theory]
     [InlineData(UiLanguage.Korean)]
     [InlineData(UiLanguage.English)]
-    public void SettingsWindow_MnemonicsAreUnique(UiLanguage lang)
+    public void SettingsPages_MnemonicsAreUnique(UiLanguage lang)
     {
-        AssertUniqueMnemonics(Strings.Table(lang), "settings.reset", "look.theme", "look.style", "look.placement", "look.size", "look.opacity",
-            "look.hangulColor", "look.englishColor", "look.animate", "look.capsLock", "look.shiftHold", "look.visibility",
-            "settings.export", "settings.import", "behavior.autostart",
-            "behavior.fullscreen", "behavior.trayState", "behavior.hotkey", "behavior.updates", "behavior.poll", "behavior.language", "exclude.add", "exclude.remove");
+        var t = Strings.Table(lang);
+        // 모양
+        AssertUniqueMnemonics(t, "look.theme", "look.style", "look.placement", "look.size", "look.opacity", "look.hangulColor", "look.englishColor");
+        // 표시
+        AssertUniqueMnemonics(t, "look.visibility", "look.animate", "look.capsLock", "look.shiftHold", "behavior.fullscreen", "behavior.trayState");
+        // 일반
+        AssertUniqueMnemonics(t, "behavior.autostart", "behavior.hotkey", "behavior.updates", "behavior.language", "behavior.poll",
+            "settings.import", "settings.export", "settings.reset");
+        // 제외 앱
+        AssertUniqueMnemonics(t, "exclude.add");
     }
 
     static void AssertUniqueMnemonics(IReadOnlyDictionary<string, string> table, params string[] keys)

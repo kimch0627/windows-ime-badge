@@ -8,36 +8,71 @@ using System.Windows.Forms;
 
 namespace ImeBadge;
 
+/// <summary>설정 창의 페이지. 순서가 왼쪽 탐색 목록의 순서다.</summary>
+enum SettingsPage { Appearance, Display, General, Excluded, About }
+
 /// <summary>
-/// 설정 창. 바꾸는 즉시 실제 배지에 반영되어(WYSIWYG) 화면 밖 배지로 결과를 바로 볼 수 있고,
+/// 설정 창. Windows 11 설정 앱처럼 왼쪽 탐색 목록에서 페이지를 고르고, 페이지마다 아이콘·제목·설명이 붙은 카드로 항목을 보여 준다.
+/// 바꾸는 즉시 실제 배지에 반영되어(WYSIWYG) 창 밖 배지로 결과를 바로 볼 수 있고,
 /// [확인]을 누르면 저장, [취소]나 닫기를 누르면 창을 열 때의 설정으로 되돌린다.
 /// 편집은 복사본(<see cref="_draft"/>)에 하고 매번 실제 설정(<see cref="_live"/>)으로 복사한다.
-/// 모양은 Windows 11 설정 앱을 따른다: 제목·설명이 붙은 카드, 토글 스위치, 강조색 슬라이더, 그림 타일 선택, 색 견본.
 /// 미리보기는 실제 렌더러(<see cref="BadgeRenderer"/>)로 그려 창 밖 배지와 똑같이 보인다.
+/// 뼈대 컨트롤(탐색 목록·카드·페이지)은 SettingsControls.cs 에 있다.
 /// </summary>
 sealed class SettingsForm : Form
 {
     readonly Settings _live;
     readonly Settings _draft;
     readonly Settings _original;   // 취소할 때 되돌릴 값
+    readonly AppPaths _paths;
+    readonly Action _checkUpdates;
     readonly bool _builtKorean = Strings.IsKorean;   // 이 창을 만들 때의 언어. 바뀌면 새 창으로 갈아 끼운다
     bool _autostart, _dirty, _loading, _detached;
 
     TilePicker _theme = null!, _style = null!, _character = null!, _placement = null!;
-    AccentSlider _size = null!, _opacity = null!;
-    NumericUpDown _poll = null!;
-    ComboBox _language = null!;
-    ComboBox _visibility = null!;
+    AccentSlider _size = null!, _opacity = null!, _poll = null!;
+    ThemedComboBox _language = null!, _visibility = null!;
+    InputTextBox _excludeInput = null!;
+    InputFrame _excludeFrame = null!;
+    ContextMenuStrip? _appsMenu;
     ColorSwatches _hangulColor = null!, _englishColor = null!;
     Label _hangulHex = null!, _englishHex = null!;
     ToggleSwitch _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!, _shiftHold = null!;
     HotkeyBox _hotkeyBox = null!;
-    ProcessListEditor _excluded = null!;
     PreviewPanel _preview = null!;
+    SettingsCard _updateCard = null!, _diagCard = null!;
+    SectionHeader _excludeHeader = null!;
+    CardStack _excludePage = null!;
+    readonly List<Control> _excludeRows = new();
+
+    NavList _nav = null!;
+    PageHeader _header = null!;
+    CommandBar _commands = null!;
+    readonly CardStack[] _pages = new CardStack[Pages.Length];
+
     readonly ToolTip _tips = new() { AutoPopDelay = 12000 };
+    readonly Font _sectionFont, _hintFont;
     // "점, 바뀔 때 1.5초 글자" 미리보기용. 실제 배지처럼 설정이 바뀐 직후 1.5초는 글자 배지를, 그 뒤엔 점을 보여 준다.
     readonly System.Windows.Forms.Timer _flashTimer = new() { Interval = BadgeForm.FlashMs };
     bool _flashing;
+    // "진단 정보 복사" 를 누른 뒤 잠깐 "복사했습니다" 를 보여 준다.
+    readonly System.Windows.Forms.Timer _copiedTimer = new() { Interval = 2500 };
+
+    // 언어를 바꿔 새 창으로 갈아 끼울 때 이어받는 창 상태(Reopen).
+    Rectangle? _restoreBounds;
+    bool _restoreMaximized, _focusLanguage;
+    int _restoreScroll;
+
+    /// <summary>페이지마다 탐색 목록의 아이콘과 문구 키(nav.{key}, page.{key}.desc). 순서는 <see cref="SettingsPage"/> 와 같다.</summary>
+    static readonly (string glyph, string key)[] Pages =
+    {
+        (Glyphs.Appearance, "appearance"), (Glyphs.Display, "display"), (Glyphs.General, "general"), (Glyphs.Apps, "excluded"), (Glyphs.Info, "about"),
+    };
+
+    // 창 크기(96 DPI 기준 논리 픽셀). 처음에는 DefaultClient 로 열되 작업 영역보다 크면 줄이고, MinClient 보다 작게는 줄일 수 없다.
+    // 최소 폭은 타일 다섯 개(테마·모양)가 카드 안에 잘리지 않고 들어가는 폭이다.
+    static readonly Size DefaultClient = new(1040, 760), MinClient = new(800, 540);
+    const int NavWidth = 264, CommandHeight = 64;
 
     /// <summary>편집 중 값이 바뀔 때마다 발생. 실제 설정에는 이미 복사되어 있으니 다시 그리기만 하면 된다(저장은 하지 않는다).</summary>
     public event Action? Changed;
@@ -46,32 +81,41 @@ sealed class SettingsForm : Form
     /// <summary>UI 언어가 이 창을 만들 때와 달라졌다. 받는 쪽(BadgeForm)이 <see cref="Reopen"/> 으로 새 창을 만들고 이 창을 <see cref="Detach"/> 한다.</summary>
     public event Action? LanguageChanged;
 
-    public SettingsForm(Settings live) : this(live, live.Clone(), dirty: false) { }
+    /// <param name="checkUpdates">"정보" 페이지의 [새 버전 확인]. 트레이 메뉴의 업데이트 확인과 같다.</param>
+    public SettingsForm(Settings live, AppPaths paths, Action checkUpdates, SettingsPage page = SettingsPage.Appearance)
+        : this(live, live.Clone(), dirty: false, paths, checkUpdates, page) { }
 
     /// <param name="original">취소할 때 되돌릴 값. 새 창이 이전 창의 기준을 이어받을 때 넘긴다.</param>
     /// <param name="dirty">이미 편집이 있었는가(이어받은 창은 true).</param>
-    SettingsForm(Settings live, Settings original, bool dirty)
+    SettingsForm(Settings live, Settings original, bool dirty, AppPaths paths, Action checkUpdates, SettingsPage page)
     {
         _live = live;
         _draft = live.Clone();
         _original = original;
+        _paths = paths;
+        _checkUpdates = checkUpdates;
         _autostart = Autostart.IsEnabled();
 
         Text = Strings.Format("settings.title", AppInfo.ProductName);
         Icon = Icons.App;
-        // 크기를 바꿀 수 있는 창. 화면이 작으면 FitToScreen 이 작업 영역에 맞춰 줄이고 내용은 스크롤된다.
         FormBorderStyle = FormBorderStyle.Sizable;
-        MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = true;
-        StartPosition = FormStartPosition.CenterScreen;
+        MaximizeBox = true; MinimizeBox = true; ShowInTaskbar = true;
+        StartPosition = FormStartPosition.Manual;   // 위치와 크기는 OnLoad 의 Place 가 정한다
         AutoScaleMode = AutoScaleMode.Dpi;
         AutoScaleDimensions = new SizeF(96F, 96F);   // 아래 픽셀 크기들은 96 DPI 기준. 고DPI 에서 WinForms 가 배율을 곱한다
-        Font = Theme.DialogFont;
+        // 본문은 시스템 대화상자 글꼴보다 조금 크게(10pt): Windows 11 설정 앱의 본문 크기에 가깝다.
+        using (var dialog = Theme.DialogFont) Font = new Font(dialog.FontFamily, Math.Max(10f, dialog.SizeInPoints));
+        _sectionFont = Theme.SectionFont(Font);
+        _hintFont = Theme.HintFont(Font);
+        ClientSize = DefaultClient;
 
         _flashTimer.Tick += (_, _) => { _flashTimer.Stop(); _flashing = false; _preview.Invalidate(); };
+        _copiedTimer.Tick += (_, _) => { _copiedTimer.Stop(); if (!_diagCard.IsDisposed) _diagCard.Description = Strings.Get("about.copyDiag.desc"); };
 
-        Build();
+        Build(page);
         LoadDraftIntoControls();
         _dirty = dirty;   // 컨트롤 초기화로 생긴 변경 알림은 실제 변경이 아니다
+        UpdateHint();
         _painted = Theme.Design = DesignThemes.Get(_draft.Theme);
         Theme.Apply(this);
     }
@@ -87,17 +131,29 @@ sealed class SettingsForm : Form
         Invalidate(true);
     }
 
-    /// <summary>같은 편집 상태(기준값·자동 시작 체크)를 이어받는 새 창을 현재 언어로 만든다. 위치도 그대로.</summary>
+    /// <summary>같은 편집 상태(기준값·자동 시작 체크)를 이어받는 새 창을 현재 언어로 만든다. 위치·크기·페이지·스크롤도 그대로.</summary>
     public SettingsForm Reopen()
     {
-        var next = new SettingsForm(_live, _original, dirty: true) { _autostart = _autostart };
+        var next = new SettingsForm(_live, _original, dirty: true, _paths, _checkUpdates, CurrentPage) { _autostart = _autostart };
         next._autostartBox.Checked = _autostart;
-        if (IsHandleCreated) { next.StartPosition = FormStartPosition.Manual; next.Location = Location; }
+        if (IsHandleCreated)
+        {
+            next._restoreBounds = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+            next._restoreMaximized = WindowState == FormWindowState.Maximized;
+            next._restoreScroll = -CurrentStack.AutoScrollPosition.Y;
+            next._focusLanguage = ActiveControl == _language;
+        }
         return next;
     }
 
     /// <summary>닫을 때 되돌리기·저장 알림을 하지 않게 한다(새 창에 편집을 넘긴 뒤).</summary>
     public void Detach() => _detached = true;
+
+    public SettingsPage CurrentPage => (SettingsPage)Math.Max(0, _nav.SelectedIndex);
+    CardStack CurrentStack => _pages[(int)CurrentPage];
+
+    /// <summary>다른 페이지로 옮긴다(트레이 메뉴의 "정보").</summary>
+    public void ShowPage(SettingsPage page) => _nav.SelectedIndex = (int)page;
 
     protected override void OnHandleCreated(EventArgs e)
     {
@@ -108,122 +164,457 @@ sealed class SettingsForm : Form
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
-        FitToScreen(center: StartPosition == FormStartPosition.CenterScreen);
+        Place();
+    }
+
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        if (_restoreScroll > 0) CurrentStack.AutoScrollPosition = new Point(0, _restoreScroll);
+        if (_focusLanguage) _language.Focus();
+    }
+
+    protected override void OnActivated(EventArgs e)
+    {
+        base.OnActivated(e);
+        if (CurrentPage == SettingsPage.About) RefreshUpdateCard();   // [새 버전 확인] 의 결과 대화상자를 닫고 돌아왔을 때
     }
 
     protected override void OnDpiChanged(DpiChangedEventArgs e)
     {
         base.OnDpiChanged(e);
-        BeginInvoke(() => { if (!IsDisposed) FitToScreen(center: false); });   // 배율이 다른 모니터로 옮겼다. 새 배율로 레이아웃이 끝난 뒤 다시 맞춘다
+        BeginInvoke(() => { if (!IsDisposed) MinimumSize = MinimumFor(Screen.FromControl(this).WorkingArea); });   // 배율이 다른 모니터로 옮겼다
     }
 
     /// <summary>
-    /// 창 크기를 내용에 맞추되, 창이 놓인 모니터의 작업 영역(작업 표시줄 제외)을 넘지 않게 한다.
-    /// 해상도가 낮거나 배율이 커서 다 들어가지 않으면 내용 영역(<see cref="_scroll"/>)에 스크롤바가 생기고, 아래 버튼 줄은 늘 보인다.
-    /// 사용자가 창을 늘려도 내용보다 커지지 않게 최대 크기를 내용 크기로 묶는다.
+    /// 처음 열 때: 마우스가 있는 모니터(트레이 아이콘을 누른 곳)의 가운데에 기본 크기로, 작업 영역(작업 표시줄 제외)을 넘지 않게.
+    /// 언어를 바꿔 다시 연 창은 이전 창의 자리와 크기를 그대로 쓴다. 해상도가 낮으면 내용 영역이 스크롤된다.
     /// </summary>
-    void FitToScreen(bool center)
+    void Place()
     {
-        int outer = LogicalToDeviceUnits(Outer);
-        _scroll.AutoScrollPosition = Point.Empty;
-        _root.Location = new Point(outer, outer);
-        _scroll.AutoScrollMargin = new Size(outer, outer / 2);
-
-        var content = _root.GetPreferredSize(Size.Empty);
-        var need = new Size(content.Width + 2 * outer, content.Height + outer + outer / 2 + _buttonBar.GetPreferredSize(Size.Empty).Height);
         var frame = Size - ClientSize;   // 제목 표시줄·테두리
-        // 처음 열 때는 마우스가 있는 모니터(트레이 아이콘을 누른 곳), 이미 떠 있으면 창이 걸친 모니터.
-        var area = (center ? Screen.FromPoint(Cursor.Position) : Screen.FromControl(this)).WorkingArea;
-        int gap = LogicalToDeviceUnits(8);
-        var max = new Size(area.Width - frame.Width - 2 * gap, area.Height - frame.Height - 2 * gap);
+        var area = (_restoreBounds is { } prev ? Screen.FromRectangle(prev) : Screen.FromPoint(Cursor.Position)).WorkingArea;
+        MinimumSize = MinimumFor(area);
+        Rectangle bounds;
+        if (_restoreBounds is { } r) bounds = r;
+        else
+        {
+            int gap = LogicalToDeviceUnits(8);
+            var want = new Size(LogicalToDeviceUnits(DefaultClient.Width), LogicalToDeviceUnits(DefaultClient.Height)) + frame;
+            var size = new Size(Math.Min(want.Width, area.Width - 2 * gap), Math.Min(want.Height, area.Height - 2 * gap));
+            bounds = new Rectangle(area.Left + (area.Width - size.Width) / 2, area.Top + (area.Height - size.Height) / 2, size.Width, size.Height);
+        }
+        bounds.Width = Math.Min(bounds.Width, area.Width);
+        bounds.Height = Math.Min(bounds.Height, area.Height);
+        bounds.X = Math.Clamp(bounds.X, area.Left, area.Right - bounds.Width);
+        bounds.Y = Math.Clamp(bounds.Y, area.Top, area.Bottom - bounds.Height);
+        Bounds = bounds;
+        if (_restoreMaximized) WindowState = FormWindowState.Maximized;
+    }
 
-        int w = need.Width, h = need.Height;
-        if (h > max.Height) { h = max.Height; w += SystemInformation.VerticalScrollBarWidth; }   // 세로 스크롤바 자리
-        if (w > max.Width) { w = max.Width; h = Math.Min(max.Height, h + SystemInformation.HorizontalScrollBarHeight); }
+    Size MinimumFor(Rectangle area)
+    {
+        var frame = Size - ClientSize;
+        var min = new Size(LogicalToDeviceUnits(MinClient.Width), LogicalToDeviceUnits(MinClient.Height)) + frame;
+        return new Size(Math.Min(min.Width, area.Width), Math.Min(min.Height, area.Height));
+    }
 
-        MaximumSize = Size.Empty;
-        ClientSize = new Size(w, h);
-        MaximumSize = new Size(need.Width + SystemInformation.VerticalScrollBarWidth, need.Height) + frame;
-        MinimumSize = new Size(Math.Min(Width, LogicalToDeviceUnits(420)), Math.Min(Height, LogicalToDeviceUnits(320)));
-
-        var loc = center ? new Point(area.Left + (area.Width - Width) / 2, area.Top + (area.Height - Height) / 2) : Location;
-        loc.X = Math.Max(area.Left, Math.Min(loc.X, area.Right - Width));
-        loc.Y = Math.Max(area.Top, Math.Min(loc.Y, area.Bottom - Height));
-        StartPosition = FormStartPosition.Manual;
-        Location = loc;
+    /// <summary>Ctrl+Tab·Ctrl+Shift+Tab(또는 Ctrl+PageDown·PageUp)으로 다음·이전 페이지. 단축키 입력칸에서는 그 키 조합을 입력으로 받는다.</summary>
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        int step = keyData switch
+        {
+            Keys.Control | Keys.Tab or Keys.Control | Keys.PageDown => 1,
+            Keys.Control | Keys.Shift | Keys.Tab or Keys.Control | Keys.PageUp => -1,
+            _ => 0,
+        };
+        if (step != 0 && ActiveControl is not HotkeyBox)
+        {
+            _nav.SelectedIndex = (_nav.SelectedIndex + step + Pages.Length) % Pages.Length;
+            _nav.Focus();
+            return true;
+        }
+        return base.ProcessCmdKey(ref msg, keyData);
     }
 
     // ── 화면 구성 ──
-    // 레이아웃 원칙: 자동 크기(AutoSize) 컨테이너 안에는 Dock 을 쓰지 않는다. AutoSize 부모는 자식 크기로 자기 크기를 정하고,
-    // Dock 된 자식은 부모 크기로 자기 크기를 정하므로 서로를 기다리다 폭 0 으로 접힌다(제목이 세로로 찍히던 문제).
-    // 카드는 고정 폭(GroupWidth)을 주고 높이만 내용에 맞춘다. 96 DPI 기준 픽셀이며 고DPI 에서는 WinForms 가 배율을 곱한다.
-    // 간격은 8px 격자: 바깥 여백 20, 카드 사이 12, 카드 안쪽 16, 행 사이 8.
-    const int Outer = 20, GroupWidth = 424, CardInset = 16, CardGap = 12;
-    const int InnerWidth = GroupWidth - 2 * CardInset;
-
-    // 창 구성: 위는 스크롤되는 내용 영역(_scroll 안의 _root), 아래는 늘 보이는 버튼 줄(_buttonBar).
-    // 창 자체는 AutoSize 가 아니므로 이 둘에는 Dock 을 쓴다(내용 _root 는 AutoSize 이고 Dock 없이 둔다).
-    Panel _scroll = null!;
-    TableLayoutPanel _root = null!;
-    FlowLayoutPanel _buttonBar = null!;
-
-    void Build()
+    // 창: 왼쪽 탐색 창(NavPane) + 오른쪽 내용(content). 내용은 위에 페이지 제목(PageHeader), 가운데 페이지(CardStack, 고른 것만 보임),
+    // 아래에 늘 보이는 [확인]/[취소] 줄(CommandBar). Dock 은 나중에 추가한 것부터 자리를 잡으므로 채우는(Fill) 것을 먼저 넣는다.
+    // 페이지 안의 카드는 CardStack 이 직접 쌓는다(SettingsControls.cs 설명 참고). 크기는 96 DPI 기준이고 고DPI 에서는 배율을 곱한다.
+    void Build(SettingsPage page)
     {
-        var root = _root = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Location = new Point(Outer, Outer) };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-
-        // 머리: 아이콘 + 제목 + 한 줄 안내
-        var header = BuildHeader();
-        root.Controls.Add(header, 0, 0);
-        root.SetColumnSpan(header, 2);
-
-        // 왼쪽: 모양 + 동작
-        var left = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = new Padding(0, 0, CardGap, 0) };
-        left.Controls.Add(BuildLookGroup());
-        left.Controls.Add(BuildBehaviorGroup());
-        root.Controls.Add(left, 0, 1);
-
-        // 오른쪽: 미리보기 + 제외 앱
-        var right = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false };
-        right.Controls.Add(BuildPreviewGroup());
-        right.Controls.Add(BuildExcludeGroup());
-        root.Controls.Add(right, 1, 1);
-
-        // 아래: 버튼. 오른쪽 끝에 확인·취소, 왼쪽으로 떨어져 기본값 복원. 창 아래에 붙어 스크롤과 상관없이 늘 보인다.
-        var buttons = _buttonBar = new FlowLayoutPanel
+        _nav = new NavList { TabIndex = 0 };
+        _nav.SetItems(Pages.Select(p => new NavList.Item(p.glyph, Strings.Get("nav." + p.key))));
+        var navPane = new NavPane(_nav, AppInfo.ProductName, $"v{AppVersion.Display}", new Font(Font, FontStyle.Bold))
         {
-            FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Bottom, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            WrapContents = false, Padding = new Padding(Outer, 10, Outer, Outer),
+            Dock = DockStyle.Left, Width = NavWidth, TabIndex = 0,
         };
-        var cancel = new AccentButton { Text = Strings.Get("settings.cancel"), DialogResult = DialogResult.Cancel, AutoSize = true, Margin = new Padding(8, 0, 0, 0) };
-        var ok = new AccentButton { Text = Strings.Get("settings.ok"), Primary = true, AutoSize = true, Margin = new Padding(8, 0, 0, 0) };
-        var reset = new AccentButton { Text = Strings.Get("settings.reset"), AutoSize = true, Margin = new Padding(24, 0, 0, 0) };
+
+        var ok = new AccentButton { Text = Strings.Get("settings.ok"), Primary = true, AutoSize = true };
+        var cancel = new AccentButton { Text = Strings.Get("settings.cancel"), DialogResult = DialogResult.Cancel, AutoSize = true };
         // 모드리스(Show) 창은 DialogResult 만으로는 닫히지 않는다. 명시적으로 닫는다.
         ok.Click += (_, _) => { Apply(); DialogResult = DialogResult.OK; Close(); };
         cancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
-        reset.Click += (_, _) =>
+        AcceptButton = ok; CancelButton = cancel;
+        _commands = new CommandBar(Strings.Get("settings.hint.clean"), cancel, ok) { Dock = DockStyle.Bottom, Height = CommandHeight, TabIndex = 1 };
+
+        _pages[(int)SettingsPage.Appearance] = BuildAppearancePage();
+        _pages[(int)SettingsPage.Display] = BuildDisplayPage();
+        _pages[(int)SettingsPage.General] = BuildGeneralPage();
+        _pages[(int)SettingsPage.Excluded] = BuildExcludedPage();
+        _pages[(int)SettingsPage.About] = BuildAboutPage();
+
+        _header = new PageHeader { Dock = DockStyle.Top };
+        var content = new Panel { Dock = DockStyle.Fill, TabIndex = 1 };
+        foreach (var p in _pages) { p.Dock = DockStyle.Fill; p.Visible = false; p.TabIndex = 0; content.Controls.Add(p); }
+        content.Controls.Add(_header);
+        content.Controls.Add(_commands);
+
+        Controls.Add(content);
+        Controls.Add(navPane);
+
+        _nav.SelectedIndex = (int)page;
+        SelectPage();
+        _nav.SelectedChanged += (_, _) => SelectPage();
+    }
+
+    /// <summary>탐색 목록에서 고른 페이지만 보이고, 제목과 설명을 그 페이지의 것으로 바꾼다. 새 페이지는 맨 위부터.</summary>
+    void SelectPage()
+    {
+        int index = Math.Max(0, _nav.SelectedIndex);
+        var key = Pages[index].key;
+        _header.Text = Strings.Get("nav." + key);
+        _header.Description = Strings.Get("page." + key + ".desc");
+        for (int i = 0; i < _pages.Length; i++)
+            if (i != index) _pages[i].Visible = false;
+        var page = _pages[index];
+        page.Visible = true;
+        page.ScrollToTop();
+        page.PerformLayout();
+        if (index == (int)SettingsPage.About) RefreshUpdateCard();
+    }
+
+    CardStack BuildAppearancePage()
+    {
+        var page = new CardStack();
+
+        _preview = new PreviewPanel { Height = PreviewHeight, Tag = "custom-paint" };
+        _preview.Paint += (_, e) => PaintPreview(e.Graphics);
+        _tips.SetToolTip(_preview, Strings.Get("preview.tip"));
+        page.Controls.Add(new SettingsCard
         {
-            // 고른 테마는 그대로 두고, 나머지와 배지 색을 그 테마의 기본값으로.
-            var design = DesignThemes.Get(_draft.Theme);
-            _draft.CopyFrom(new Settings { Theme = design.Id, HangulColor = design.HangulColor, EnglishColor = design.EnglishColor });
-            LoadDraftIntoControls();
+            Glyph = Glyphs.Preview, Title = Strings.Get("group.preview"), Description = Strings.Get("group.preview.desc"),
+            StretchBody = true, Body = _preview,
+        });
+
+        page.Controls.Add(Section("section.themeShape"));
+        // 테마: 배지 색·질감과 이 창의 색을 한 벌로 바꾼다. 타일에는 그 테마의 한/영 배지를 실제 렌더러로 그린다.
+        _theme = new TilePicker { TileSize = new Size(68, 58) };
+        _theme.SetTiles(DesignThemes.All.Select(d => new TilePicker.Tile(d.Id, Strings.Get("theme." + d.Id), (gr, r, p) => DrawThemeTile(gr, r, d))));
+        _theme.SelectedChanged += (_, _) => { if (_theme.SelectedValue is string id && id != _draft.Theme) ChooseTheme(DesignThemes.Get(id)); };
+        page.Controls.Add(Card(Glyphs.Theme, "look.theme", body: _theme));
+
+        // 배지 모양: 실제 렌더러로 그린 타일에서 고른다. 윗줄은 기본 모양, 아랫줄은 캐릭터. 둘 중 한 줄에서만 선택된다.
+        _style = new TilePicker { TileSize = new Size(68, 58), AccessibleName = Strings.Get("menu.style.basic"), Margin = new Padding(0, 0, 0, 8) };
+        _style.SetTiles(Labels.Styles.Select(s => new TilePicker.Tile(s.value, ShortStyle(s.value), (gr, r, p) => DrawStyleTile(gr, r, p, s.value))));
+        _style.SelectedChanged += (_, _) =>
+        {
+            if (_style.SelectedValue is not BadgeStyle v) return;
+            _draft.Style = v;
+            _draft.Character = BadgeCharacters.None;
+            _character.SelectedValue = null;
+            Touch();
         };
+        _character = new TilePicker { TileSize = new Size(68, 58), AccessibleName = Strings.Get("menu.style.characters"), Margin = Padding.Empty };
+        _character.SetTiles(Labels.Characters.Select(c => new TilePicker.Tile(c.id, c.label, (gr, r, p) => DrawCharacterTile(gr, r, p, c.id))));
+        _character.SelectedChanged += (_, _) =>
+        {
+            if (_character.SelectedValue is not string id) return;
+            _draft.Character = id;
+            _draft.Style = BadgeStyle.Pill;   // 구버전으로 되돌려도 둥근 배지로 보이게
+            _style.SelectedValue = null;
+            Touch();
+        };
+        page.Controls.Add(Card(Glyphs.Shape, "look.style", body: Stack(_style, _character)));
+
+        _placement = new TilePicker { TileSize = new Size(68, 58) };
+        _placement.SetTiles(Labels.Placements.Select(pl => new TilePicker.Tile(pl.value, ShortPlacement(pl.value), (gr, r, p) => DrawPlacementTile(gr, r, p, pl.value))));
+        _placement.SelectedChanged += (_, _) => { if (_placement.SelectedValue is BadgePlacement v) { _draft.Placement = v; Touch(); } };
+        page.Controls.Add(Card(Glyphs.Position, "look.placement", body: _placement));
+
+        page.Controls.Add(Section("section.sizeColor"));
+        // 크기·불투명도는 눈으로 맞추는 값이라 숫자 입력보다 슬라이더가 자연스럽다(Windows 설정 앱과 같은 방식).
+        page.Controls.Add(Card(Glyphs.Size, "look.size", action: Slider(out _size, 50, 300, 5, 25, "%", v => { _draft.SizePercent = v; Touch(); })));
+        page.Controls.Add(Card(Glyphs.Opacity, "look.opacity", action: Slider(out _opacity, 30, 100, 5, 10, "%", v => { _draft.OpacityPercent = v; Touch(); })));
+        page.Controls.Add(Card(Glyphs.Color, "look.hangulColor", body: Swatches(out _hangulColor, out _hangulHex, v => _draft.HangulColor = v)));
+        page.Controls.Add(Card(Glyphs.Color, "look.englishColor", body: Swatches(out _englishColor, out _englishHex, v => _draft.EnglishColor = v)));
+        _tips.SetToolTip(_hangulColor, Strings.Get("look.swatch.tip"));
+        _tips.SetToolTip(_englishColor, Strings.Get("look.swatch.tip"));
+        if (SystemInformation.HighContrast)   // 배지는 시스템 색(BadgeTheme.From). 견본은 그대로 저장되고 고대비를 끄면 쓰인다
+            page.Controls.Add(Note(Strings.Get("look.highContrastNote")));
+        return page;
+    }
+
+    CardStack BuildDisplayPage()
+    {
+        var page = new CardStack();
+
+        _visibility = Combo(240, Labels.Visibilities.Select(v => v.label), i => { _draft.Visibility = Labels.Visibilities[i].value; Touch(); });
+        _tips.SetToolTip(_visibility, Strings.Get("look.visibility.tip"));
+        page.Controls.Add(Card(Glyphs.Visibility, "look.visibility", action: _visibility));
+
+        _animate = Toggle(v => { _draft.Animate = v; Touch(); });
+        page.Controls.Add(Card(Glyphs.Animation, "look.animate", action: _animate));
+
+        page.Controls.Add(Section("section.capsShift"));
+        _capsLock = Toggle(v => { _draft.ShowCapsLock = v; _shiftHold.Enabled = v; Touch(); });
+        _tips.SetToolTip(_capsLock, Strings.Get("look.capsLock.tip"));
+        page.Controls.Add(Card(Glyphs.CapsLock, "look.capsLock", action: _capsLock));
+        // Caps Lock 표시의 하위 옵션: 대소문자를 글자로 구별할 때만 의미가 있다. 들여 쓰고, Caps Lock 표시가 꺼져 있으면 흐리게.
+        _shiftHold = Toggle(v => { _draft.ShowShiftHold = v; Touch(); });
+        _tips.SetToolTip(_shiftHold, Strings.Get("look.shiftHold.tip"));
+        var shift = Card(Glyphs.Shift, "look.shiftHold", action: _shiftHold);
+        shift.Indent = true;
+        page.Controls.Add(shift);
+
+        page.Controls.Add(Section("section.hideTray"));
+        _fullscreen = Toggle(v => { _draft.HideOnFullscreen = v; Touch(); });
+        page.Controls.Add(Card(Glyphs.FullScreen, "behavior.fullscreen", action: _fullscreen));
+        _trayStateBox = Toggle(v => { _draft.TrayShowsState = v; Touch(); });
+        page.Controls.Add(Card(Glyphs.Tray, "behavior.trayState", action: _trayStateBox));
+        return page;
+    }
+
+    CardStack BuildGeneralPage()
+    {
+        var page = new CardStack();
+
+        page.Controls.Add(Section("section.startup"));
+        // 자동 시작은 레지스트리를 만지므로 [확인] 때만 반영한다.
+        _autostartBox = Toggle(v => { _autostart = v; if (!_loading) { _dirty = true; UpdateHint(); } });
+        page.Controls.Add(Card(Glyphs.Power, "behavior.autostart", action: _autostartBox));
+
+        // 단축키: 키 조합을 받는 입력칸 + 켜기/끄기.
+        _hotkeyBox = new HotkeyBox { AccessibleName = Mnemonic.Plain(Strings.Get("behavior.hotkey")) };
+        _hotkeyBox.HotkeyChanged += spec => { _draft.Hotkey = spec.ToString(); Touch(); };
+        _tips.SetToolTip(_hotkeyBox, Strings.Get("behavior.hotkey.tip"));
+        _hotkey = Toggle(v => { _draft.HotkeyEnabled = v; _hotkeyBox.Enabled = v; Touch(); });
+        _hotkey.AccessibleName = Mnemonic.Plain(Strings.Get("behavior.hotkey"));
+        var hotkeyFrame = new InputFrame(_hotkeyBox) { Width = 170, Margin = new Padding(0, 0, 16, 0) };
+        page.Controls.Add(Card(Glyphs.Keyboard, "behavior.hotkey", action: Row(hotkeyFrame, _hotkey)));
+
+        page.Controls.Add(Section("section.updatesLanguage"));
+        _updates = Toggle(v => { _draft.CheckForUpdates = v; Touch(); });
+        page.Controls.Add(Card(Glyphs.Update, "behavior.updates", action: _updates));
+        _language = Combo(200, Labels.Languages.Select(l => l.label), i => { _draft.Language = Labels.Languages[i].value; Touch(); });
+        page.Controls.Add(Card(Glyphs.Language, "behavior.language", action: _language));
+
+        page.Controls.Add(Section("section.advanced"));
+        page.Controls.Add(Card(Glyphs.Clock, "behavior.poll", action: Slider(out _poll, 50, 1000, 50, 100, " ms", v => { _draft.PollIntervalMs = v; Touch(); })));
+        _tips.SetToolTip(_poll, Strings.Get("behavior.poll.tip"));
+
+        page.Controls.Add(Section("section.manage"));
         // 내보내기·가져오기: 다른 PC 로 설정을 옮긴다. 가져온 값은 초안에만 채우므로 [확인] 해야 저장되고 [취소] 하면 되돌아간다.
-        var import = new AccentButton { Text = Strings.Get("settings.import"), AutoSize = true, Margin = new Padding(8, 0, 0, 0) };
-        var export = new AccentButton { Text = Strings.Get("settings.export"), AutoSize = true, Margin = new Padding(8, 0, 0, 0) };
-        import.Click += (_, _) => ImportSettings();
-        export.Click += (_, _) => ExportSettings();
+        var import = Button("settings.import", ImportSettings);
+        var export = Button("settings.export", ExportSettings);
+        import.Margin = new Padding(0, 0, 8, 0);
         _tips.SetToolTip(import, Strings.Get("settings.import.tip"));
         _tips.SetToolTip(export, Strings.Get("settings.export.tip"));
-        buttons.Controls.Add(cancel); buttons.Controls.Add(ok); buttons.Controls.Add(reset); buttons.Controls.Add(import); buttons.Controls.Add(export);
+        page.Controls.Add(Card(Glyphs.Save, "settings.backup", action: Row(import, export)));
+        page.Controls.Add(Card(Glyphs.Reset, "settings.resetTitle", action: Button("settings.reset", ResetToDefaults)));
+        return page;
+    }
 
-        AcceptButton = ok; CancelButton = cancel;
-        _scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
-        _scroll.Controls.Add(root);
-        // Dock 은 뒤(나중에 추가한 것)부터 자리를 잡는다: 버튼 줄이 먼저 아래를 차지하고, 스크롤 영역이 남은 곳을 채운다.
-        Controls.Add(_scroll);
-        Controls.Add(buttons);
+    CardStack BuildExcludedPage()
+    {
+        var page = _excludePage = new CardStack();
+
+        // 이름을 직접 쓰거나(Enter 로 추가) 오른쪽 단추(Alt+↓)로 실행 중인 앱 목록을 펼쳐 고른다. 쓰는 동안 실행 중인 앱 이름을 자동 완성한다.
+        _excludeInput = new InputTextBox
+        {
+            AccessibleName = Strings.Get("exclude.addTitle"), PlaceholderText = Strings.Get("exclude.placeholder"),
+            AutoCompleteMode = AutoCompleteMode.SuggestAppend, AutoCompleteSource = AutoCompleteSource.CustomSource,
+        };
+        _excludeInput.GotFocus += (_, _) => { _excludeInput.AutoCompleteCustomSource.Clear(); _excludeInput.AutoCompleteCustomSource.AddRange(RunningAppNames()); };
+        _excludeInput.KeyDown += (_, e) =>
+        {
+            if (e.KeyCode == Keys.Enter) { AddExcluded(); e.Handled = true; e.SuppressKeyPress = true; }
+            else if (e.KeyCode == Keys.F4 || (e.Alt && e.KeyCode == Keys.Down)) { ShowRunningApps(); e.Handled = true; e.SuppressKeyPress = true; }
+        };
+        _tips.SetToolTip(_excludeInput, Strings.Get("exclude.new.tip"));
+        var pick = new GlyphButton { Glyph = "\uE70D", AccessibleName = Strings.Get("exclude.running") };
+        pick.Click += (_, _) => ShowRunningApps();
+        _tips.SetToolTip(pick, Strings.Get("exclude.running"));
+        _excludeFrame = new InputFrame(_excludeInput, pick) { Width = 280, Margin = new Padding(0, 0, 8, 0) };
+        var add = Button("exclude.add", AddExcluded);
+        add.Margin = Padding.Empty;
+        page.Controls.Add(Card(Glyphs.Add, "exclude.addTitle", body: Row(_excludeFrame, add)));
+
+        // 제외한 앱: 하나에 카드 하나, 오른쪽에 [삭제]. 목록은 ReloadExcluded 가 다시 만든다.
+        _excludeHeader = Section("exclude.listHeader");
+        page.Controls.Add(_excludeHeader);
+        return page;
+    }
+
+    CardStack BuildAboutPage()
+    {
+        var page = new CardStack();
+
+        Bitmap appIcon;
+        using (var big = new Icon(Icons.App, 128, 128)) appIcon = big.ToBitmap();   // 큰 프레임을 줄여 그려 고DPI 에서도 또렷하게
+        page.Controls.Add(new SettingsCard
+        {
+            Picture = appIcon, PictureSize = 48, Title = Strings.Get("app.name"), Description = Strings.Get("app.tagline"),
+            Action = new VersionChip { Text = $"v{AppVersion.Display}" },
+        });
+
+        var check = new AccentButton { Text = Strings.Get("about.checkUpdates"), AutoSize = true };
+        check.Click += (_, _) => _checkUpdates();
+        _updateCard = new SettingsCard { Glyph = Glyphs.Update, Title = Strings.Get("about.update"), Action = check };
+        page.Controls.Add(_updateCard);
+
+        page.Controls.Add(Section("section.links"));
+        page.Controls.Add(Link(Glyphs.Download, "about.releases", () => AboutInfo.Open(AppInfo.ReleasesUrl)));
+        page.Controls.Add(Link(Glyphs.Link, "about.repo", () => AboutInfo.Open(AppInfo.RepoUrl)));
+
+        page.Controls.Add(Section("section.troubleshoot"));
+        page.Controls.Add(Link(Glyphs.Folder, "about.settingsDir", () => AboutInfo.OpenFolder(_paths.SettingsDir)));
+        page.Controls.Add(Link(Glyphs.Folder, "about.logDir", () => AboutInfo.OpenFolder(_paths.LogDir)));
+        // 진단 정보: 이슈에 붙여 넣으면 재현 환경을 바로 알 수 있다.
+        _diagCard = Link(Glyphs.Copy, "about.copyDiag", CopyDiagnostics, trailing: "");
+        page.Controls.Add(_diagCard);
+
+        page.Controls.Add(Note(Strings.Get("about.license")));
+        return page;
+    }
+
+    /// <summary>"정보" 페이지의 업데이트 카드 설명: 마지막으로 확인한 시각.</summary>
+    void RefreshUpdateCard()
+    {
+        var last = _live.LastUpdateCheckUtc;
+        _updateCard.Description = last is { } t
+            ? Strings.Format("about.lastCheck", t.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))
+            : Strings.Get("about.neverChecked");
+    }
+
+    void CopyDiagnostics()
+    {
+        try
+        {
+            Clipboard.SetText(AboutInfo.Diagnostics(_paths, _live, DeviceDpi));
+            _diagCard.Description = Strings.Get("about.copied");
+            _copiedTimer.Stop();
+            _copiedTimer.Start();
+        }
+        catch (Exception ex) { Log.Error("clipboard failed", ex); }
+    }
+
+    void ResetToDefaults()
+    {
+        // 고른 테마는 그대로 두고, 나머지와 배지 색을 그 테마의 기본값으로.
+        var design = DesignThemes.Get(_draft.Theme);
+        _draft.CopyFrom(new Settings { Theme = design.Id, HangulColor = design.HangulColor, EnglishColor = design.EnglishColor });
+        LoadDraftIntoControls();
+    }
+
+    // ── 제외 앱 ──
+    /// <summary>제외 앱 카드들을 초안의 목록으로 다시 만든다. 목록은 초안(_draft)의 List 를 매번 읽는다("기본값 복원" 이 List 인스턴스를 바꾼다).</summary>
+    void ReloadExcluded()
+    {
+        var page = _excludePage;
+        page.SuspendLayout();
+        foreach (var c in _excludeRows) { page.Controls.Remove(c); c.Dispose(); }
+        _excludeRows.Clear();
+        var items = _draft.ExcludedProcesses;
+        _excludeHeader.Text = Strings.Format("exclude.listHeader", items.Count);
+        if (items.Count == 0) _excludeRows.Add(Note(Strings.Get("exclude.empty")));
+        foreach (var name in items)
+        {
+            string item = name;
+            var remove = new AccentButton { Text = Strings.Get("exclude.removeItem"), AutoSize = true, AccessibleName = Strings.Format("exclude.removeItem.name", name) };
+            // 눌린 버튼이 든 카드를 지우므로 클릭 처리가 끝난 뒤에 지운다.
+            remove.Click += (_, _) => BeginInvoke(() => RemoveExcluded(item));
+            _excludeRows.Add(new SettingsCard
+            {
+                Glyph = Glyphs.Apps, Title = name.Replace("&", "&&"),
+                Description = name.EndsWith('*') ? Strings.Format("exclude.prefix", name.TrimEnd('*')) : "",
+                Action = remove,
+            });
+        }
+        foreach (var c in _excludeRows) page.Controls.Add(c);
+        page.ResumeLayout(true);
+        if (IsHandleCreated) Theme.Apply(this);   // 새로 만든 카드에 색을 입힌다(처음에는 생성자 끝에서 칠한다)
+    }
+
+    void AddExcluded()
+    {
+        string name = _excludeInput.Text.Trim();
+        if (name.Length == 0) return;
+        var items = _draft.ExcludedProcesses;
+        if (!items.Any(x => string.Equals(ProcessFilter.Normalize(x), ProcessFilter.Normalize(name), StringComparison.OrdinalIgnoreCase)))
+        {
+            items.Add(name);
+            Touch();
+            ReloadExcluded();
+        }
+        _excludeInput.Text = "";
+        _excludeInput.Focus();
+    }
+
+    void RemoveExcluded(string name)
+    {
+        if (IsDisposed) return;
+        var items = _draft.ExcludedProcesses;
+        int i = items.IndexOf(name);
+        if (i < 0) return;
+        items.RemoveAt(i);
+        Touch();
+        ReloadExcluded();
+        // 키보드로 지우던 사람이 이어서 지울 수 있게 같은 자리의 다음 항목으로, 없으면 입력칸으로.
+        var next = _excludeRows.OfType<SettingsCard>().ElementAtOrDefault(Math.Min(i, items.Count - 1))?.Action;
+        (next ?? _excludeInput).Focus();
+    }
+
+    /// <summary>실행 중인 앱 목록을 펼친다. 고르면 바로 제외 목록에 넣는다.</summary>
+    void ShowRunningApps()
+    {
+        var names = RunningAppNames()
+            .Where(n => !_draft.ExcludedProcesses.Any(x => string.Equals(ProcessFilter.Normalize(x), ProcessFilter.Normalize(n), StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+        if (names.Length == 0) return;
+        _appsMenu?.Dispose();
+        var menu = _appsMenu = new ContextMenuStrip
+        {
+            Renderer = Theme.CreateMenuRenderer(), ShowImageMargin = false, Font = Font, MinimumSize = new Size(_excludeFrame.Width, 0),
+        };
+        foreach (var n in names)
+        {
+            string name = n;
+            var item = new ToolStripMenuItem(name.Replace("&", "&&"));
+            item.Click += (_, _) => { _excludeInput.Text = name; AddExcluded(); };
+            menu.Items.Add(item);
+        }
+        menu.Opened += (_, _) => Theme.RoundCorners(menu.Handle);
+        menu.Show(_excludeFrame, new Point(0, _excludeFrame.Height + LogicalToDeviceUnits(2)));
+    }
+
+    /// <summary>창이 있는 실행 중인 앱의 프로세스 이름(이 프로그램 제외), 이름순.</summary>
+    static string[] RunningAppNames()
+    {
+        System.Diagnostics.Process[]? procs = null;
+        try
+        {
+            procs = System.Diagnostics.Process.GetProcesses();
+            return procs
+                .Where(p => { try { return p.MainWindowHandle != IntPtr.Zero; } catch { return false; } })   // 창이 있는 앱만
+                .Select(p => p.ProcessName)
+                .Where(n => !string.Equals(n, AppInfo.ProductName, StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+        catch (Exception ex) { Log.Error("list running apps failed", ex); return Array.Empty<string>(); }
+        finally { if (procs is not null) foreach (var p in procs) p.Dispose(); }
     }
 
     void ExportSettings()
@@ -272,167 +663,6 @@ sealed class SettingsForm : Form
         LoadDraftIntoControls();
         Log.Write($"settings imported: {dlg.FileName}");
         Dialogs.Info(Strings.Get("settings.imported"), Strings.Get("settings.imported.text"));
-    }
-
-    Control BuildHeader()
-    {
-        var row = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = new Padding(0, 0, 0, 16) };
-        var pic = new PictureBox { Size = new Size(40, 40), SizeMode = PictureBoxSizeMode.Zoom, Margin = new Padding(0, 2, 12, 0) };
-        using (var big = new Icon(Icons.App, 128, 128)) pic.Image = big.ToBitmap();
-        var texts = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty };
-        texts.Controls.Add(new Label { Text = Strings.Get("settings.heading"), Font = Theme.TitleFont(Font), AutoSize = true, Margin = new Padding(0, 0, 0, 2) });
-        texts.Controls.Add(new Label { Text = Strings.Get("settings.subtitle"), ForeColor = SystemColors.GrayText, AutoSize = true, Margin = Padding.Empty });
-        row.Controls.Add(pic);
-        row.Controls.Add(texts);
-        return row;
-    }
-
-    GroupBox BuildLookGroup()
-    {
-        var g = NewGroup(Strings.Get("group.look"), Strings.Get("group.look.desc"));
-        var t = NewTable(g);
-
-        // 테마: 배지 색·질감과 이 창의 색을 한 벌로 바꾼다. 타일에는 그 테마의 한/영 배지를 실제 렌더러로 그린다.
-        AddRow(t, null, FieldLabel(Strings.Get("look.theme")));
-        _theme = new TilePicker { TileSize = new Size(68, 58) };
-        _theme.SetTiles(DesignThemes.All.Select(d => new TilePicker.Tile(d.Id, Strings.Get("theme." + d.Id), (gr, r, p) => DrawThemeTile(gr, r, d))));
-        _theme.SelectedChanged += (_, _) => { if (_theme.SelectedValue is string id && id != _draft.Theme) ChooseTheme(DesignThemes.Get(id)); };
-        AddRow(t, null, _theme);
-        _tips.SetToolTip(_theme, Strings.Get("look.theme.tip"));
-
-        // 배지 모양: 실제 렌더러로 그린 타일에서 고른다. 윗줄은 기본 모양, 아랫줄은 캐릭터. 둘 중 한 줄에서만 선택된다.
-        AddRow(t, null, FieldLabel(Strings.Get("look.style")));
-        _style = new TilePicker { TileSize = new Size(68, 58) };
-        _style.SetTiles(Labels.Styles.Select(s => new TilePicker.Tile(s.value, ShortStyle(s.value), (gr, r, p) => DrawStyleTile(gr, r, p, s.value))));
-        _style.SelectedChanged += (_, _) =>
-        {
-            if (_style.SelectedValue is not BadgeStyle v) return;
-            _draft.Style = v;
-            _draft.Character = BadgeCharacters.None;
-            _character.SelectedValue = null;
-            Touch();
-        };
-        AddRow(t, null, _style);
-        _character = new TilePicker { TileSize = new Size(68, 58) };
-        _character.SetTiles(Labels.Characters.Select(c => new TilePicker.Tile(c.id, c.label, (gr, r, p) => DrawCharacterTile(gr, r, p, c.id))));
-        _character.SelectedChanged += (_, _) =>
-        {
-            if (_character.SelectedValue is not string id) return;
-            _draft.Character = id;
-            _draft.Style = BadgeStyle.Pill;   // 구버전으로 되돌려도 둥근 배지로 보이게
-            _style.SelectedValue = null;
-            Touch();
-        };
-        AddRow(t, null, _character);
-
-        AddRow(t, null, FieldLabel(Strings.Get("look.placement")));
-        _placement = new TilePicker { TileSize = new Size(68, 58) };
-        _placement.SetTiles(Labels.Placements.Select(pl => new TilePicker.Tile(pl.value, ShortPlacement(pl.value), (gr, r, p) => DrawPlacementTile(gr, r, p, pl.value))));
-        _placement.SelectedChanged += (_, _) => { if (_placement.SelectedValue is BadgePlacement v) { _draft.Placement = v; Touch(); } };
-        AddRow(t, null, _placement);
-        _tips.SetToolTip(_placement, Strings.Get("look.placement.tip"));
-
-        // 크기·불투명도는 눈으로 맞추는 값이라 숫자 입력보다 슬라이더가 자연스럽다(Windows 설정 앱과 같은 방식).
-        AddRow(t, Strings.Get("look.size"), Slider(out _size, 50, 300, 5, 25, v => { _draft.SizePercent = v; Touch(); }));
-        AddRow(t, Strings.Get("look.opacity"), Slider(out _opacity, 30, 100, 5, 10, v => { _draft.OpacityPercent = v; Touch(); }));
-        _tips.SetToolTip(_size, Strings.Get("look.size.tip"));
-        _tips.SetToolTip(_opacity, Strings.Get("look.opacity.tip"));
-
-        AddRow(t, Strings.Get("look.hangulColor"), Swatches(out _hangulColor, out _hangulHex, v => _draft.HangulColor = v));
-        AddRow(t, Strings.Get("look.englishColor"), Swatches(out _englishColor, out _englishHex, v => _draft.EnglishColor = v));
-        if (SystemInformation.HighContrast)   // 배지는 시스템 색(BadgeTheme.From). 견본은 그대로 저장되고 고대비를 끄면 쓰인다
-            AddRow(t, null, Hint(Strings.Get("look.highContrastNote")));
-        _tips.SetToolTip(_hangulColor, Strings.Get("look.swatch.tip"));
-        _tips.SetToolTip(_englishColor, Strings.Get("look.swatch.tip"));
-
-        _animate = Toggle(Strings.Get("look.animate"), v => { _draft.Animate = v; Touch(); });
-        AddRow(t, null, _animate);
-        _tips.SetToolTip(_animate, Strings.Get("look.animate.tip"));
-
-        _visibility = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
-        _visibility.Items.AddRange(Labels.Visibilities.Select(v => (object)v.label).ToArray());
-        _visibility.SelectedIndexChanged += (_, _) => { _draft.Visibility = Labels.Visibilities[Math.Max(0, _visibility.SelectedIndex)].value; Touch(); };
-        AddRow(t, Strings.Get("look.visibility"), _visibility);
-        _tips.SetToolTip(_visibility, Strings.Get("look.visibility.tip"));
-
-        _capsLock = Toggle(Strings.Get("look.capsLock"), v => { _draft.ShowCapsLock = v; _shiftHold.Enabled = v; Touch(); });
-        AddRow(t, null, _capsLock);
-        _tips.SetToolTip(_capsLock, Strings.Get("look.capsLock.tip"));
-
-        // Caps Lock 표시의 하위 옵션: 대소문자를 글자로 구별할 때만 의미가 있다.
-        _shiftHold = Toggle(Strings.Get("look.shiftHold"), v => { _draft.ShowShiftHold = v; Touch(); });
-        AddRow(t, null, _shiftHold);
-        _tips.SetToolTip(_shiftHold, Strings.Get("look.shiftHold.tip"));
-
-        g.Controls.Add(t);
-        return g;
-    }
-
-    GroupBox BuildBehaviorGroup()
-    {
-        var g = NewGroup(Strings.Get("group.behavior"), Strings.Get("group.behavior.desc"));
-        var t = NewTable(g);
-
-        _autostartBox = Toggle(Strings.Get("behavior.autostart"), v => _autostart = v);   // 레지스트리는 [확인] 때만 만진다
-        AddRow(t, null, _autostartBox);
-
-        _fullscreen = Toggle(Strings.Get("behavior.fullscreen"), v => { _draft.HideOnFullscreen = v; Touch(); });
-        AddRow(t, null, _fullscreen);
-
-        _trayStateBox = Toggle(Strings.Get("behavior.trayState"), v => { _draft.TrayShowsState = v; Touch(); });
-        AddRow(t, null, _trayStateBox);
-
-        // 단축키: 토글 + 키 조합을 받는 입력칸을 한 줄에.
-        var hotkeyRow = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty };
-        _hotkey = Toggle(Strings.Get("behavior.hotkey"), v => { _draft.HotkeyEnabled = v; _hotkeyBox.Enabled = v; Touch(); });
-        _hotkey.Margin = new Padding(0, 0, 12, 0);
-        _hotkeyBox = new HotkeyBox { Width = 130 };
-        _hotkeyBox.HotkeyChanged += spec => { _draft.Hotkey = spec.ToString(); Touch(); };
-        _tips.SetToolTip(_hotkeyBox, Strings.Get("behavior.hotkey.tip"));
-        hotkeyRow.Controls.Add(_hotkey);
-        hotkeyRow.Controls.Add(_hotkeyBox);
-        AddRow(t, null, hotkeyRow);
-
-        _updates = Toggle(Strings.Get("behavior.updates"), v => { _draft.CheckForUpdates = v; Touch(); });
-        AddRow(t, null, _updates);
-        _tips.SetToolTip(_updates, Strings.Get("behavior.updates.tip"));
-
-        _poll = new NumericUpDown { Minimum = 50, Maximum = 1000, Increment = 50, Width = 80 };
-        _poll.ValueChanged += (_, _) => { _draft.PollIntervalMs = (int)_poll.Value; Touch(); };
-        AddRow(t, Strings.Get("behavior.poll"), _poll);
-        AddRow(t, null, Hint(Strings.Get("behavior.poll.note")));
-        _tips.SetToolTip(_poll, Strings.Get("behavior.poll.tip"));
-
-        _language = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
-        _language.Items.AddRange(Labels.Languages.Select(l => (object)l.label).ToArray());
-        _language.SelectedIndexChanged += (_, _) => { _draft.Language = Labels.Languages[Math.Max(0, _language.SelectedIndex)].value; Touch(); };
-        AddRow(t, Strings.Get("behavior.language"), _language);
-        _tips.SetToolTip(_language, Strings.Get("behavior.language.tip"));
-
-        g.Controls.Add(t);
-        return g;
-    }
-
-    GroupBox BuildPreviewGroup()
-    {
-        var g = NewGroup(Strings.Get("group.preview"), Strings.Get("group.preview.desc"));
-        _preview = new PreviewPanel { Location = g.ContentOrigin, Width = InnerWidth, Height = PreviewHeight, Tag = "custom-paint" };
-        _preview.Paint += (_, e) => PaintPreview(e.Graphics);
-        _tips.SetToolTip(_preview, Strings.Get("preview.tip"));
-        g.Controls.Add(_preview);
-        return g;
-    }
-
-    GroupBox BuildExcludeGroup()
-    {
-        var g = NewGroup(Strings.Get("group.exclude"), Strings.Get("group.exclude.desc"));
-        // 목록은 초안(_draft)의 List 를 매번 가리킨다. "기본값 복원" 이 List 인스턴스를 바꾸므로 붙잡아 두면 안 된다.
-        _excluded = new ProcessListEditor(() => _draft.ExcludedProcesses, InnerWidth, _tips,
-            Strings.Get("exclude.add"), Strings.Get("exclude.remove"), Strings.Get("exclude.new.tip"), Strings.Get("exclude.note"))
-        { Location = g.ContentOrigin };
-        _excluded.Changed += Touch;
-        g.Controls.Add(_excluded);
-        return g;
     }
 
     // ── 타일 그리기 ──
@@ -504,80 +734,102 @@ sealed class SettingsForm : Form
     }
 
     // ── 도우미 ──
-    /// <summary>폭은 고정(GroupWidth), 높이는 내용에 맞춰 자란다. 자식은 Dock 없이 <see cref="CardGroupBox.ContentOrigin"/> 에 둔다.</summary>
-    static CardGroupBox NewGroup(string title, string description) =>
-        new()
-        {
-            Text = title,
-            Description = description,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            MinimumSize = new Size(GroupWidth, 0),
-            Padding = new Padding(CardInset, 0, CardInset, CardInset),
-            Margin = new Padding(0, 0, 0, CardGap),
-        };
-
-    static TableLayoutPanel NewTable(CardGroupBox card)
+    /// <summary>카드 하나: 아이콘, 제목(key, 니모닉 포함), 설명(key + ".desc"), 오른쪽 컨트롤 또는 아래 넓은 내용.</summary>
+    SettingsCard Card(string glyph, string key, Control? action = null, Control? body = null)
     {
-        var t = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Location = card.ContentOrigin };
-        t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        return t;
+        var card = new SettingsCard { Glyph = glyph, Title = Strings.Get(key), Description = Strings.Get(key + ".desc") };
+        if (action is not null) card.Action = action;
+        if (body is not null) card.Body = body;
+        return card;
     }
 
-    static void AddRow(TableLayoutPanel t, string? label, Control c)
+    /// <summary>누를 수 있는 카드(폴더·웹 페이지 열기). 오른쪽 끝에 "새 창에서 열기" 표시.</summary>
+    SettingsCard Link(string glyph, string key, Action onClick, string trailing = Glyphs.OpenExternal)
     {
-        int row = t.RowCount++;
-        t.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        c.Margin = new Padding(0, 4, 0, 4);
-        if (label is null)
-        {
-            t.Controls.Add(c, 0, row);
-            t.SetColumnSpan(c, 2);
-        }
-        else
-        {
-            t.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 8, 12, 4), MinimumSize = new Size(88, 0) }, 0, row);
-            t.Controls.Add(c, 1, row);
-        }
+        var card = Card(glyph, key);
+        card.Clickable = true;
+        card.TrailingGlyph = trailing;
+        card.Click += (_, _) => onClick();
+        return card;
     }
 
-    /// <summary>타일 선택기처럼 폭이 넓은 항목의 이름표. 아래 컨트롤로 Alt 니모닉이 이어진다.</summary>
-    static Label FieldLabel(string text) => new() { Text = text, AutoSize = true, Margin = new Padding(0, 6, 0, 0) };
+    SectionHeader Section(string key) => new(Strings.Get(key), _sectionFont);
 
-    static Label Hint(string text) => new() { Text = text, ForeColor = SystemColors.GrayText, AutoSize = true, MaximumSize = new Size(InnerWidth - 4, 0) };
+    NoteLabel Note(string text) => new(text, _hintFont);
 
-    static ToggleSwitch Toggle(string text, Action<bool> onChange)
+    /// <summary>"켬/끔" 이 붙은 토글(카드 오른쪽). 이름은 카드 제목이 준다.</summary>
+    ToggleSwitch Toggle(Action<bool> onChange)
     {
-        var t = new ToggleSwitch { Text = text, AutoSize = true };
+        var t = new ToggleSwitch { AutoSize = true, OnText = Strings.Get("toggle.on"), OffText = Strings.Get("toggle.off"), Margin = Padding.Empty };
         t.CheckedChanged += (_, _) => onChange(t.Checked);
         return t;
     }
 
-    /// <summary>퍼센트 슬라이더 + 현재 값 라벨. 값은 <paramref name="step"/> 단위로 맞춰진다(예: 137% → 135%).</summary>
-    static Control Slider(out AccentSlider bar, int min, int max, int step, int page, Action<int> onChange)
+    static AccentButton Button(string key, Action onClick)
+    {
+        var b = new AccentButton { Text = Strings.Get(key), AutoSize = true };
+        b.Click += (_, _) => onClick();
+        return b;
+    }
+
+    /// <summary>고르기 상자(카드 오른쪽). 휠은 받지 않아 페이지 스크롤 중에 값이 바뀌지 않는다(<see cref="ThemedComboBox"/>).</summary>
+    static ThemedComboBox Combo(int width, IEnumerable<string> items, Action<int> onChange)
+    {
+        var c = new ThemedComboBox { Width = width };
+        c.SetItems(items);
+        c.SelectedIndexChanged += (_, _) => onChange(Math.Max(0, c.SelectedIndex));
+        return c;
+    }
+
+    /// <summary>가로로 나란히(카드 오른쪽의 여러 컨트롤).</summary>
+    static FlowLayoutPanel Row(params Control[] controls)
     {
         var panel = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty };
-        var s = new AccentSlider { Minimum = min, Maximum = max, SmallChange = step, LargeChange = page, Width = 200, Margin = new Padding(0, 0, 8, 0) };
-        var value = new Label { AutoSize = true, Margin = new Padding(0, 6, 0, 0), Text = $"{s.Value}%", MinimumSize = new Size(40, 0) };
-        s.ValueChanged += (_, _) => { value.Text = $"{s.Value}%"; onChange(s.Value); };
-        panel.Controls.Add(s);
-        panel.Controls.Add(value);
-        bar = s;
+        panel.Controls.AddRange(controls);
         return panel;
+    }
+
+    /// <summary>세로로 쌓기(배지 모양의 기본·캐릭터 두 줄).</summary>
+    static FlowLayoutPanel Stack(params Control[] controls)
+    {
+        var panel = Row(controls);
+        panel.FlowDirection = FlowDirection.TopDown;
+        return panel;
+    }
+
+    /// <summary>슬라이더 + 현재 값(왼쪽). 값은 <paramref name="step"/> 단위로 맞춰진다(예: 137% → 135%).</summary>
+    static Control Slider(out AccentSlider bar, int min, int max, int step, int page, string unit, Action<int> onChange)
+    {
+        var s = new AccentSlider { Minimum = min, Maximum = max, SmallChange = step, LargeChange = page, Width = 220, Margin = Padding.Empty };
+        var value = new Label { AutoSize = true, Margin = new Padding(0, 6, 8, 0), MinimumSize = new Size(56, 0), TextAlign = ContentAlignment.TopRight, Text = $"{s.Value}{unit}" };
+        s.ValueChanged += (_, _) => { value.Text = $"{s.Value}{unit}"; onChange(s.Value); };
+        bar = s;
+        return Row(value, s);
     }
 
     /// <summary>색 견본 팔레트 + 현재 색의 16진수 표시.</summary>
     Control Swatches(out ColorSwatches swatches, out Label hex, Action<string> onChange)
     {
-        var panel = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty };
         var s = new ColorSwatches { Margin = new Padding(0, 0, 8, 0) };
-        var h = new Label { AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 7, 0, 0), Font = Theme.HintFont(Font) };
+        var h = new Label { AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 7, 0, 0), Font = _hintFont };
         s.ColorChanged += (_, _) => { h.Text = s.Hex; onChange(s.Hex); Touch(); };
-        panel.Controls.Add(s);
-        panel.Controls.Add(h);
         swatches = s; hex = h;
-        return panel;
+        return Row(s, h);
+    }
+
+    void UpdateHint() => _commands.Hint = Strings.Get(_dirty ? "settings.hint.dirty" : "settings.hint.clean");
+
+    /// <summary>
+    /// 편집 값을 실제 설정에 넣는다. 업데이트 확인 기록(마지막 확인 시각·건너뛴 버전)은 이 창이 편집하는 값이 아니므로 실제 설정의 것을 지킨다:
+    /// 창이 열린 동안 [새 버전 확인]이나 하루 한 번 자동 확인이 그 값을 바꿨을 수 있다.
+    /// </summary>
+    void Store(Settings from)
+    {
+        var lastCheck = _live.LastUpdateCheckUtc;
+        var skipped = _live.SkippedUpdateTag;
+        _live.CopyFrom(from);
+        _live.LastUpdateCheckUtc = lastCheck;
+        _live.SkippedUpdateTag = skipped;
     }
 
     /// <summary>초안을 컨트롤에 싣는다. 컨트롤마다 변경 이벤트가 오지만 끝에 한 번만 반영한다.</summary>
@@ -601,7 +853,7 @@ sealed class SettingsForm : Form
         _placement.SelectedValue = _draft.Placement;
         _size.Value = _draft.SizePercent;
         _opacity.Value = _draft.OpacityPercent;
-        _poll.Value = Math.Clamp(_draft.PollIntervalMs, (int)_poll.Minimum, (int)_poll.Maximum);
+        _poll.Value = Math.Clamp(_draft.PollIntervalMs, _poll.Minimum, _poll.Maximum);
         _hangulColor.Hex = _draft.HangulColor; _hangulHex.Text = _hangulColor.Hex;
         _englishColor.Hex = _draft.EnglishColor; _englishHex.Text = _englishColor.Hex;
         _animate.Checked = _draft.Animate;
@@ -617,7 +869,7 @@ sealed class SettingsForm : Form
         _hotkeyBox.Text = _draft.Hotkey;
         _updates.Checked = _draft.CheckForUpdates;
         _language.SelectedIndex = Math.Max(0, Array.FindIndex(Labels.Languages, l => l.value == _draft.Language));
-        _excluded.Reload();
+        ReloadExcluded();
     }
 
     /// <summary>테마를 고르면 배지 색도 그 테마의 기본색으로, 견본도 그 테마의 것으로 바꾼다. 창은 <see cref="Touch"/> 에서 다시 칠한다.</summary>
@@ -634,8 +886,9 @@ sealed class SettingsForm : Form
     {
         if (_loading) return;   // 컨트롤을 채우는 중에는 마지막에 한 번만
         _draft.Normalize();
-        _live.CopyFrom(_draft);
+        Store(_draft);
         _dirty = true;
+        UpdateHint();
         Changed?.Invoke();   // BadgeForm 이 여기서 Strings.Setting 을 새 언어로 맞춘다
         var design = DesignThemes.Get(_draft.Theme);
         if (!ReferenceEquals(design, _painted)) { _painted = Theme.Design = design; Recolor(); }
@@ -781,7 +1034,7 @@ sealed class SettingsForm : Form
     /// <summary>[확인]: 자동 시작을 반영하고 저장을 알린다. 배지 설정은 이미 실제 설정에 들어가 있다.</summary>
     void Apply()
     {
-        _live.CopyFrom(_draft);
+        Store(_draft);
         if (_autostart != Autostart.IsEnabled()) Autostart.Set(_autostart);
         _dirty = false;
         Applied?.Invoke();
@@ -792,14 +1045,14 @@ sealed class SettingsForm : Form
     {
         base.OnFormClosing(e);
         if (e.Cancel || _detached || DialogResult == DialogResult.OK || !_dirty) return;
-        _live.CopyFrom(_original);
+        Store(_original);
         _dirty = false;
         Applied?.Invoke();
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { _flashTimer.Dispose(); _tips.Dispose(); }
+        if (disposing) { _flashTimer.Dispose(); _copiedTimer.Dispose(); _tips.Dispose(); _sectionFont.Dispose(); _hintFont.Dispose(); _appsMenu?.Dispose(); }
         base.Dispose(disposing);
     }
 }
@@ -809,113 +1062,16 @@ sealed class SettingsForm : Form
 /// </summary>
 sealed class PreviewPanel : Panel
 {
-    public PreviewPanel() { DoubleBuffered = true; }
+    // 창 크기를 바꾸면 밝은·어두운 반쪽의 경계가 옮겨 가므로 새로 드러난 곳만이 아니라 전체를 다시 그린다.
+    public PreviewPanel() { DoubleBuffered = true; SetStyle(ControlStyles.ResizeRedraw, true); }
 }
 
 /// <summary>
-/// 프로세스 이름 목록 편집기: 목록 + (실행 중인 앱 콤보박스, 추가, 삭제) + 안내문.
-/// "배지를 띄우지 않을 앱" 과 "모서리에 표시할 앱" 이 함께 쓴다. 목록은 <see cref="_items"/> 로 매번 가져오고(설정 초안의 List),
-/// 추가·삭제하면 <see cref="Changed"/> 로 알린다. Enter 로 추가, Delete 로 삭제.
+/// 직접 입력하는 칸(제외 앱 추가). Enter 를 창의 [확인] 대신 이 칸이 받아 "추가" 로 쓴다.
 /// </summary>
-sealed class ProcessListEditor : TableLayoutPanel
+sealed class InputTextBox : TextBox
 {
-    readonly Func<List<string>> _items;
-    readonly ListBox _list;
-    readonly ComboBox _input;
-
-    /// <summary>목록이 바뀌었다(추가·삭제).</summary>
-    public event Action? Changed;
-
-    public ProcessListEditor(Func<List<string>> items, int width, ToolTip tips, string addText, string removeText, string inputTip, string note)
-    {
-        _items = items;
-        ColumnCount = 1; AutoSize = true; AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-
-        _list = new ListBox { Width = width - 6, Height = 72, IntegralHeight = false };
-        _list.KeyDown += (_, e) => { if (e.KeyCode == Keys.Delete) RemoveItem(); };
-        AddRow(_list);
-
-        // 실행 중인 앱에서 고르거나 이름을 직접 쓴다. 목록은 펼칠 때마다 새로 읽는다.
-        var row = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false };
-        _input = new ComboBox { DropDownStyle = ComboBoxStyle.DropDown, Width = 196, Margin = new Padding(0, 2, 8, 0) };
-        _input.DropDown += (_, _) => FillRunningApps();
-        _input.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) { AddItem(); e.SuppressKeyPress = true; } };
-        tips.SetToolTip(_input, inputTip);
-        var add = new AccentButton { Text = addText, AutoSize = true, Margin = new Padding(0, 0, 8, 0) };
-        add.Click += (_, _) => AddItem();
-        var remove = new AccentButton { Text = removeText, AutoSize = true, Margin = Padding.Empty };
-        remove.Click += (_, _) => RemoveItem();
-        row.Controls.Add(_input); row.Controls.Add(add); row.Controls.Add(remove);
-        AddRow(row);
-
-        AddRow(new Label { Text = note, ForeColor = SystemColors.GrayText, AutoSize = true, MaximumSize = new Size(width - 4, 0) });
-    }
-
-    void AddRow(Control c)
-    {
-        int row = RowCount++;
-        RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        c.Margin = new Padding(0, 4, 0, 4);
-        Controls.Add(c, 0, row);
-    }
-
-    /// <summary>설정 초안의 목록을 다시 싣는다(창을 열 때, 기본값 복원 때).</summary>
-    public void Reload()
-    {
-        _list.BeginUpdate();
-        _list.Items.Clear();
-        foreach (var p in _items()) _list.Items.Add(p);
-        _list.EndUpdate();
-    }
-
-    void FillRunningApps()
-    {
-        System.Diagnostics.Process[]? procs = null;
-        try
-        {
-            procs = System.Diagnostics.Process.GetProcesses();
-            var names = procs
-                .Where(p => { try { return p.MainWindowHandle != IntPtr.Zero; } catch { return false; } })   // 창이 있는 앱만
-                .Select(p => p.ProcessName)
-                .Where(n => !string.Equals(n, AppInfo.ProductName, StringComparison.OrdinalIgnoreCase))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            string typed = _input.Text;
-            _input.Items.Clear();
-            _input.Items.AddRange(names);
-            _input.Text = typed;
-        }
-        catch (Exception ex) { Log.Error("list running apps failed", ex); }
-        finally { if (procs is not null) foreach (var p in procs) p.Dispose(); }
-    }
-
-    void AddItem()
-    {
-        string name = _input.Text.Trim();
-        if (name.Length == 0) return;
-        var items = _items();
-        if (!items.Any(x => string.Equals(ProcessFilter.Normalize(x), ProcessFilter.Normalize(name), StringComparison.OrdinalIgnoreCase)))
-        {
-            items.Add(name);
-            Reload();
-            Changed?.Invoke();
-        }
-        _input.Text = "";
-        _input.Focus();
-    }
-
-    void RemoveItem()
-    {
-        int i = _list.SelectedIndex;
-        var items = _items();
-        if (i < 0 || i >= items.Count) return;
-        items.RemoveAt(i);
-        Reload();
-        if (_list.Items.Count > 0) _list.SelectedIndex = Math.Min(i, _list.Items.Count - 1);
-        Changed?.Invoke();
-    }
+    protected override bool IsInputKey(Keys keyData) => (keyData & Keys.KeyCode) == Keys.Enter || base.IsInputKey(keyData);
 }
 
 /// <summary>

@@ -47,7 +47,7 @@ static class CrashHandler
                 Strings.Get("crash.text"),
                 ex is null ? null : $"{ex.GetType().Name}: {ex.Message}",
                 logDir);
-            if (open) AboutForm.OpenFolder(logDir);
+            if (open) AboutInfo.OpenFolder(logDir);
         }
         catch { }
         Environment.Exit(1);

@@ -4,9 +4,25 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 namespace ImeBadge;
+
+/// <summary>
+/// 니모닉(Alt+글자) 표시. 한국어 문구는 "테마(&amp;V)" 처럼 괄호 꼬리로 단축키를 적는데, Windows 11 앱처럼 평소에는 감추고
+/// 키보드 단서가 켜지면(Alt 를 누르면) 보여 준다. 영어 문구의 밑줄(&amp;)은 TextRenderer 의 HidePrefix 가 같은 일을 한다.
+/// </summary>
+static class Mnemonic
+{
+    static readonly Regex Suffix = new(@"\(&[^)&]\)", RegexOptions.Compiled);
+
+    /// <summary>키보드 단서가 꺼져 있으면 "(&amp;V)" 꼬리를 뺀 문구.</summary>
+    public static string Display(string text, bool cues) => cues || !text.Contains("(&", StringComparison.Ordinal) ? text : Suffix.Replace(text, "");
+
+    /// <summary>니모닉 표시를 모두 뺀 이름("일시 중지 단축키(&amp;K)" → "일시 중지 단축키"). 화면 읽기 프로그램용.</summary>
+    public static string Plain(string text) => Suffix.Replace(text, "").Replace("&&", "\u0001").Replace("&", "").Replace("\u0001", "&");
+}
 
 /// <summary>
 /// 직접 그리는 컨트롤의 공통 기반. WinForms 기본 컨트롤(체크박스·TrackBar·Button)은 테마 엔진이 그려서 어두운 배경과 어울리지 않고
@@ -69,20 +85,41 @@ abstract class ThemedControl : Control
     protected TextFormatFlags TextFlags(TextFormatFlags extra = TextFormatFlags.Default) =>
         TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | extra | (ShowKeyboardCues ? 0 : TextFormatFlags.HidePrefix);
 
+    /// <summary>그릴 문구. 키보드 단서가 꺼져 있으면 한국어 니모닉 꼬리 "(&amp;V)" 를 감춘다(<see cref="Mnemonic"/>).</summary>
+    protected string CueText(string text) => Mnemonic.Display(text, ShowKeyboardCues);
+
+    /// <summary>Alt 를 눌러 키보드 단서가 켜지면 니모닉 꼬리가 나타나므로 크기와 그림을 다시 맞춘다.</summary>
+    protected override void OnChangeUICues(UICuesEventArgs e)
+    {
+        base.OnChangeUICues(e);
+        if (AutoSize) Size = GetPreferredSize(Size.Empty);
+        Invalidate();
+    }
+
     protected static Color Alpha(Color c, int alpha) => Color.FromArgb(alpha, c);
     protected static float Ease(float t) => 1f - (1f - t) * (1f - t);
 }
 
-/// <summary>Windows 11 토글 스위치. 켜짐은 강조색, 손잡이는 짧게 미끄러진다(Windows "애니메이션 효과"가 꺼져 있으면 즉시).</summary>
+/// <summary>
+/// Windows 11 토글 스위치. 켜짐은 강조색, 손잡이는 짧게 미끄러진다(Windows "애니메이션 효과"가 꺼져 있으면 즉시).
+/// <see cref="Text"/> 가 있으면 스위치 오른쪽에 쓰고, 비어 있고 <see cref="OnText"/>·<see cref="OffText"/> 가 있으면
+/// 설정 카드 안에서처럼 스위치 왼쪽에 지금 상태("켬"/"끔")를 쓴다.
+/// </summary>
 sealed class ToggleSwitch : ThemedControl
 {
-    const int TrackW = 40, TrackH = 20, Gap = 10, AnimMs = 120;
+    const int TrackW = 40, TrackH = 20, Gap = 10, StateGap = 12, AnimMs = 120;
     bool _checked;
     float _pos;   // 0 = 왼쪽(꺼짐), 1 = 오른쪽(켜짐)
     long _animStart = -1;
     readonly System.Windows.Forms.Timer _timer = new() { Interval = 15 };
 
     public event EventHandler? CheckedChanged;
+
+    /// <summary>상태 글자. 둘 다 정하고 <see cref="Text"/> 를 비워 두면 스위치 왼쪽에 지금 상태를 쓴다.</summary>
+    public string? OnText { get; set; }
+    public string? OffText { get; set; }
+
+    bool StateMode => Text.Length == 0 && OnText is not null && OffText is not null;
 
     public bool Checked
     {
@@ -100,6 +137,7 @@ sealed class ToggleSwitch : ThemedControl
     public ToggleSwitch()
     {
         Cursor = Cursors.Hand;
+        AccessibleRole = AccessibleRole.CheckButton;
         _timer.Tick += (_, _) =>
         {
             float t = Math.Clamp((Environment.TickCount64 - _animStart) / (float)AnimMs, 0f, 1f);
@@ -112,7 +150,14 @@ sealed class ToggleSwitch : ThemedControl
 
     public override Size GetPreferredSize(Size proposed)
     {
-        var ts = TextRenderer.MeasureText(Text, Font, Size.Empty, TextFormatFlags.NoPadding);
+        if (StateMode)
+        {
+            var on = TextRenderer.MeasureText(OnText, Font, Size.Empty, TextFormatFlags.NoPadding);
+            var off = TextRenderer.MeasureText(OffText, Font, Size.Empty, TextFormatFlags.NoPadding);
+            int w = Math.Max(on.Width, off.Width);
+            return new Size(w + Px(StateGap) + Px(TrackW) + Px(2), Math.Max(Px(TrackH) + Px(4), Math.Max(on.Height, off.Height) + Px(4)));
+        }
+        var ts = TextRenderer.MeasureText(CueText(Text), Font, Size.Empty, TextFormatFlags.NoPadding);
         return new Size(Px(TrackW) + Px(Gap) + ts.Width + Px(2), Math.Max(Px(TrackH) + Px(4), ts.Height + Px(4)));
     }
 
@@ -140,7 +185,9 @@ sealed class ToggleSwitch : ThemedControl
         var p = Palette;
         int alpha = Enabled ? 255 : 90;
 
-        var track = new RectangleF(Px(1), (Height - Px(TrackH)) / 2f, Px(TrackW), Px(TrackH));
+        bool state = StateMode;
+        float trackLeft = state ? Width - Px(TrackW) - Px(1) : Px(1);
+        var track = new RectangleF(trackLeft, (Height - Px(TrackH)) / 2f, Px(TrackW), Px(TrackH));
         float knobR = Px(Hot ? 7 : 6);
         if (Pressed) knobR = Px(7);
         float cx = track.Left + Px(10) + _pos * (track.Width - Px(20));
@@ -161,15 +208,26 @@ sealed class ToggleSwitch : ThemedControl
         using (var knob = new SolidBrush(Alpha(knobColor, alpha)))
             g.FillEllipse(knob, cx - knobR, cy - knobR, knobR * 2, knobR * 2);
 
-        var textRect = new Rectangle((int)track.Right + Px(Gap), 0, Width - (int)track.Right - Px(Gap), Height);
-        TextRenderer.DrawText(g, Text, Font, textRect, Alpha(p.Text, alpha), TextFlags(TextFormatFlags.Left));
+        if (state)
+        {
+            var stateRect = new Rectangle(0, 0, Math.Max(0, (int)track.Left - Px(StateGap)), Height);
+            TextRenderer.DrawText(g, _checked ? OnText : OffText, Font, stateRect, Alpha(p.Text, alpha), TextFlags(TextFormatFlags.Right | TextFormatFlags.NoPrefix));
+        }
+        else
+        {
+            var textRect = new Rectangle((int)track.Right + Px(Gap), 0, Width - (int)track.Right - Px(Gap), Height);
+            TextRenderer.DrawText(g, CueText(Text), Font, textRect, Alpha(p.Text, alpha), TextFlags(TextFormatFlags.Left));
+        }
         DrawFocusRing(g, track, track.Height / 2f);
     }
 
     protected override void Dispose(bool disposing) { if (disposing) _timer.Dispose(); base.Dispose(disposing); }
 }
 
-/// <summary>Windows 11 슬라이더. 얇은 트랙, 강조색 채움, 흰 원 안에 강조색 점이 있는 손잡이.</summary>
+/// <summary>
+/// Windows 11 슬라이더. 얇은 트랙, 강조색 채움, 흰 원 안에 강조색 점이 있는 손잡이.
+/// 마우스 휠은 받지 않는다: 스크롤되는 설정 페이지에서 휠을 굴리다 손잡이 위를 지나도 값이 바뀌지 않고 페이지가 스크롤된다.
+/// </summary>
 sealed class AccentSlider : ThemedControl
 {
     const int ThumbR = 10, TrackH = 4;
@@ -219,7 +277,6 @@ sealed class AccentSlider : ThemedControl
     }
     protected override void OnMouseMove(MouseEventArgs e) { base.OnMouseMove(e); if (_drag) Value = ValueAt(e.X); }
     protected override void OnMouseUp(MouseEventArgs e) { _drag = false; Capture = false; base.OnMouseUp(e); }
-    protected override void OnMouseWheel(MouseEventArgs e) { base.OnMouseWheel(e); Value += e.Delta > 0 ? _small : -_small; }
 
     protected override bool IsInputKey(Keys keyData) =>
         (keyData & Keys.KeyCode) is Keys.Left or Keys.Right or Keys.Up or Keys.Down or Keys.Home or Keys.End or Keys.PageUp or Keys.PageDown || base.IsInputKey(keyData);
@@ -286,7 +343,7 @@ sealed class AccentButton : ThemedControl, IButtonControl
 
     public override Size GetPreferredSize(Size proposed)
     {
-        var ts = TextRenderer.MeasureText(Text, Font, Size.Empty, TextFormatFlags.NoPadding);
+        var ts = TextRenderer.MeasureText(CueText(Text), Font, Size.Empty, TextFormatFlags.NoPadding);
         return new Size(Math.Max(Px(88), ts.Width + Px(32)), Px(32));
     }
 
@@ -339,7 +396,7 @@ sealed class AccentButton : ThemedControl, IButtonControl
             using (var bottom = new Pen(Alpha(p.Dark ? Color.Black : Color.Black, p.Dark ? 60 : 24), Px(1)))
                 g.DrawLine(bottom, r.Left + Px(4), r.Bottom, r.Right - Px(4), r.Bottom);
 
-        TextRenderer.DrawText(g, Text, Font, new Rectangle(0, 0, Width, Height), Alpha(text, alpha), TextFlags(TextFormatFlags.HorizontalCenter));
+        TextRenderer.DrawText(g, CueText(Text), Font, new Rectangle(0, 0, Width, Height), Alpha(text, alpha), TextFlags(TextFormatFlags.HorizontalCenter));
         DrawFocusRing(g, r, Px(Palette.Radius / 2));
     }
 }
