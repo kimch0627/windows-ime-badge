@@ -132,4 +132,35 @@ public sealed class BadgeLayoutTests
         Assert.Equal(work.Left, p.X);
         Assert.Equal(work.Top, p.Y);
     }
+
+    // 한/영 전환 효과(펄스)로 배지가 18% 커지는 동안에도 고른 쪽에 머문다. 원래 크기 24×20 은 들어가고 커진 28×24 는 안 들어가는 자리.
+    static readonly Size Pulsed = new(28, 24);
+
+    [Fact]
+    public void Pulse_NearTop_StaysAbove()
+    {
+        var caret = new Rectangle(500, 24, 2, 20);   // 위로 24px: 원래 크기(20+3) 는 들어가고 커진 크기(24+3) 는 안 들어감
+        var resting = BadgeLayout.Compute(In(caret));
+        var pulsed = BadgeLayout.Compute(new LayoutInput(caret, Pulsed, BadgeStyle.Pill, BadgePlacement.AboveRight, 1f, Work, Badge));
+        Assert.Equal(1, resting.Y);
+        Assert.Equal(0, pulsed.Y);   // 위쪽에 붙어 작업 영역 안으로 밀림. 아래(47)로 튀지 않는다
+    }
+
+    [Fact]
+    public void Pulse_NearBottom_StaysBelow()
+    {
+        var caret = new Rectangle(500, 996, 2, 20);   // 아래로 24px
+        var resting = BadgeLayout.Compute(In(caret, place: BadgePlacement.Below));
+        var pulsed = BadgeLayout.Compute(new LayoutInput(caret, Pulsed, BadgeStyle.Pill, BadgePlacement.Below, 1f, Work, Badge));
+        Assert.Equal(1019, resting.Y);
+        Assert.Equal(1040 - 24, pulsed.Y);   // 아래쪽에 붙어 작업 영역 안으로 밀림. 위(969)로 튀지 않는다
+    }
+
+    [Fact]
+    public void Pulse_NearLeftEdge_StaysLeft()
+    {
+        var caret = new Rectangle(28, 300, 2, 20);   // 왼쪽으로 28px: 원래 폭(24+3) 은 들어가고 커진 폭(28+3) 은 안 들어감
+        var pulsed = BadgeLayout.Compute(new LayoutInput(caret, Pulsed, BadgeStyle.Pill, BadgePlacement.AboveLeft, 1f, Work, Badge));
+        Assert.Equal(0, pulsed.X);   // 오른쪽(33)으로 튀지 않는다
+    }
 }

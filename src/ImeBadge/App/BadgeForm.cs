@@ -291,6 +291,7 @@ sealed class BadgeForm : Form
         menu.Opening += (_, _) =>
         {
             RefreshChecks(menu.Items);
+            place.Enabled = _settings.Style != BadgeStyle.Underline;   // 밑줄은 위치와 상관없이 caret 바로 아래(설정 창과 같음)
             _statusItem.Text = Strings.Format("menu.current", StateText(_trayState, _trayCaps));
             RefreshStatusImage();
             RefreshPreviews();
@@ -957,7 +958,9 @@ sealed class BadgeForm : Form
         }
 
         var area = Screen.FromPoint(caret.Location).WorkingArea;
-        var pos = BadgeLayout.Compute(new LayoutInput(caret, bs, style, _settings.Placement, scale, area));
+        // 펄스로 잠깐 커진 동안에는 원래 크기로 반대쪽 대피를 정한다. 가장자리 근처에서 배지가 반대쪽으로 튀었다 돌아오지 않게.
+        var resting = pulse != 1f && _pulseBase is not null ? _pulseBase.Size : Size.Empty;
+        var pos = BadgeLayout.Compute(new LayoutInput(caret, bs, style, _settings.Placement, scale, area, resting));
 
         // FlowLauncher처럼 자기도 최상위(TopMost)인 창은 나중에 뜬 쪽이 위에 온다. 배지가 처음 보일 때,
         // 활성 창이 바뀌었을 때, 위치가 바뀌었을 때마다 최상위 창들 중에서도 맨 위로 다시 올린다.

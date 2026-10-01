@@ -247,8 +247,11 @@ sealed class SettingsCard : Panel
     bool HasHeader => _title.Length > 0;
     bool HasIcon => _picture is not null || (_glyph.Length > 0 && Theme.HasIconFont);
     int IconWidth => _picture is not null ? Px(PictureSize) : Px(IconBox);
-    /// <summary>하위 컨트롤이 꺼져 있으면(예: Caps Lock 표시가 꺼진 동안의 Shift 표시) 제목·설명도 흐리게.</summary>
-    bool Dimmed => _action is { Enabled: false };
+    /// <summary>
+    /// 카드의 컨트롤이 꺼져 있으면 제목·설명도 흐리게. 오른쪽 컨트롤이 있으면 그것(예: Caps Lock 표시가 꺼진 동안의 Shift 표시),
+    /// 없으면 아래 넓은 내용(예: 밑줄 모양일 때의 위치 타일)을 본다.
+    /// </summary>
+    bool Dimmed => (_action ?? _body) is { Enabled: false };
     string PlainTitle => _title.Replace("&&", "\u0001").Replace("&", "").Replace("\u0001", "&");
 
     void Swap(ref Control? slot, Control? value)
