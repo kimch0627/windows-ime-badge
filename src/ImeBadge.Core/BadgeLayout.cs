@@ -7,8 +7,12 @@ namespace ImeBadge;
 /// <param name="Caret">caret 사각형. 높이 0 이면 "입력창 모서리로 근사한 위치"라는 뜻(UIA 경로).</param>
 /// <param name="Badge">그려진 배지 비트맵 크기.</param>
 /// <param name="WorkArea">caret 이 속한 모니터의 작업 영역(작업 표시줄 제외).</param>
+/// <param name="RestingBadge">
+/// 한/영 전환 효과(펄스)로 잠깐 커진 배지면 원래 크기. 자리가 모자라 반대쪽으로 옮길지는 이 크기로 정한다.
+/// 커진 크기로 정하면 가장자리 근처에서 0.26초 동안 반대쪽으로 튀었다 돌아온다. 비우면 <paramref name="Badge"/>.
+/// </param>
 public readonly record struct LayoutInput(
-    Rectangle Caret, Size Badge, BadgeStyle Style, BadgePlacement Placement, float Scale, Rectangle WorkArea);
+    Rectangle Caret, Size Badge, BadgeStyle Style, BadgePlacement Placement, float Scale, Rectangle WorkArea, Size RestingBadge = default);
 
 /// <summary>caret 옆 어디에 배지를 둘지 정하는 순수 계산. Win32 에 의존하지 않아 단위 테스트가 가능하다.</summary>
 public static class BadgeLayout
@@ -21,27 +25,29 @@ public static class BadgeLayout
         int gap = (int)Math.Round(Gap * i.Scale);
         var caret = i.Caret;
         var bs = i.Badge;
+        var fit = i.RestingBadge.IsEmpty ? bs : i.RestingBadge;   // 반대쪽 대피를 정할 크기
+        var area = i.WorkArea;
         bool approx = caret.Height == 0;   // 근사 위치면 항상 아래쪽(위쪽은 입력창 내부라 글자를 가림)
         bool center = i.Placement is BadgePlacement.Above or BadgePlacement.Below;
         bool left = i.Placement is BadgePlacement.AboveLeft or BadgePlacement.BelowLeft;
         bool above = i.Placement is BadgePlacement.AboveRight or BadgePlacement.AboveLeft or BadgePlacement.Above;
         int centerX = caret.Left + caret.Width / 2 - bs.Width / 2;
         int x = center ? centerX : left ? caret.Left - gap - bs.Width : caret.Right + gap;
+        if (left && caret.Left - gap - fit.Width < area.Left) x = caret.Right + gap;   // 왼쪽에 자리가 없으면 오른쪽으로
 
         Point pos;
         if (i.Style == BadgeStyle.Underline)
             pos = new Point(centerX, caret.Bottom + 1);
-        else if (above && !approx)
-            pos = new Point(x, caret.Top - bs.Height - gap);
         else
-            pos = new Point(x, caret.Bottom + gap);
+        {
+            bool up = above && !approx;
+            bool roomAbove = caret.Top - gap - fit.Height >= area.Top;
+            bool roomBelow = caret.Bottom + gap + fit.Height <= area.Bottom;
+            if (up && !roomAbove) up = false;                               // 위에 자리가 없으면 아래로
+            else if (!up && !approx && !roomBelow && roomAbove) up = true;  // 아래에 자리가 없으면 위로(밀어 올리면 caret 을 가린다)
+            pos = new Point(x, up ? caret.Top - gap - bs.Height : caret.Bottom + gap);
+        }
 
-        var area = i.WorkArea;
-        int aboveY = caret.Top - bs.Height - gap;
-        if (pos.Y < area.Top) pos.Y = caret.Bottom + gap;                // 위에 자리가 없으면 아래로
-        else if (pos.Y + bs.Height > area.Bottom && !approx && i.Style != BadgeStyle.Underline && aboveY >= area.Top)
-            pos.Y = aboveY;                                              // 아래에 자리가 없으면 위로(밀어 올리면 caret 을 가린다)
-        if (left && pos.X < area.Left) pos.X = caret.Right + gap;        // 왼쪽에 자리가 없으면 오른쪽으로
         pos.X = Math.Max(area.Left, Math.Min(pos.X, area.Right - bs.Width));
         pos.Y = Math.Max(area.Top, Math.Min(pos.Y, area.Bottom - bs.Height));
         return pos;

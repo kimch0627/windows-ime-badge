@@ -510,6 +510,12 @@ sealed class TilePicker : ThemedControl
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
             if (sel) DrawFocusRing(g, r, Px(Palette.Radius - 2));
         }
+        // 꺼져 있으면(예: 밑줄 모양일 때의 위치 타일) 바탕색을 덮어 흐리게. 다른 컨트롤의 꺼진 모습(알파 90/255)과 비슷한 짙기.
+        if (!Enabled)
+        {
+            using var veil = new SolidBrush(Color.FromArgb(165, BackColor));
+            g.FillRectangle(veil, ClientRectangle);
+        }
     }
 }
 

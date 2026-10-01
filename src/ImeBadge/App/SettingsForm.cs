@@ -323,6 +323,7 @@ sealed class SettingsForm : Form
             _draft.Style = v;
             _draft.Character = BadgeCharacters.None;
             _character.SelectedValue = null;
+            SyncPlacementEnabled();
             Touch();
         };
         _character = new TilePicker { TileSize = new Size(68, 58), AccessibleName = Strings.Get("menu.style.characters"), Margin = Padding.Empty };
@@ -333,6 +334,7 @@ sealed class SettingsForm : Form
             _draft.Character = id;
             _draft.Style = BadgeStyle.Pill;   // 구버전으로 되돌려도 둥근 배지로 보이게
             _style.SelectedValue = null;
+            SyncPlacementEnabled();
             Touch();
         };
         page.Controls.Add(Card(Glyphs.Shape, "look.style", body: Stack(_style, _character)));
@@ -666,6 +668,12 @@ sealed class SettingsForm : Form
     }
 
     // ── 타일 그리기 ──
+    /// <summary>밑줄 모양은 위치와 상관없이 caret 바로 아래에 붙으므로(BadgeLayout) 위치 타일을 끈다. 고른 위치는 그대로 남는다.</summary>
+    void SyncPlacementEnabled()
+    {
+        if (_placement is not null) _placement.Enabled = _draft.Style != BadgeStyle.Underline;
+    }
+
     static string ShortStyle(BadgeStyle s) => Strings.Get(s switch
     {
         BadgeStyle.Box => "style.short.box", BadgeStyle.Pill => "style.short.pill", BadgeStyle.Dot => "style.short.dot",
@@ -861,6 +869,7 @@ sealed class SettingsForm : Form
         _style.SelectedValue = character ? null : _draft.Style;
         _character.SelectedValue = character ? _draft.Character : null;
         _placement.SelectedValue = _draft.Placement;
+        SyncPlacementEnabled();
         _size.Value = _draft.SizePercent;
         _opacity.Value = _draft.OpacityPercent;
         _poll.Value = Math.Clamp(_draft.PollIntervalMs, _poll.Minimum, _poll.Maximum);
