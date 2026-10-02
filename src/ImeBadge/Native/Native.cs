@@ -64,6 +64,10 @@ static class Native
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string? className, string? windowName);
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
+    /// <summary>핸들을 기다린다. WaitHandle.WaitOne 과 달리 STA(UI 스레드)에서도 메시지를 펌프하지 않아, 기다리는 동안 다른 처리가 끼어들지 않는다.</summary>
+    [DllImport("kernel32.dll")] public static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
+    public const uint WAIT_OBJECT_0 = 0;
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
     [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc proc, IntPtr lParam);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
@@ -166,6 +170,18 @@ static class Native
     /// </summary>
     public static bool IsShiftAloneDown() =>
         IsKeyDown(VK_SHIFT) && !IsKeyDown(VK_CONTROL) && !IsKeyDown(VK_MENU) && !IsKeyDown(VK_LWIN) && !IsKeyDown(VK_RWIN);
+
+    public const int VK_INSERT = 0x2D;
+
+    /// <summary>
+    /// Insert 토글 비트. Insert 를 누를 때마다 Windows 가 뒤집는 값이라 Caps Lock 처럼 GetKeyState 로 다른 앱에서 누른 것도 보인다.
+    /// 앱의 실제 겹쳐 쓰기 상태와는 다를 수 있어 그대로 보여 주지 않고 <see cref="InsertToggle"/> 이 바뀐 순간만 센다.
+    /// </summary>
+    public static bool IsInsertToggled() => (GetKeyState(VK_INSERT) & 0x0001) != 0;
+
+    /// <summary>지금 Ctrl·Shift·Alt·Win 중 하나라도 눌려 있는가(실제 키 상태). Ctrl+Insert·Shift+Insert 같은 단축키를 가려낸다.</summary>
+    public static bool IsModifierDown() =>
+        IsKeyDown(VK_SHIFT) || IsKeyDown(VK_CONTROL) || IsKeyDown(VK_MENU) || IsKeyDown(VK_LWIN) || IsKeyDown(VK_RWIN);
 
     public const int VK_LBUTTON = 0x01, VK_RBUTTON = 0x02, VK_MBUTTON = 0x04;
 

@@ -99,12 +99,17 @@ static class BadgeRenderer
 {
     public const string FontFamily = "Malgun Gothic";
 
-    /// <summary>배지 글자와 색. Caps Lock·Shift 표시 규칙(한/꺆, a/A, 밑줄/▲)은 <see cref="BadgeText"/> 가 정한다.</summary>
-    public static (string text, Color color, BadgeMark mark) Look(ImeState s, in BadgeTheme theme, bool capsLock = false, bool shift = false)
+    /// <summary>
+    /// 배지 글자와 색, 특수 키 표시. Caps Lock·Shift 표시 규칙(한/꺆, a/A, 밑줄/▲)은 <see cref="BadgeText"/> 가 정하고,
+    /// 겹쳐 쓰기(■)는 입력 언어와 상관없이 더한다(다른 언어 "?" 배지에도).
+    /// </summary>
+    public static (string text, Color color, BadgeMark mark) Look(ImeState s, in BadgeTheme theme, bool capsLock = false, bool shift = false,
+                                                                  bool insert = false)
     {
-        if (s is not (ImeState.Hangul or ImeState.English)) return ("?", theme.Other, BadgeMark.None);
+        var overtype = insert ? BadgeMark.Insert : BadgeMark.None;
+        if (s is not (ImeState.Hangul or ImeState.English)) return ("?", theme.Other, overtype);
         var (text, mark) = BadgeText.For(s == ImeState.Hangul, capsLock, theme.ShowCapsLock, shift);
-        return (text, s == ImeState.Hangul ? theme.Hangul : theme.English, mark);
+        return (text, s == ImeState.Hangul ? theme.Hangul : theme.English, mark | overtype);
     }
 
     /// <summary>트레이 아이콘용 글자와 색. Caps Lock 과 상관없이 항상 "한"/"A"(16px 에서도 읽히는 글자).</summary>
@@ -128,9 +133,9 @@ static class BadgeRenderer
         theme.Contrast is { } hc ? (state == ImeState.Hangul ? hc.HangulInk : hc.OtherInk) : TextColorOn(background, theme.Finish);
 
     public static Bitmap Render(ImeState state, BadgeStyle style, float scale, in BadgeTheme theme, int opacityPercent = 100, bool capsLock = false,
-                                bool shift = false)
+                                bool shift = false, bool insert = false)
     {
-        var (text, color, mark) = Look(state, theme, capsLock, shift);
+        var (text, color, mark) = Look(state, theme, capsLock, shift, insert);
         // 고대비는 불투명도 설정과 상관없이 늘 불투명(비치면 사용자가 고른 대비가 깨진다).
         var fill = theme.Contrast is null ? Color.FromArgb(Math.Clamp(255 * opacityPercent / 100, 30, 255), color) : color;
         var ink = InkFor(state, color, theme);
@@ -138,8 +143,8 @@ static class BadgeRenderer
             return RenderCharacter(theme.Character, text, mark, fill, ink, scale, theme);
         return style switch
         {
-            BadgeStyle.Dot => RenderDot(fill, scale, theme),
-            BadgeStyle.Underline => RenderUnderline(fill, scale, theme),
+            BadgeStyle.Dot => RenderDot(fill, mark, scale, theme),
+            BadgeStyle.Underline => RenderUnderline(fill, mark, scale, theme),
             BadgeStyle.Box => RenderText(text, mark, fill, ink, scale, rounded: false, theme),
             _ => RenderText(text, mark, fill, ink, scale, rounded: true, theme),   // Pill, DotFlash(글자 단계)
         };
@@ -294,14 +299,19 @@ static class BadgeRenderer
         g.FillPath(core, shadow);
     }
 
-    static Bitmap RenderDot(Color color, float scale, in BadgeTheme theme)
+    /// <summary>
+    /// 지름 9px(배율 1)의 점. 특수 키 표시는 점 아래 한 줄에 그린다(<see cref="DrawMarksBelow"/>). 표시 자리(아래
+    /// <see cref="BadgeLayout.Tail"/>, 좌우 <see cref="BadgeLayout.Side"/>)는 표시가 없어도 비워 두어, 표시가 생기고 사라져도
+    /// 그림 크기와 점 자리가 같다.
+    /// </summary>
+    static Bitmap RenderDot(Color color, BadgeMark mark, float scale, in BadgeTheme theme)
     {
         int d = (int)Math.Round(9 * scale);
-        int pad = ShadowPad(scale);
-        var bmp = NewCanvas(d + 2 * pad, d + 2 * pad + pad, out var g);
+        int pad = ShadowPad(scale), side = BadgeLayout.Side(BadgeStyle.Dot, scale);
+        var bmp = NewCanvas(side + d + 2 * pad + side, d + 2 * pad + pad + BadgeLayout.Tail(BadgeStyle.Dot, scale), out var g);
         using (g)
         {
-            var rect = new RectangleF(pad, pad, d, d);
+            var rect = new RectangleF(side + pad, pad, d, d);
             using var path = new GraphicsPath();
             path.AddEllipse(rect);
             DrawShadow(g, path, scale, color, theme);
@@ -311,6 +321,7 @@ static class BadgeRenderer
             g.FillPath(brush, path);
             g.DrawPath(pen, path);
             DrawRim(g, path, rect, line, line, color, theme);
+            DrawMarksBelow(g, mark, rect.X + rect.Width / 2, rect.Bottom + OutsideGap * scale, scale, color, theme);
         }
         return bmp;
     }
@@ -321,15 +332,17 @@ static class BadgeRenderer
     /// 3px 중 2px 가 테두리가 되어 배지색이 사라진다. 고대비는 창 바탕색 막대가 창 위에서 묻히므로 둘레 전체에 창 글자색 선.
     /// 막대는 캔버스 맨 위에 두고 그림자 여백은 좌우(같은 폭)와 아래에만 둔다. 위치 계산(<see cref="BadgeLayout"/>: 가로 가운데,
     /// 위쪽 = caret 아래 1px)이 캔버스 기준이라 이렇게 하면 막대 자리가 예전과 같다.
+    /// 특수 키 표시는 막대 아래 한 줄에 그리고, 그 자리(아래 <see cref="BadgeLayout.Tail"/>, 좌우 <see cref="BadgeLayout.Side"/>)는
+    /// 표시가 없어도 비워 둔다.
     /// </summary>
-    static Bitmap RenderUnderline(Color color, float scale, in BadgeTheme theme)
+    static Bitmap RenderUnderline(Color color, BadgeMark mark, float scale, in BadgeTheme theme)
     {
         int w = (int)Math.Round(16 * scale), h = (int)Math.Round(3 * scale);
-        int pad = ShadowPad(scale);
-        var bmp = NewCanvas(w + 2 * pad, h + pad, out var g);
+        int pad = ShadowPad(scale), side = BadgeLayout.Side(BadgeStyle.Underline, scale);
+        var bmp = NewCanvas(side + w + 2 * pad + side, h + pad + BadgeLayout.Tail(BadgeStyle.Underline, scale), out var g);
         using (g)
         {
-            var rect = new RectangleF(pad, 0, w, h);
+            var rect = new RectangleF(side + pad, 0, w, h);
             using var path = RoundedRect(rect, h / 2f);
             DrawShadow(g, path, scale, color, theme);
             using var brush = new SolidBrush(color);
@@ -350,33 +363,99 @@ static class BadgeRenderer
                 g.FillRectangle(edge, rect.X, rect.Bottom - line, rect.Width, line);
                 g.Restore(state);
             }
+            DrawMarksBelow(g, mark, rect.X + rect.Width / 2, rect.Bottom + OutsideGap * scale, scale, color, theme);
         }
         return bmp;
+    }
+
+    /// <summary>
+    /// 점·밑줄 아래 표시의 크기(배율 1 기준 px). 배지 밖, 문서 위에 그리므로 글자 배지 안의 표시보다 조금 굵게.
+    /// 몸통과의 틈은 몸통 그림자보다 넓어야 기호가 몸통에 붙은 한 덩어리(버섯·핀 모양)로 보이지 않는다.
+    /// 밑줄(폭 7)이 네모(3×3)보다 뚜렷이 넓어야 둘이 헷갈리지 않는다. 폭이 홀수라 점(지름 9) 가운데에 픽셀 경계가 맞아 좌우 틈이 같다.
+    /// </summary>
+    const float OutsideGap = 2.5f, OutsideBarW = 7f, OutsideBarH = 2f, OutsideTriH = 3f, OutsideSpace = 2.2f;
+
+    /// <summary>
+    /// 점·밑줄 모양의 특수 키 표시. 글자 배지와 같은 기호를 몸통 아래 한 줄의 정해진 자리에 그린다: 왼쪽 Shift ▲, 가운데 Caps Lock ▁,
+    /// 오른쪽 겹쳐 쓰기 ■(글자 배지의 왼쪽 아래·글자 아래·오른쪽 아래와 같은 순서). 없는 기호의 자리는 비워 두므로 하나만 켜져도
+    /// 제자리에 보이고, 다른 기호가 켜지고 꺼져도 움직이지 않는다. 기호들은 아래쪽을 맞춘다.
+    /// 몸통과 같은 색·테두리·그림자로 그리고, 문서 위에 바로 놓이므로 테두리를 먼저 긋고 그 위를 채워 바깥 절반만 남긴다(가늘어지지 않게).
+    /// 줄 폭(가운데에서 ▲ 왼쪽 끝까지 약 11px)은 그림 좌우의 표시 자리(<see cref="BadgeLayout.Side"/>)에 들어간다.
+    /// </summary>
+    static void DrawMarksBelow(Graphics g, BadgeMark mark, float cx, float top, float scale, Color fill, in BadgeTheme theme)
+    {
+        if (mark == BadgeMark.None) return;
+        float barW = OutsideBarW * scale, barH = OutsideBarH * scale, triH = OutsideTriH * scale, triW = triH * 1.8f;
+        float bottom = MathF.Round(top) + triH;
+        float inner = barW / 2 + OutsideSpace * scale;   // 가운데 밑줄 자리의 끝에서 양옆 기호까지
+        using var path = new GraphicsPath();
+        if ((mark & BadgeMark.Shift) != 0)
+        {
+            float right = MathF.Round(cx - inner);
+            path.AddPolygon(new PointF[] { new(right - triW, bottom), new(right, bottom), new(right - triW / 2, bottom - triH) });
+        }
+        if ((mark & BadgeMark.CapsBar) != 0)
+            path.AddRectangle(new RectangleF(MathF.Round(cx - barW / 2), bottom - barH, barW, barH));
+        if ((mark & BadgeMark.Insert) != 0)
+            path.AddRectangle(new RectangleF(MathF.Round(cx + inner), bottom - triH, triH, triH));
+        DrawShadow(g, path, scale, fill, theme);
+        float line = Math.Max(1f, scale);
+        using (var edge = OutlinePen(fill, line, theme, 2 * line)) { edge.LineJoin = LineJoin.Round; g.DrawPath(edge, path); }
+        using var brush = new SolidBrush(fill);
+        g.FillPath(brush, path);
+    }
+
+    /// <summary>
+    /// 글자 배지의 모서리 표시: 왼쪽 아래에 Shift ▲, 오른쪽 아래에 겹쳐 쓰기 ■(블록 커서 모양). 글자 아래에는 Caps Lock 밑줄만 둔다
+    /// (■ 를 글자 아래에 두면 마침표처럼 읽힌다: "한.", "?."). 모서리에 걸쳐 글자와 떨어져 있어 셋이 함께 켜져도 겹치지 않는다.
+    /// 글자색으로 채우고 배지 테두리색으로 둘러 배지 안팎 어디에 걸쳐도 보인다. <paramref name="size"/> 는 높이(▲ 의 밑변은 1.2 배).
+    /// <paramref name="snap"/> 이면 정수 픽셀에 맞춰 작은 기호가 흐려지지 않게 한다(확대 변환으로 그리는 캐릭터는 false).
+    /// </summary>
+    static void DrawCornerMark(Graphics g, BadgeMark kind, PointF center, float size, float line, float scale, Color fill, Color ink,
+                               in BadgeTheme theme, bool snap, float penScale = 1f)
+    {
+        if (kind == BadgeMark.Shift) size *= 1.15f;   // 삼각형은 같은 높이의 네모보다 면적이 절반이라 작아 보인다
+        if (snap) size = MathF.Max(3f, MathF.Round(size));
+        float w = kind == BadgeMark.Shift ? size * 1.2f : size;
+        if (snap) w = MathF.Round(w);
+        float x = center.X - w / 2, y = center.Y - size / 2;
+        if (snap) { x = MathF.Round(x); y = MathF.Round(y); }
+        using var path = kind == BadgeMark.Shift ? new GraphicsPath() : RoundedRect(new RectangleF(x, y, w, size), size * 0.15f);
+        if (kind == BadgeMark.Shift)
+            path.AddPolygon(new PointF[] { new(x, y + size), new(x + w, y + size), new(x + w / 2, y) });
+        DrawShadow(g, path, scale, fill, theme, penScale);
+        using var brush = new SolidBrush(Color.FromArgb(255, ink));
+        g.FillPath(brush, path);
+        using var pen = OutlinePen(fill, line, theme, line);
+        pen.LineJoin = LineJoin.Round;
+        g.DrawPath(pen, path);
+    }
+
+    /// <summary>
+    /// 둥근 모서리 사각형(반지름 <paramref name="radius"/>)의 아래 모서리 호 위, 45° 자리. 왼쪽은 Shift ▲, 오른쪽은 겹쳐 쓰기 ■ 를 둔다.
+    /// </summary>
+    static PointF LowerCorner(RectangleF rect, float radius, bool right)
+    {
+        float r = Math.Min(radius, Math.Min(rect.Width, rect.Height) / 2), k = r * (1 - 0.7071f);
+        return new PointF(right ? rect.Right - k : rect.Left + k, rect.Bottom - k);
     }
 
     /// <summary>배지 폭 = 잉크 폭 + 좌우 여백(배율 1 기준 px). 폭이 높이보다 <c>CircleSnap</c> 만큼도 크지 않으면("a", "A") 동그라미로 맞춘다.</summary>
     const float InkSidePad = 7f, CircleSnap = 3f;
 
     /// <summary>
-    /// 글자 아래 표시의 윤곽. Caps Lock 은 짧은 밑줄(키보드의 Caps Lock 표시등을 닮은 모양), Shift 는 가운데 위를 가리키는
-    /// 작은 삼각형(Shift 키의 ⇧ 모양, 폭 = 높이 × 1.8)이라 한눈에 구별된다. 표시가 없으면 null.
-    /// 글자와 표시를 한 덩어리로 보고 가운데에 두도록 <paramref name="cy"/>(글자 잉크 중심)를 표시 높이와 틈의 절반만큼 올린다.
+    /// 글자 아래 Caps Lock 밑줄(키보드의 Caps Lock 표시등을 닮은 모양)의 윤곽. Caps Lock 이 꺼져 있으면 null.
+    /// 글자와 밑줄을 한 덩어리로 보고 가운데에 두도록 <paramref name="cy"/>(글자 잉크 중심)를 밑줄 높이와 틈의 절반만큼 올린다.
+    /// Shift ▲·겹쳐 쓰기 ■ 는 글자 아래가 아니라 모서리에 그린다(<see cref="DrawCornerMark"/>).
     /// </summary>
-    static GraphicsPath? MarkPath(BadgeMark mark, float cx, ref float cy, RectangleF ink, float gap, float barW, float barH, float triH, bool snap)
+    static GraphicsPath? CapsBarPath(BadgeMark mark, float cx, ref float cy, RectangleF ink, float gap, float barW, float barH, bool snap)
     {
-        if (mark == BadgeMark.None) return null;
-        float markH = mark == BadgeMark.Shift ? triH : barH;
-        cy -= (gap + markH) / 2;
+        if ((mark & BadgeMark.CapsBar) == 0) return null;
+        cy -= (gap + barH) / 2;
         float top = cy + ink.Height / 2 + gap;
         if (snap) top = MathF.Round(top);
         var p = new GraphicsPath();
-        if (mark == BadgeMark.CapsBar)
-            p.AddRectangle(new RectangleF(cx - barW / 2, top, barW, barH));
-        else
-        {
-            float triW = triH * 1.8f;
-            p.AddPolygon(new PointF[] { new(cx - triW / 2, top + triH), new(cx + triW / 2, top + triH), new(cx, top) });
-        }
+        p.AddRectangle(new RectangleF(cx - barW / 2, top, barW, barH));
         return p;
     }
 
@@ -394,7 +473,8 @@ static class BadgeRenderer
         using (g)
         {
             var rect = new RectangleF(pad + 0.5f, pad + 0.5f, w - 1, h - 1);
-            using var path = RoundedRect(rect, rounded ? (h - 1) / 2f : 3 * scale);
+            float radius = rounded ? (h - 1) / 2f : 3 * scale;
+            using var path = RoundedRect(rect, radius);
             DrawShadow(g, path, scale, color, theme);
             using var brush = FillBrush(color, rect, theme);
             using var pen = OutlinePen(color, 1f, theme, 2 * Math.Max(1f, scale));
@@ -403,31 +483,45 @@ static class BadgeRenderer
             float rimWidth = Math.Max(1f, scale);
             DrawRim(g, path, rect, 0.5f + rimWidth / 2, rimWidth, color, theme);
 
-            // 글자와 그 아래 표시(Caps Lock 밑줄·Shift ▲)를 한 덩어리로 보고 배지 가운데에 둔다.
+            // 글자와 그 아래 Caps Lock 밑줄을 한 덩어리로 보고 배지 가운데에 둔다. Shift ▲·겹쳐 쓰기 ■ 는 아래 모서리(DrawCornerMark).
             float cx = pad + w / 2f, cy = pad + h / 2f;
-            using var markPath = MarkPath(mark, cx, ref cy, ib, gap: 1.5f * scale,
-                barW: Math.Max(6 * scale, Math.Min(ib.Width, w - 8 * scale)), barH: Math.Max(1f, 1.5f * scale), triH: Math.Max(2f, 2.5f * scale), snap: true);
+            using var markPath = CapsBarPath(mark, cx, ref cy, ib, gap: 1.5f * scale,
+                barW: Math.Max(6 * scale, Math.Min(ib.Width, w - 8 * scale)), barH: Math.Max(1f, 1.5f * scale), snap: true);
             using var textBrush = new SolidBrush(ink);
             using var halo = HaloBrush(color, ink, rect, theme);
             DrawCentered(g, text, font, glyph, cx, cy, snap: true, textBrush, markPath, halo, HaloWidth * scale);
+            foreach (var (kind, right) in CornerMarks)
+                if ((mark & kind) != 0)
+                    DrawCornerMark(g, kind, LowerCorner(rect, radius, right), CornerMarkSize * scale, Math.Max(1f, scale), scale, color, ink, theme, snap: true);
         }
         return bmp;
     }
+
+    /// <summary>모서리 표시의 높이(배율 1 기준 px, 캐릭터는 단위).</summary>
+    const float CornerMarkSize = 5f;
+
+    /// <summary>모서리 표시와 그 자리: Shift ▲ 는 왼쪽 아래, 겹쳐 쓰기 ■ 는 오른쪽 아래.</summary>
+    static readonly (BadgeMark Kind, bool Right)[] CornerMarks = { (BadgeMark.Shift, false), (BadgeMark.Insert, true) };
 
     // ── 캐릭터 모양 ──
     // 모든 좌표는 24 단위 상자(배율 1 에서 1 단위 = 1px). 글자가 들어가는 몸통의 높이가 약 20 으로 둥근 배지와 같고, 귀는 그 위로 나온다.
     // 비트맵이 조금 커지지만 위치 계산(BadgeLayout)은 비트맵 크기로 하므로 커서 옆 정렬은 그대로다.
 
-    /// <summary>캐릭터 한 종류의 틀: 전체 크기, 글자(잉크) 중심, 글자 크기(단위).</summary>
-    readonly record struct Figure(float Width, float Height, float TextX, float TextY, float FontSize);
+    /// <summary>
+    /// 캐릭터 한 종류의 틀: 전체 크기, 글자(잉크) 중심, 글자 크기, 오른쪽 아래 모서리 표시(겹쳐 쓰기 ■)의 중심(몸통 가장자리, 글자와 떨어진 곳)(단위).
+    /// 몸통이 글자 중심 기준 좌우 대칭이라 왼쪽 아래 표시(Shift ▲)는 그 거울 자리(<see cref="CornerOf"/>).
+    /// </summary>
+    readonly record struct Figure(float Width, float Height, float TextX, float TextY, float FontSize, float BlockX, float BlockY);
+
+    static PointF CornerOf(in Figure fig, bool right) => new(right ? fig.BlockX : 2 * fig.TextX - fig.BlockX, fig.BlockY);
 
     static Figure FigureOf(string character) => character switch
     {
-        BadgeCharacters.Cat => new(24, 25, 12, 16.2f, 12.5f),
-        BadgeCharacters.Dog => new(26, 23, 13, 13.6f, 12.5f),
-        BadgeCharacters.Heart => new(24, 22, 12, 10.6f, 11.5f),
-        BadgeCharacters.Cloud => new(27, 21, 13.5f, 14.2f, 12f),
-        _ => new(26, 25, 13, 14.6f, 10.5f),   // Star
+        BadgeCharacters.Cat => new(24, 25, 12, 16.2f, 12.5f, 20.6f, 23.2f),
+        BadgeCharacters.Dog => new(26, 23, 13, 13.6f, 12.5f, 21f, 21f),
+        BadgeCharacters.Heart => new(24, 22, 12, 10.6f, 11.5f, 20f, 17.2f),
+        BadgeCharacters.Cloud => new(27, 21, 13.5f, 14.2f, 12f, 23.7f, 19.2f),
+        _ => new(26, 25, 13, 14.6f, 10.5f, 20.6f, 20.8f),   // Star: 오른쪽 아래 뿔
     };
 
     /// <summary>2차 베지어(SVG 의 Q)를 GDI+ 의 3차 베지어로.</summary>
@@ -529,16 +623,19 @@ static class BadgeRenderer
             // 림: 테두리의 바깥 절반(0.8 단위) 안쪽에. 별은 둥근 선(2.4)이 몸통 밖으로 1.2 나와 있어 그만큼 바깥쪽에 긋는다.
             DrawRim(g, body, body.GetBounds(), star ? -0.6f : 0.6f, 1f, color, theme);
 
-            // 글자와 그 아래 표시(Caps Lock 밑줄·Shift ▲)의 한 덩어리 중심을 몸통의 글자 자리(TextX, TextY)에.
+            // 글자와 그 아래 Caps Lock 밑줄의 한 덩어리 중심을 몸통의 글자 자리(TextX, TextY)에. Shift ▲·겹쳐 쓰기 ■ 는 아래 모서리.
             using var font = new Font(BadgeFonts.For(text), fig.FontSize, FontStyle.Bold, GraphicsUnit.Pixel);
             using var glyph = TextPath(text, font);
             var ib = glyph.GetBounds();
             float cy = fig.TextY;
-            using var markPath = MarkPath(mark, fig.TextX, ref cy, ib, gap: 1.2f,
-                barW: Math.Max(fig.FontSize * 0.5f, ib.Width), barH: 1.4f, triH: 2.3f, snap: false);
+            using var markPath = CapsBarPath(mark, fig.TextX, ref cy, ib, gap: 1.2f,
+                barW: Math.Max(fig.FontSize * 0.5f, ib.Width), barH: 1.4f, snap: false);
             using var textBrush = new SolidBrush(ink);
             using var halo = HaloBrush(color, ink, bounds, theme);
             DrawCentered(g, text, font, glyph, fig.TextX, cy, snap: false, textBrush, markPath, halo, HaloWidth);
+            foreach (var (kind, right) in CornerMarks)
+                if ((mark & kind) != 0)
+                    DrawCornerMark(g, kind, CornerOf(fig, right), CornerMarkSize, 1.2f, scale, color, ink, theme, snap: false, penScale: scale);
         }
         return bmp;
     }

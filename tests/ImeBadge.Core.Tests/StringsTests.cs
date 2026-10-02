@@ -65,7 +65,8 @@ public sealed class StringsTests
         // 모양
         AssertUniqueMnemonics(t, "look.theme", "look.style", "look.placement", "look.size", "look.opacity", "look.hangulColor", "look.englishColor");
         // 표시
-        AssertUniqueMnemonics(t, "look.visibility", "look.animate", "look.capsLock", "look.shiftHold", "behavior.fullscreen", "behavior.trayState");
+        AssertUniqueMnemonics(t, "look.visibility", "look.animate", "look.capsLock", "look.shiftHold", "look.shiftNow", "look.insert",
+            "behavior.fullscreen", "behavior.trayState");
         // 일반
         AssertUniqueMnemonics(t, "behavior.autostart", "behavior.hotkey", "behavior.updates", "behavior.language", "behavior.poll",
             "settings.import", "settings.export", "settings.reset");

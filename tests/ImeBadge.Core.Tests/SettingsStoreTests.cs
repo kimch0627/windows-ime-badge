@@ -42,6 +42,8 @@ public sealed class SettingsStoreTests : IDisposable
             Animate = false,
             ShowCapsLock = false,
             ShowShiftHold = false,
+            ShowShiftImmediately = true,
+            ShowInsert = false,
             Language = UiLanguage.English,
             Hotkey = "Ctrl+Shift+F9",
             LastUpdateCheckUtc = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc),
@@ -61,6 +63,8 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.False(back.Animate);
         Assert.False(back.ShowCapsLock);
         Assert.False(back.ShowShiftHold);
+        Assert.True(back.ShowShiftImmediately);
+        Assert.False(back.ShowInsert);
         Assert.Equal(UiLanguage.English, back.Language);
         Assert.Equal("Ctrl+Shift+F9", back.Hotkey);
         Assert.Equal(s.LastUpdateCheckUtc, back.LastUpdateCheckUtc);
@@ -149,6 +153,8 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.True(s.HideOnFullscreen);                 // 새 항목은 기본값
         Assert.True(s.ShowCapsLock);
         Assert.True(s.ShowShiftHold);
+        Assert.False(s.ShowShiftImmediately);            // 1.13.0 이하 설정 파일에는 없다 → 기본 꺼짐(0.3초 기다림)
+        Assert.True(s.ShowInsert);                       // 1.13.0 이하 설정 파일에는 없다 → 기본 켜짐
         Assert.Equal(UiLanguage.Auto, s.Language);
         Assert.True(File.Exists(P("new/settings.json"))); // 새 위치에 복사됨
         Assert.True(File.Exists(P("imebadge.settings.json")));
@@ -244,8 +250,12 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(50, a.SizePercent);
 
         b.Visibility = BadgeVisibility.OnChange;
+        b.ShowInsert = false;
+        b.ShowShiftImmediately = true;
         a.CopyFrom(b);
         Assert.Equal(BadgeVisibility.OnChange, a.Visibility);
+        Assert.False(a.ShowInsert);
+        Assert.True(a.ShowShiftImmediately);
     }
 
     [Fact]

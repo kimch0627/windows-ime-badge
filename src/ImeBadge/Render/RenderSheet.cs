@@ -47,7 +47,7 @@ static class RenderSheet
 
     /// <summary>한 칸에 그릴 배지.</summary>
     readonly record struct Item(string Caption, ImeState State, BadgeStyle Style = BadgeStyle.Pill, bool Caps = false, string Character = "",
-        bool Shift = false);
+        bool Shift = false, bool Insert = false);
 
     static readonly Item Han = new("한", ImeState.Hangul), EnA = new("a", ImeState.English),
         EnCaps = new("A Caps", ImeState.English, Caps: true), HanCaps = new("꺆 Caps", ImeState.Hangul, Caps: true),
@@ -188,6 +188,65 @@ static class RenderSheet
             }, $"창 {window} / 글자 {windowText} · 강조 {highlight} / {highlightText}");
         }
 
+        // 8. 특수 키 표시
+        s.Section("8. 특수 키 표시 — 모양별",
+            "▁ = Caps Lock 켜짐, ▲ = Shift 를 누르고 있음, ■ = Insert 로 겹쳐 쓰기. 글자 배지는 ▁ 를 글자 아래, ▲ 를 왼쪽 아래 모서리, " +
+            "■ 를 오른쪽 아래 모서리에. 점·밑줄 모양은 그 아래 한 줄의 왼쪽 ▲·가운데 ▁·오른쪽 ■. 배율 150%. 마지막 판은 배율 100% 를 3배로 확대한 것.");
+        var marks = new (string Caption, bool Caps, bool Shift, bool Insert)[]
+        {
+            ("없음", false, false, false), ("Caps", true, false, false), ("Shift", false, true, false), ("Ins", false, false, true),
+            ("Caps+Shift", true, true, false), ("Caps+Ins", true, false, true), ("Shift+Ins", false, true, true), ("전부", true, true, true),
+        };
+        var markSlots = marks.Select(m => m.Caption).ToArray();
+        var classic = BadgeTheme.Of(DesignThemes.Classic);
+        var night = ContrastPalettes[3];
+        var contrast = BadgeTheme.HighContrast(Hex(night.Window), Hex(night.WindowText), Hex(night.Highlight), Hex(night.HighlightText));
+        var markRows = new (string Name, ImeState State, BadgeStyle Style, string Character, BadgeTheme Theme, int Opacity, Color Bg, Color DarkBg)[]
+        {
+            ("둥근 · 한", ImeState.Hangul, BadgeStyle.Pill, "", classic, 100, Light, Dark),
+            ("둥근 · a", ImeState.English, BadgeStyle.Pill, "", classic, 100, Light, Dark),
+            ("사각 · 한", ImeState.Hangul, BadgeStyle.Box, "", classic, 100, Light, Dark),
+            ("고양이 · 한", ImeState.Hangul, BadgeStyle.Pill, BadgeCharacters.Cat, classic, 100, Light, Dark),
+            ("별 · a", ImeState.English, BadgeStyle.Pill, BadgeCharacters.Star, classic, 100, Light, Dark),
+            ("다른 언어 ?", ImeState.OtherLang, BadgeStyle.Pill, "", classic, 100, Light, Dark),
+            ("점 · 한", ImeState.Hangul, BadgeStyle.Dot, "", classic, 100, Light, Dark),
+            ("점 · a", ImeState.English, BadgeStyle.Dot, "", classic, 100, Light, Dark),
+            ("점 · 한 · 벚꽃", ImeState.Hangul, BadgeStyle.Dot, "", BadgeTheme.Of(DesignThemes.Blossom), 100, Light, Dark),
+            ("점 · 한 · 불투명도 30%", ImeState.Hangul, BadgeStyle.Dot, "", classic, 30, Light, Dark),
+            ("밑줄 · 한", ImeState.Hangul, BadgeStyle.Underline, "", classic, 100, Light, Dark),
+            ("밑줄 · a", ImeState.English, BadgeStyle.Underline, "", classic, 100, Light, Dark),
+            ("고대비(밤하늘) 둥근 · 한", ImeState.Hangul, BadgeStyle.Pill, "", contrast, 50, Hex(night.Window), Hex(night.Window)),
+            ("고대비(밤하늘) 점 · a", ImeState.English, BadgeStyle.Dot, "", contrast, 50, Hex(night.Window), Hex(night.Window)),
+            ("고대비(밤하늘) 밑줄 · 한", ImeState.Hangul, BadgeStyle.Underline, "", contrast, 50, Hex(night.Window), Hex(night.Window)),
+        };
+        s.Headers(new[] { ("밝은 배경", markSlots, slot), ("어두운 배경", markSlots, slot), ("100% ×3 확대", markSlots, 96f) });
+        foreach (var row in markRows)
+        {
+            var items = marks.Select(m => new Item(m.Caption, row.State, row.Style, m.Caps, row.Character, m.Shift, m.Insert)).ToArray();
+            s.Row(row.Name, new[]
+            {
+                Panel(row.Bg, slot, items, row.Theme, Main, row.Opacity),
+                Panel(row.DarkBg, slot, items, row.Theme, Main, row.Opacity),
+                new SheetPanel(row.Bg, 96, items.Select(i => Zoom(RenderItem(i, row.Theme, 1f, row.Opacity), 3)).ToList()),
+            });
+        }
+
+        // 9. 특수 키 표시가 생겨도 자리가 그대로인지
+        s.Section("9. 표시가 생겨도 배지가 움직이지 않는지",
+            "칸마다 같은 caret(검은 선)에 앱과 같은 위치 계산으로 놓았다. 한 줄 안에서 점·밑줄·배지의 몸통이 같은 높이에 있어야 한다. 배율 150%.");
+        var placedSlot = PlacedCellSize(Main).Width + 4f;
+        s.Headers(new[] { ("위치", markSlots, placedSlot) });
+        foreach (var (name, style, place) in new[]
+        {
+            ("점 · 오른쪽 위", BadgeStyle.Dot, BadgePlacement.AboveRight), ("점 · 오른쪽 아래", BadgeStyle.Dot, BadgePlacement.BelowRight),
+            ("점 · 위", BadgeStyle.Dot, BadgePlacement.Above), ("밑줄", BadgeStyle.Underline, BadgePlacement.AboveRight),
+            ("둥근 · 오른쪽 위", BadgeStyle.Pill, BadgePlacement.AboveRight),
+        })
+        {
+            var items = marks.Select(m => new Item(m.Caption, ImeState.Hangul, style, m.Caps, "", m.Shift, m.Insert));
+            s.Row(name, new[] { new SheetPanel(Light, placedSlot, items.Select(i => PlacedCell(i, classic, Main, place)).ToList()) });
+        }
+
         return s.Finish();
     }
 
@@ -239,7 +298,24 @@ static class RenderSheet
     }
 
     static Bitmap RenderItem(in Item it, BadgeTheme theme, float scale, int opacity) =>
-        BadgeRenderer.Render(it.State, it.Style, scale, theme with { Character = it.Character }, opacity, it.Caps, it.Shift);
+        BadgeRenderer.Render(it.State, it.Style, scale, theme with { Character = it.Character }, opacity, it.Caps, it.Shift, it.Insert);
+
+    static Size PlacedCellSize(float scale) => new((int)Math.Ceiling(44 * scale), (int)Math.Ceiling(68 * scale));
+
+    /// <summary>caret(정수 픽셀의 검은 막대)과, 앱과 같은 위치 계산(<see cref="BadgeLayout.Compute"/>)으로 놓은 배지 한 칸.</summary>
+    static Bitmap PlacedCell(in Item it, BadgeTheme theme, float scale, BadgePlacement place)
+    {
+        var size = PlacedCellSize(scale);
+        var cell = new Bitmap(size.Width, size.Height, PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(cell);
+        g.Clear(Color.White);
+        var caret = new Rectangle((int)Math.Round(14 * scale), (int)Math.Round(30 * scale), Math.Max(1, (int)Math.Round(scale)), (int)Math.Round(16 * scale));
+        g.FillRectangle(Brushes.Black, caret);
+        using var badge = RenderItem(it, theme, scale, 100);
+        var pos = BadgeLayout.Compute(new LayoutInput(caret, badge.Size, it.Style, place, scale, new Rectangle(Point.Empty, size)));
+        g.DrawImage(badge, new Rectangle(pos, badge.Size));
+        return cell;
+    }
 
     static SheetPanel Panel(Color bg, float slot, IEnumerable<Item> items, BadgeTheme theme, float scale, int opacity, Color? backdrop = null) =>
         new(bg, slot, items.Select(i => RenderItem(i, theme, scale, opacity)).ToList(), backdrop);

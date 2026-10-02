@@ -109,9 +109,12 @@ static class Uia
         // 이후 메서드는 쓰지 않으므로 생략
     }
 
-    static IUIAutomation? _automation;
+    [ThreadStatic] static IUIAutomation? _automation;
 
-    /// <summary>프로세스에 하나만 만들어 재사용하는 UIA 클라이언트 객체.</summary>
+    /// <summary>
+    /// 스레드마다 하나 만들어 재사용하는 UIA 클라이언트 객체. caret 찾기는 UI 스레드 밖의 작업 스레드(MTA)에서 하고(<see cref="A11yCaret"/>),
+    /// 묶인 작업 스레드는 버리고 새로 만들기도 하므로 스레드마다 따로 둔다.
+    /// </summary>
     public static IUIAutomation Client => _automation ??= (IUIAutomation)new CUIAutomation();
 
     /// <summary>COM 객체를 즉시 놓아준다. 100ms마다 만드는 객체가 GC까지 쌓이지 않게.</summary>

@@ -41,6 +41,8 @@ static class Glyphs
     public const string FullScreen = "\uE740";   // FullScreen
     public const string CapsLock = "\uE8D2";     // Font
     public const string Shift = "\uE752";        // ScrollUpDown
+    public const string ShiftNow = "\uE916";     // Stopwatch
+    public const string Insert = "\uE8AC";       // Rename (글자 칸 + 커서)
     public const string Tray = "\uE7F4";         // TVMonitor
     public const string Power = "\uE7E8";        // PowerButton
     public const string Keyboard = "\uE765";     // KeyboardClassic
@@ -212,8 +214,11 @@ sealed class SettingsCard : Panel
     /// <summary>오른쪽 끝에 그릴 작은 글리프(링크 카드의 "새 창에서 열기" 표시). 컨트롤이 없을 때만 그린다.</summary>
     public string TrailingGlyph { get => _trailingGlyph; set { _trailingGlyph = value; Changed(); } }
 
-    /// <summary>위 카드에 딸린 하위 항목(예: Caps Lock 표시 아래의 Shift 표시). 쌓을 때 들여 쓴다.</summary>
-    public bool Indent { get; set; }
+    /// <summary>
+    /// 위 카드에 딸린 하위 항목의 깊이. 쌓을 때 한 단계마다 들여 쓴다(0 = 들여 쓰지 않음).
+    /// 예: Caps Lock 표시 아래의 Shift 표시는 1, 그 아래의 "누르는 즉시 표시" 는 2.
+    /// </summary>
+    public int Indent { get; set; }
 
     /// <summary>몸통을 카드 안쪽 폭 전체로 늘린다(미리보기). 아니면 제목 글자 위치에서 시작하고 자기 크기를 쓴다.</summary>
     public bool StretchBody { get; set; }
@@ -594,7 +599,7 @@ sealed class CardStack : Panel
             if (!c.Visible) continue;
             if (prev is not null)
                 y += c is SectionHeader ? Px(SectionGap) : prev is SectionHeader ? Px(AfterSection) : Px(CardGap);
-            int indent = c is SettingsCard { Indent: true } ? Px(IndentWidth) : 0;
+            int indent = c is SettingsCard { Indent: > 0 } card ? Px(IndentWidth * card.Indent) : 0;
             int h = c.GetPreferredSize(new Size(width - indent, 0)).Height;
             c.SetBounds(x + indent + AutoScrollPosition.X, y + AutoScrollPosition.Y, width - indent, h);
             y += h;
