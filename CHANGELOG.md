@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-10-02
+
+설정 창 모양 페이지의 **미리보기를 페이지 제목 아래에 고정**해, 아래 항목을 바꾸면서도 결과를 바로 볼 수 있게 한 릴리스입니다.
+설정 항목과 설정 파일은 그대로 호환됩니다.
+
 ### 변경
 - **설정 창 모양 페이지의 미리보기가 페이지 제목 아래에 고정됩니다.** 예전에는 미리보기가 페이지 맨 위에 있어서, 위치·크기·
   불투명도·색을 바꾸려고 아래로 스크롤하면 미리보기가 화면 밖으로 나가 바뀐 모습을 볼 수 없었습니다.
@@ -483,7 +488,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.12.0...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.13.0...HEAD
+[1.13.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.9.0...v1.10.0
