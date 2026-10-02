@@ -37,7 +37,8 @@ sealed class SettingsForm : Form
     ContextMenuStrip? _appsMenu;
     ColorSwatches _hangulColor = null!, _englishColor = null!;
     Label _hangulHex = null!, _englishHex = null!;
-    ToggleSwitch _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!, _shiftHold = null!;
+    ToggleSwitch _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!, _shiftHold = null!,
+        _shiftNow = null!, _insert = null!;
     HotkeyBox _hotkeyBox = null!;
     PreviewPanel _preview = null!;
     SettingsCard _previewCard = null!;
@@ -386,16 +387,26 @@ sealed class SettingsForm : Form
         _animate = Toggle(v => { _draft.Animate = v; Touch(); });
         page.Controls.Add(Card(Glyphs.Animation, "look.animate", action: _animate));
 
-        page.Controls.Add(Section("section.capsShift"));
-        _capsLock = Toggle(v => { _draft.ShowCapsLock = v; _shiftHold.Enabled = v; Touch(); });
+        page.Controls.Add(Section("section.keys"));
+        _capsLock = Toggle(v => { _draft.ShowCapsLock = v; SyncShiftEnabled(); Touch(); });
         _tips.SetToolTip(_capsLock, Strings.Get("look.capsLock.tip"));
         page.Controls.Add(Card(Glyphs.CapsLock, "look.capsLock", action: _capsLock));
         // Caps Lock 표시의 하위 옵션: 대소문자를 글자로 구별할 때만 의미가 있다. 들여 쓰고, Caps Lock 표시가 꺼져 있으면 흐리게.
-        _shiftHold = Toggle(v => { _draft.ShowShiftHold = v; Touch(); });
+        _shiftHold = Toggle(v => { _draft.ShowShiftHold = v; SyncShiftEnabled(); Touch(); });
         _tips.SetToolTip(_shiftHold, Strings.Get("look.shiftHold.tip"));
         var shift = Card(Glyphs.Shift, "look.shiftHold", action: _shiftHold);
-        shift.Indent = true;
+        shift.Indent = 1;
         page.Controls.Add(shift);
+        // Shift 표시의 하위 옵션: 0.3초를 기다리지 않고 누르는 즉시. 한 단계 더 들여 쓰고, Shift 표시가 꺼져 있으면 흐리게.
+        _shiftNow = Toggle(v => { _draft.ShowShiftImmediately = v; Touch(); });
+        _tips.SetToolTip(_shiftNow, Strings.Get("look.shiftNow.tip"));
+        var shiftNow = Card(Glyphs.ShiftNow, "look.shiftNow", action: _shiftNow);
+        shiftNow.Indent = 2;
+        page.Controls.Add(shiftNow);
+        // 겹쳐 쓰기는 대소문자와 상관없어 Caps Lock 표시와 따로 켜고 끈다.
+        _insert = Toggle(v => { _draft.ShowInsert = v; Touch(); });
+        _tips.SetToolTip(_insert, Strings.Get("look.insert.tip"));
+        page.Controls.Add(Card(Glyphs.Insert, "look.insert", action: _insert));
 
         page.Controls.Add(Section("section.hideTray"));
         _fullscreen = Toggle(v => { _draft.HideOnFullscreen = v; Touch(); });
@@ -692,6 +703,16 @@ sealed class SettingsForm : Form
         if (_placement is not null) _placement.Enabled = _draft.Style != BadgeStyle.Underline;
     }
 
+    /// <summary>
+    /// 하위 옵션을 위 옵션에 맞춰 켜고 끈다(흐리게). Shift 표시는 Caps Lock 표시가, "누르는 즉시 표시" 는 둘 다 켜져 있어야 의미가 있다.
+    /// 꺼 둔 하위 옵션의 값은 그대로 남아 위 옵션을 다시 켜면 쓰인다.
+    /// </summary>
+    void SyncShiftEnabled()
+    {
+        if (_shiftHold is not null) _shiftHold.Enabled = _draft.ShowCapsLock;
+        if (_shiftNow is not null) _shiftNow.Enabled = _draft.ShowCapsLock && _draft.ShowShiftHold;
+    }
+
     static string ShortStyle(BadgeStyle s) => Strings.Get(s switch
     {
         BadgeStyle.Box => "style.short.box", BadgeStyle.Pill => "style.short.pill", BadgeStyle.Dot => "style.short.dot",
@@ -739,13 +760,15 @@ sealed class SettingsForm : Form
         float dpi = DeviceDpi / 96f;
         var theme = BadgeTheme.From(_draft) with { Character = BadgeCharacters.None };
         var draw = style == BadgeStyle.DotFlash ? BadgeStyle.Pill : style;
-        using var bmp = BadgeRenderer.Render(ImeState.Hangul, draw, 0.85f * dpi, theme, 100);
+        float scale = 0.85f * dpi;
+        using var bmp = BadgeRenderer.Render(ImeState.Hangul, draw, scale, theme, 100);
         var caret = new Rectangle((int)(r.Left + 6 * dpi), (int)(r.Top + r.Height / 2 - 8 * dpi), 1, (int)(16 * dpi));
         using (var pen = new Pen(p.Text, Math.Max(1f, dpi))) g.DrawLine(pen, caret.Left, caret.Top, caret.Left, caret.Bottom);
-        // 밑줄은 caret 아래, 나머지는 caret 오른쪽에 세로 가운데.
+        // 밑줄은 caret 아래, 나머지는 caret 오른쪽에 세로 가운데. 점은 둘레의 특수 키 표시 자리(Side·Tail)를 빼고 몸통으로 맞춘다.
+        float body = bmp.Height - BadgeLayout.Tail(draw, scale);
         var pos = style == BadgeStyle.Underline
             ? new Point(caret.Left - bmp.Width / 2 + 1, caret.Bottom + (int)(2 * dpi))
-            : new Point(caret.Right + (int)(4 * dpi), (int)(r.Top + r.Height / 2 - bmp.Height / 2f));
+            : new Point(caret.Right + (int)(4 * dpi) - BadgeLayout.Side(draw, scale), (int)(r.Top + r.Height / 2 - body / 2f));
         g.DrawImage(bmp, new Rectangle(pos, bmp.Size), new Rectangle(Point.Empty, bmp.Size), GraphicsUnit.Pixel);
     }
 
@@ -897,7 +920,9 @@ sealed class SettingsForm : Form
         _visibility.SelectedIndex = Math.Max(0, Array.FindIndex(Labels.Visibilities, v => v.value == _draft.Visibility));
         _capsLock.Checked = _draft.ShowCapsLock;
         _shiftHold.Checked = _draft.ShowShiftHold;
-        _shiftHold.Enabled = _draft.ShowCapsLock;
+        _shiftNow.Checked = _draft.ShowShiftImmediately;
+        SyncShiftEnabled();
+        _insert.Checked = _draft.ShowInsert;
         _autostartBox.Checked = _autostart;
         _fullscreen.Checked = _draft.HideOnFullscreen;
         _trayStateBox.Checked = _draft.TrayShowsState;
@@ -1032,6 +1057,7 @@ sealed class SettingsForm : Form
 
         // 1) 줄과 caret 자리. 반쪽의 왼쪽 위, 첫 줄 위를 y=0 으로 잰다(두 반쪽이 같은 자리를 쓴다).
         //    Caps Lock 표시를 켰으면 영문 줄을 대문자 예시로 바꿔 "A + 밑줄" 배지도 미리 보여 준다(한글 줄은 평소 모습).
+        //    점·밑줄 모양이면 그 아래에 밑줄이 붙은 모습이 된다.
         var lines = new string[PreviewRows.Length];
         var widths = new float[PreviewRows.Length];
         var carets = new List<(ImeState state, bool caps, Rectangle caret)>();

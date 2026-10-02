@@ -105,10 +105,59 @@ public sealed class BadgeLayoutTests
     public void ClampedToWorkArea_RightAndBottom()
     {
         // 밑줄은 caret 에 붙은 막대라 아래 자리가 없어도 위로 옮기지 않고 작업 영역 안으로 밀어 넣는다.
+        // 막대 둘레의 특수 키 표시 자리(아래 Tail, 좌우 Side)는 작업 영역 밖으로 나가도 된다(막대가 caret 줄로 올라오지 않게).
         var edge = new Rectangle(1915, 1030, 2, 20);
         var p = BadgeLayout.Compute(In(edge, style: BadgeStyle.Underline));
-        Assert.Equal(1920 - 24, p.X);
-        Assert.Equal(1040 - 20, p.Y);
+        Assert.Equal(1920 - 24 + BadgeLayout.Side(BadgeStyle.Underline, 1f), p.X);
+        Assert.Equal(1040 - (20 - BadgeLayout.Tail(BadgeStyle.Underline, 1f)), p.Y);
+    }
+
+    // 점 그림(배율 1): 몸통 = 지름 9 + 그림자 여백 → 13×15. 그 둘레에 특수 키 표시 자리: 좌우 Side(6), 아래 Tail(4) → 25×19.
+    static readonly int DotSide = BadgeLayout.Side(BadgeStyle.Dot, 1f);
+    static readonly Size DotPicture = new(13 + 2 * DotSide, 15 + BadgeLayout.Tail(BadgeStyle.Dot, 1f));
+
+    [Fact]
+    public void MarkRoom_IsOnlyForDotAndUnderline_AndScales()
+    {
+        Assert.Equal(4, BadgeLayout.Tail(BadgeStyle.Dot, 1f));
+        Assert.Equal(6, BadgeLayout.Tail(BadgeStyle.Underline, 1f));
+        Assert.Equal(6, BadgeLayout.Tail(BadgeStyle.Dot, 1.5f));
+        Assert.Equal(0, BadgeLayout.Tail(BadgeStyle.Pill, 1f));
+        Assert.Equal(0, BadgeLayout.Tail(BadgeStyle.Box, 2f));
+        Assert.Equal(6, BadgeLayout.Side(BadgeStyle.Dot, 1f));
+        Assert.Equal(3, BadgeLayout.Side(BadgeStyle.Underline, 1f));
+        Assert.Equal(0, BadgeLayout.Side(BadgeStyle.Pill, 1f));
+    }
+
+    /// <summary>표시 자리를 뺀 몸통(13×15)이 예전(1.13.0) 점 자리와 같다. 표시 자리는 caret 과의 틈이나 바깥으로 나간다.</summary>
+    [Theory]
+    [InlineData(BadgePlacement.AboveRight, 502 + 3, 300 - 3 - 15)]
+    [InlineData(BadgePlacement.Above, 501 - 6, 300 - 3 - 15)]
+    [InlineData(BadgePlacement.AboveLeft, 500 - 3 - 13, 300 - 3 - 15)]
+    [InlineData(BadgePlacement.BelowRight, 502 + 3, 320 + 3)]
+    [InlineData(BadgePlacement.BelowLeft, 500 - 3 - 13, 320 + 3)]
+    public void Dot_KeepsItsPlace_WithMarkRoom(BadgePlacement place, int bodyX, int y)
+    {
+        var p = BadgeLayout.Compute(new LayoutInput(Caret, DotPicture, BadgeStyle.Dot, place, 1f, Work));
+        Assert.Equal(new Point(bodyX - DotSide, y), p);
+    }
+
+    [Fact]
+    public void Dot_RoomAboveIgnoresMarkRoom()
+    {
+        // 위로 18px: 몸통(3+15)은 들어가고 표시 자리까지(3+19)는 안 들어감 → 몸통 기준이라 위에 그대로 둔다(아래로 튀지 않음).
+        var caret = new Rectangle(500, 18, 2, 20);
+        var p = BadgeLayout.Compute(new LayoutInput(caret, DotPicture, BadgeStyle.Dot, BadgePlacement.AboveRight, 1f, Work));
+        Assert.Equal(0, p.Y);
+    }
+
+    [Fact]
+    public void Dot_AtLeftScreenEdge_KeepsBodyInside()
+    {
+        // 왼쪽 위치인데 왼쪽에 자리가 없어 오른쪽으로 옮긴 뒤에도, 작업 영역 밖으로 나가는 것은 투명한 표시 자리뿐이다.
+        var caret = new Rectangle(5, 300, 2, 20);
+        var p = BadgeLayout.Compute(new LayoutInput(caret, DotPicture, BadgeStyle.Dot, BadgePlacement.AboveLeft, 1f, Work));
+        Assert.Equal(7 + 3 - DotSide, p.X);
     }
 
     [Theory]
@@ -129,7 +178,7 @@ public sealed class BadgeLayoutTests
         var work = new Rectangle(-1920, -100, 1920, 1000);
         var caret = new Rectangle(-1925, -150, 2, 20);   // 작업 영역 밖
         var p = BadgeLayout.Compute(In(caret, style: BadgeStyle.Underline, work: work));
-        Assert.Equal(work.Left, p.X);
+        Assert.Equal(work.Left - BadgeLayout.Side(BadgeStyle.Underline, 1f), p.X);   // 막대(몸통)는 작업 영역 안, 좌우 표시 자리는 밖
         Assert.Equal(work.Top, p.Y);
     }
 

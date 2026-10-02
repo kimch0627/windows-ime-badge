@@ -250,7 +250,7 @@ public sealed class DesignThemesTests
     public void Characters_Normalize(string? input, string expected) => Assert.Equal(expected, BadgeCharacters.Normalize(input));
 }
 
-/// <summary>배지 글자 규칙: 한/꺆, a/A, Caps Lock 이면 밑줄, Shift 를 누르고 있으면 반대 대소문자와 ▲. 설정을 끄면 예전처럼 한/A.</summary>
+/// <summary>배지 글자 규칙: 한/꺆, a/A, Caps Lock 이면 밑줄, Shift 를 누르고 있으면 반대 대소문자와 ▲(밑줄과 함께). 설정을 끄면 예전처럼 한/A.</summary>
 public sealed class BadgeTextTests
 {
     [Theory]
@@ -269,14 +269,17 @@ public sealed class BadgeTextTests
     public void ShowCapsLock_Off_KeepsOldLetters(bool korean, bool caps, string text) =>
         Assert.Equal((text, BadgeMark.None), BadgeText.For(korean, caps, showCapsLock: false));
 
-    /// <summary>Shift 는 지금 입력될 글자를 보여 준다: Caps Lock 이 꺼져 있으면 대문자, 켜져 있으면 소문자. 표시는 늘 ▲.</summary>
+    /// <summary>
+    /// Shift 는 지금 입력될 글자를 보여 준다: Caps Lock 이 꺼져 있으면 대문자, 켜져 있으면 소문자. 표시는 늘 ▲ 이고,
+    /// Caps Lock 이 켜져 있으면 밑줄도 그대로 남는다(▲ 는 왼쪽 아래 모서리라 자리가 겹치지 않는다).
+    /// </summary>
     [Theory]
-    [InlineData(true, false, "꺆")]
-    [InlineData(true, true, "한")]
-    [InlineData(false, false, "A")]
-    [InlineData(false, true, "a")]
-    public void ShiftHeld_FlipsCase_WithShiftMark(bool korean, bool caps, string text) =>
-        Assert.Equal((text, BadgeMark.Shift), BadgeText.For(korean, caps, showCapsLock: true, shift: true));
+    [InlineData(true, false, "꺆", BadgeMark.Shift)]
+    [InlineData(true, true, "한", BadgeMark.Shift | BadgeMark.CapsBar)]
+    [InlineData(false, false, "A", BadgeMark.Shift)]
+    [InlineData(false, true, "a", BadgeMark.Shift | BadgeMark.CapsBar)]
+    public void ShiftHeld_FlipsCase_WithShiftMark(bool korean, bool caps, string text, BadgeMark mark) =>
+        Assert.Equal((text, mark), BadgeText.For(korean, caps, showCapsLock: true, shift: true));
 
     [Theory]
     [InlineData(true, false, "한")]

@@ -65,14 +65,24 @@ public sealed class Settings
     public bool Animate { get; set; } = true;
     /// <summary>
     /// Caps Lock 상태를 배지 글자로 구별한다: 한글 "한"/"꺆", 영문 "a"/"A", 켜져 있으면 글자 아래 밑줄(<see cref="BadgeText"/>).
-    /// 끄면 항상 "한"/"A". 트레이 아이콘은 이 설정과 상관없이 항상 "한"/"A".
+    /// 점·밑줄 모양은 글자가 없으므로 그 아래에 같은 밑줄을 긋는다. 끄면 항상 "한"/"A". 트레이 아이콘은 이 설정과 상관없이 항상 "한"/"A".
     /// </summary>
     public bool ShowCapsLock { get; set; } = true;
     /// <summary>
-    /// Shift 를 잠깐(<see cref="ShiftHold.ThresholdMs"/>) 이상 누르고 있으면 지금 입력될 대소문자로 글자를 바꾸고 밑줄 대신 ▲ 를 그린다.
+    /// Shift 를 잠깐(<see cref="ShiftHold.ThresholdMs"/>) 이상 누르고 있으면 지금 입력될 대소문자로 글자를 바꾸고 배지 왼쪽 아래에 ▲ 를 그린다.
     /// <see cref="ShowCapsLock"/> 이 꺼져 있으면 무시된다.
     /// </summary>
     public bool ShowShiftHold { get; set; } = true;
+    /// <summary>
+    /// <see cref="ShowShiftHold"/> 의 하위 옵션: <see cref="ShiftHold.ThresholdMs"/> 를 기다리지 않고 Shift 를 누르는 즉시 보여 준다.
+    /// 대문자 한 글자를 칠 때도 배지가 잠깐 바뀌므로 기본은 꺼짐. 구버전은 모르는 항목으로 무시한다.
+    /// </summary>
+    public bool ShowShiftImmediately { get; set; }
+    /// <summary>
+    /// Insert 로 겹쳐 쓰기를 켠 창에서는 배지에 작은 네모(■)를 그린다(<see cref="InsertToggle"/>). Caps Lock 표시와 따로 켜고 끈다.
+    /// 구버전은 모르는 항목으로 무시하므로 되돌려도 다른 설정은 그대로 남는다.
+    /// </summary>
+    public bool ShowInsert { get; set; } = true;
     /// <summary>디자인 테마 id(<see cref="DesignThemes"/>). 문자열이라 구버전이 읽어도 무시될 뿐 설정이 초기화되지 않는다.</summary>
     public string Theme { get; set; } = DesignThemes.ClassicId;
     /// <summary>캐릭터 배지 모양(<see cref="BadgeCharacters"/>). 빈 문자열이면 <see cref="Style"/> 를 따른다. 고르면 Style 은 Pill 로 둔다(구버전 호환).</summary>
@@ -141,7 +151,7 @@ public sealed class Settings
         Style = other.Style; Placement = other.Placement;
         SizePercent = other.SizePercent; OpacityPercent = other.OpacityPercent;
         HangulColor = other.HangulColor; EnglishColor = other.EnglishColor; Animate = other.Animate; ShowCapsLock = other.ShowCapsLock;
-        ShowShiftHold = other.ShowShiftHold;
+        ShowShiftHold = other.ShowShiftHold; ShowShiftImmediately = other.ShowShiftImmediately; ShowInsert = other.ShowInsert;
         Theme = other.Theme; Character = other.Character; Visibility = other.Visibility;
         HideOnFullscreen = other.HideOnFullscreen;
         ExcludedProcesses = new List<string>(other.ExcludedProcesses);

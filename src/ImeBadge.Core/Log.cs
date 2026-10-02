@@ -6,7 +6,7 @@ namespace ImeBadge;
 /// <summary>
 /// 파일 로그. 두 종류가 있다.
 ///  - 디버그 로그(imebadge.log): <c>--debug</c> 로 실행했을 때만 기록. 활성 창·caret 탐색 경로·IME 원시 값.
-///  - 오류 로그(errors.log): 항상 기록. 예외와 복구 불가 상황. 사용자가 문제를 신고할 때 첨부하는 파일.
+///  - 오류 로그(errors.log): 항상 기록. 예외와 복구 불가 상황, 배지가 멈춘 듯 오래 걸린 일(<see cref="Warn"/>). 사용자가 문제를 신고할 때 첨부하는 파일.
 /// 파일이 <see cref="MaxBytes"/> 를 넘으면 <c>.1</c> 로 한 번 밀어 두고 새로 쓴다(단순 회전).
 /// </summary>
 public static class Log
@@ -42,6 +42,14 @@ public static class Log
     public static void Error(string message, Exception? ex = null)
     {
         string line = ex is null ? "ERROR " + message : $"ERROR {message}: {ex}";
+        Append(_errorPath, line);
+        if (Enabled) Append(_debugPath, line);
+    }
+
+    /// <summary>항상 기록되는 경고(오류 로그). 예외는 아니지만 신고에 필요한 일: 배지가 멈춘 듯 한 번의 폴링이 오래 걸림 등.</summary>
+    public static void Warn(string message)
+    {
+        string line = "WARN " + message;
         Append(_errorPath, line);
         if (Enabled) Append(_debugPath, line);
     }

@@ -124,15 +124,21 @@ public static class BadgeCharacters
     }
 }
 
-/// <summary>배지 글자 아래의 표시. Caps Lock 은 짧은 밑줄, Shift 를 누르고 있으면 작은 ▲(Shift 키 ⇧ 모양).</summary>
-public enum BadgeMark { None, CapsBar, Shift }
+/// <summary>
+/// 배지의 특수 키 표시. Caps Lock 은 짧은 밑줄(▁), Shift 를 누르고 있으면 작은 ▲(Shift 키 ⇧ 모양), Insert 로 겹쳐 쓰기를 켜면
+/// 작은 네모(■, 블록 커서 모양). 셋은 서로 독립이라 함께 켜질 수 있고, 저마다 자리가 정해져 있다(왼쪽부터 ▲ ▁ ■).
+/// 글자 배지·캐릭터: ▲ 는 왼쪽 아래 모서리, ▁ 는 글자 아래, ■ 는 오른쪽 아래 모서리(글자 아래면 마침표처럼 읽힌다).
+/// 글자가 없는 점·밑줄 모양: 몸통 아래 한 줄의 왼쪽·가운데·오른쪽 자리. 없는 기호의 자리는 비워 두어 다른 기호가 움직이지 않는다.
+/// </summary>
+[Flags]
+public enum BadgeMark { None = 0, CapsBar = 1, Shift = 2, Insert = 4 }
 
 /// <summary>
 /// 배지에 쓸 글자. Caps Lock 표시가 켜져 있으면(기본) 글자로 대소문자를 구별한다:
 /// 한글은 평소 "한", Caps Lock 이 켜지면 쌍자음 "꺆"(평소와 다르다는 것이 한눈에 보이게), 영문은 소문자 "a" / 대문자 "A".
 /// Caps Lock 이 켜져 있으면 글자 아래에 짧은 밑줄도 긋는다(언어 공통). 트레이 아이콘은 이 규칙을 쓰지 않고 항상 "한"/"A" 다.
-/// Shift 를 누르고 있으면 지금 입력될 글자를 보여 준다(Caps Lock 과 반대: 꺼져 있으면 A/꺆, 켜져 있으면 a/한).
-/// 이때는 밑줄 대신 ▲ 를 그려 Caps Lock 과 구별한다.
+/// Shift 를 누르고 있으면 지금 입력될 글자(Caps Lock 과 반대: 꺼져 있으면 A/꺆, 켜져 있으면 a/한)와 ▲ 표시를 보여 준다.
+/// Caps Lock 밑줄과 자리가 달라(<see cref="BadgeMark"/>) Caps Lock 이 켜진 채로 누르고 있으면 a/한 에 밑줄과 ▲ 가 함께 보인다.
 /// 설정을 끄면 예전처럼 항상 "한"/"A", 표시 없음(Shift 도 무시).
 /// </summary>
 public static class BadgeText
@@ -146,8 +152,8 @@ public static class BadgeText
     public static (string Text, BadgeMark Mark) For(bool korean, bool capsLock, bool showCapsLock, bool shift = false)
     {
         if (!showCapsLock) return (korean ? Hangul : EnglishUpper, BadgeMark.None);
-        bool upper = capsLock ^ shift;   // 실제 입력 기준: Caps Lock 중에 Shift 를 누르면 소문자
-        var mark = shift ? BadgeMark.Shift : capsLock ? BadgeMark.CapsBar : BadgeMark.None;
+        bool upper = capsLock ^ shift;   // 실제 입력 기준: Caps Lock 중에 Shift 를 누르면 소문자(표시는 ▁·▲ 둘 다)
+        var mark = (capsLock ? BadgeMark.CapsBar : BadgeMark.None) | (shift ? BadgeMark.Shift : BadgeMark.None);
         if (korean) return (upper ? HangulCaps : Hangul, mark);
         return (upper ? EnglishUpper : EnglishLower, mark);
     }

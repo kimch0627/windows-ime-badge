@@ -13,8 +13,9 @@ enum ImeState { Unknown, Hangul, English, OtherLang }
 /// <param name="Shift">한/영 모드이고 Shift 를 계속 누르고 있는가(<see cref="ShiftHold"/>). 설정에서 표시를 껐으면 항상 false.</param>
 /// <param name="CaretWindow">커서를 자식 창으로 그리는 앱(Xshell)에서 찾은 그 커서 창(<see cref="CursorWindow"/>). 없으면 0.
 /// BadgeForm 이 이 창의 위치 변경 이벤트를 받아 타이머를 기다리지 않고 배지를 옮긴다.</param>
+/// <param name="Insert">활성 창이 Insert 로 겹쳐 쓰기를 켠 상태인가(<see cref="InsertToggle"/>). 언어와 상관없다. 설정에서 표시를 껐으면 항상 false.</param>
 readonly record struct Snapshot(ImeState State, Rectangle? Caret, IntPtr Foreground = default, string? Suppressed = null, bool CapsLock = false,
-                                bool Shift = false, IntPtr CaretWindow = default);
+                                bool Shift = false, IntPtr CaretWindow = default, bool Insert = false);
 
 /// <summary>활성 창의 caret 위치와 한/영 상태를 한 번 읽어 <see cref="Snapshot"/> 으로 돌려준다.</summary>
 static class ImeReader
@@ -29,7 +30,8 @@ static class ImeReader
     static readonly string[] TsfPreferredProcesses = { "WindowsTerminal", "OpenConsole" };
 
     /// <param name="shiftHeld">Shift 를 계속 누르고 있는가. 누른 시간은 폴링마다 재야 하므로 부르는 쪽(<see cref="ShiftHold"/>)이 잰다.</param>
-    public static Snapshot Read(IntPtr selfHandle, Settings settings, bool shiftHeld = false)
+    /// <param name="overtype">활성 창이 겹쳐 쓰기 상태인가. 창마다 Insert 를 누른 것을 세야 하므로 부르는 쪽(<see cref="InsertToggle"/>)이 잰다.</param>
+    public static Snapshot Read(IntPtr selfHandle, Settings settings, bool shiftHeld = false, bool overtype = false)
     {
         var fg = Native.GetForegroundWindow();
         if (fg == IntPtr.Zero || fg == selfHandle) return new(ImeState.Unknown, null);
@@ -39,9 +41,9 @@ static class ImeReader
         var target = core != IntPtr.Zero ? core : fg;
         uint tid = Native.GetWindowThreadProcessId(target, out uint pid);
 
-        // 우리 자신의 창(설정·정보 창)이 활성이면 조사하지 않는다. 같은 프로세스의 UI 스레드에서 UI Automation 클라이언트를
-        // 부르면 공급자(우리 창)가 같은 스레드에 있어 서로를 기다리다 시간 초과가 나고, 그동안 메시지 펌프가 재진입해
-        // 배지가 깜빡이고 버튼이 늦게 반응한다. 설정 창에는 배지가 필요 없으니 숨긴다.
+        // 우리 자신의 창(설정·정보 창)이 활성이면 조사하지 않는다. UI Automation 은 작업 스레드에서 묻지만(A11yCaret) 우리 창의
+        // 공급자는 UI 스레드에 있고, UI 스레드는 그 답을 (메시지를 펌프하지 않고) 기다리고 있어 매번 시간을 넘긴다.
+        // 설정 창에는 배지가 필요 없으니 숨긴다.
         if (pid == (uint)Environment.ProcessId) return new(ImeState.Unknown, null, fg, "self");
 
         string process = ProcessName(pid);
@@ -80,11 +82,8 @@ static class ImeReader
             }
             else
             {
-                caret = UiaCaret.Find(dump);
-                // UIA 가 입력칸 사각형만 줬으면(높이 0 = 근사 위치) MSAA 가상 caret 으로 정확한 위치를 찾아본다.
-                // 입력칸이 아닐 때(null)는 묻지 않는다. 가상 caret 에는 다른 곳에 있던 옛 위치가 남아 있을 수 있다.
-                if (caret is { Height: 0 } && AccCaret.Find(gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target, dump) is { } acc)
-                    caret = acc;
+                // UI Automation(→ 필요하면 MSAA). 대상 앱이 바쁘면 오래 걸릴 수 있어 UI 스레드 밖에서 묻고 잠깐만 기다린다.
+                caret = A11yCaret.Find(gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target, process, dump);
             }
         }
         // 셋 다 못 찾으면(caret == null) 배지를 띄우지 않는다. 작업 표시줄·버튼처럼 글자를 입력하지 않는 곳에 뜨지 않게 하기 위해서다.
@@ -95,9 +94,12 @@ static class ImeReader
         // Caps Lock 은 배지 글자로 보여 준다(한 → 꺆, a → A). 한글 모드에서도 켜져 있으면 영문 대문자가 입력되므로 함께 본다.
         bool caps = settings.ShowCapsLock && state is (ImeState.English or ImeState.Hangul) && Native.IsCapsLockOn();
         if (caps) dump?.Append(" caps");
-        // Shift 를 누르고 있는 동안은 지금 입력될 대소문자를 ▲ 와 함께 보여 준다(Caps Lock 표시의 하위 옵션).
+        // Shift 를 누르고 있는 동안은 지금 입력될 대소문자와 왼쪽 아래 ▲ 를 보여 준다(Caps Lock 표시의 하위 옵션).
         bool shift = shiftHeld && settings.ShowCapsLock && settings.ShowShiftHold && state is (ImeState.English or ImeState.Hangul);
         if (shift) dump?.Append(" shift");
+        // 겹쳐 쓰기는 입력 언어와 상관없이 글자를 덮어쓰므로 다른 언어(?) 배지에도 보여 준다.
+        bool insert = overtype && settings.ShowInsert && state != ImeState.Unknown;
+        if (insert) dump?.Append(" overtype");
 
         if (dump is not null)
         {
@@ -107,7 +109,7 @@ static class ImeReader
             Log.WriteIfChanged($"fg='{Native.ClassName(fg)}' focus='{Native.ClassName(gti.hwndFocus)}' tid={tid} pid={pid} => {state}{dump}");
         }
 
-        return new(state, caret, fg, CapsLock: caps, Shift: shift, CaretWindow: caretWindow);
+        return new(state, caret, fg, CapsLock: caps, Shift: shift, CaretWindow: caretWindow, Insert: insert);
     }
 
     /// <summary>
