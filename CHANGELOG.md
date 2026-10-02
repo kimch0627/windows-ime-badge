@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-10-02
+
 **특수 키 표시를 넓힌** 릴리스입니다. Insert(겹쳐 쓰기)를 새로 보여 주고, 지금까지 아무 표시가 없던 점·밑줄 모양에서도
 Caps Lock·Shift·겹쳐 쓰기를 알 수 있으며, Shift 를 누르는 즉시 보여 주는 옵션을 더했습니다. 커서를 찾다가 배지와 트레이 메뉴가
 멈추던 문제도 고쳤습니다. 설정 파일은 그대로 호환되고, 예전 버전으로 되돌려도 다른 설정은 남습니다.
@@ -519,7 +521,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.13.0...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.14.0...HEAD
+[1.14.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.10.0...v1.11.0
