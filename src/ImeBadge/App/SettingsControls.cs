@@ -195,6 +195,7 @@ sealed class SettingsCard : Panel
     bool _clickable, _hot, _pressed;
 
     const int PadH = 16, PadV = 12, MinH = 68, IconBox = 20, IconGap = 16, ActionGap = 24, BodyGap = 12, DescGap = 2, TrailingBox = 16;
+    const int CompactBodyGap = 8;
 
     /// <summary><see cref="Theme"/> 가 칠할 때 넣어 준다.</summary>
     public Theme.Palette Palette { get => _palette; set { _palette = value; Invalidate(); } }
@@ -216,6 +217,12 @@ sealed class SettingsCard : Panel
 
     /// <summary>몸통을 카드 안쪽 폭 전체로 늘린다(미리보기). 아니면 제목 글자 위치에서 시작하고 자기 크기를 쓴다.</summary>
     public bool StretchBody { get; set; }
+
+    /// <summary>
+    /// 제목 줄을 낮게: 최소 높이 없이 내용(제목·컨트롤) 높이만 쓰고, 몸통 위아래 여백도 줄인다.
+    /// 세로 자리가 아까운 곳(모양 페이지 제목 아래에 고정한 미리보기)에 쓴다.
+    /// </summary>
+    public bool CompactHeader { get; set; }
 
     /// <summary>카드 전체를 누를 수 있게 한다. 마우스를 올리면 밝아지고, Tab 으로 포커스를 받아 Enter·Space 로 누른다(Click 이벤트).</summary>
     public bool Clickable
@@ -281,7 +288,9 @@ sealed class SettingsCard : Panel
 
     static Size Measure(Control c) => c.AutoSize ? c.GetPreferredSize(Size.Empty) : c.Size;
 
-    Size ActionSize => _action is { Visible: true } a ? Measure(a)
+    // 컨트롤·몸통이 있는지만 보고 Visible 은 보지 않는다. Visible 은 부모까지 보여야 true 라서, 숨은 페이지나 숨은 자리에 있는 카드의
+    // 높이가 컨트롤·몸통 없이 계산된다(미리보기를 고정할지 정할 때 그 높이를 미리 잰다). 카드 안 컨트롤을 따로 숨겨 쓰는 곳은 없다.
+    Size ActionSize => _action is { } a ? Measure(a)
         : _trailingGlyph.Length > 0 && Theme.HasIconFont ? new Size(Px(TrailingBox), Px(TrailingBox)) : Size.Empty;
 
     int TextLeft => Px(PadH) + (HasIcon ? IconWidth + Px(IconGap) : 0);
@@ -313,26 +322,27 @@ sealed class SettingsCard : Panel
         var (t, d) = MeasureText(TextWidth(width));
         int textH = t.Height + (d.Height > 0 ? Px(DescGap) + d.Height : 0);
         int content = Math.Max(textH, Math.Max(ActionSize.Height, HasIcon ? IconWidth : 0));
-        int row = Math.Max(Px(MinH - 2 * PadV), content);
+        int row = CompactHeader ? content : Math.Max(Px(MinH - 2 * PadV), content);
         return (Px(PadV), row, t, d);
     }
 
     Size BodySize(int width)
     {
-        if (_body is not { Visible: true } b) return Size.Empty;
+        if (_body is not { } b) return Size.Empty;
         var s = Measure(b);
         return StretchBody ? new Size(width - 2 * Px(PadH), s.Height) : s;
     }
 
     int BodyLeft => StretchBody || !HasHeader ? Px(PadH) : TextLeft;
 
+    int BodyTop(int top, int row) => HasHeader ? top + row + Px(CompactHeader ? CompactBodyGap : BodyGap) : Px(PadH);
+
     int HeightFor(int width)
     {
         var (top, row, _, _) = HeaderRow(width);
         var body = BodySize(width);
-        if (body.IsEmpty) return Math.Max(Px(MinH), top + row + Px(PadV));
-        int bodyTop = HasHeader ? top + row + Px(BodyGap) : Px(PadH);
-        return bodyTop + body.Height + Px(PadH);
+        if (body.IsEmpty) return Math.Max(CompactHeader ? 0 : Px(MinH), top + row + Px(PadV));
+        return BodyTop(top, row) + body.Height + Px(CompactHeader ? PadV : PadH);
     }
 
     public override Size GetPreferredSize(Size proposed)
@@ -347,18 +357,14 @@ sealed class SettingsCard : Panel
         int width = Width;
         var (top, row, _, _) = HeaderRow(width);
         var body = BodySize(width);
-        if (_action is { Visible: true } a)
+        if (_action is { } a)
         {
             var s = ActionSize;
             // 몸통이 없으면 카드 전체의 세로 가운데, 있으면 제목 줄의 세로 가운데.
             int y = body.IsEmpty ? (Height - s.Height) / 2 : top + (row - s.Height) / 2;
             a.SetBounds(width - Px(PadH) - s.Width, y, s.Width, s.Height);
         }
-        if (_body is { Visible: true } b)
-        {
-            int bodyTop = HasHeader ? top + row + Px(BodyGap) : Px(PadH);
-            b.SetBounds(BodyLeft, bodyTop, body.Width, body.Height);
-        }
+        if (_body is { } b) b.SetBounds(BodyLeft, BodyTop(top, row), body.Width, body.Height);
     }
 
     protected override void OnFontChanged(EventArgs e) { base.OnFontChanged(e); Changed(); }
@@ -446,7 +452,7 @@ sealed class SettingsCard : Panel
             TextRenderer.DrawText(g, _description, hint, new Rectangle(TextLeft, y + t.Height + Px(DescGap), textW, d.Height), subtle,
                 TextFlags | TextFormatFlags.Left | TextFormatFlags.NoPrefix);
         }
-        if (_action is not { Visible: true } && _trailingGlyph.Length > 0)
+        if (_action is null && _trailingGlyph.Length > 0)
         {
             using var small = Theme.IconFont(Px(12));
             if (small is not null)
@@ -580,10 +586,7 @@ sealed class CardStack : Panel
 
     void Arrange()
     {
-        // 스크롤바 자리는 늘 비워 둔다: 스크롤바가 있는 페이지와 없는 페이지를 오갈 때 카드 오른쪽 끝이 흔들리지 않는다.
-        int usable = Width - SystemInformation.VerticalScrollBarWidth;
-        int width = Math.Max(Px(240), Math.Min(usable - 2 * Px(SideMargin), Px(MaxWidth)));
-        int x = Px(SideMargin);
+        var (x, width) = Column(Width, DpiScale);
         int y = Px(TopMargin);
         Control? prev = null;
         foreach (Control c in Controls)
@@ -602,6 +605,47 @@ sealed class CardStack : Panel
     }
 
     public void ScrollToTop() => AutoScrollPosition = Point.Empty;
+
+    /// <summary>
+    /// 카드 열의 왼쪽 위치와 폭(물리 픽셀). 스크롤바 자리는 늘 비워 둔다: 스크롤바가 있는 페이지와 없는 페이지를 오갈 때
+    /// 카드 오른쪽 끝이 흔들리지 않는다. 고정한 카드(<see cref="PinnedCardHost"/>)도 이 열에 맞춰 아래 카드들과 줄이 맞는다.
+    /// </summary>
+    public static (int x, int width) Column(int panelWidth, float dpiScale)
+    {
+        int Scaled(int logical) => (int)Math.Round(logical * dpiScale);
+        int usable = panelWidth - SystemInformation.VerticalScrollBarWidth;
+        return (Scaled(SideMargin), Math.Max(Scaled(240), Math.Min(usable - 2 * Scaled(SideMargin), Scaled(MaxWidth))));
+    }
+}
+
+/// <summary>
+/// 카드 하나를 페이지 제목 바로 아래에 고정해 두는 자리(모양 페이지의 미리보기). 아래 페이지(<see cref="CardStack"/>)를 스크롤해도 그대로 보인다.
+/// 카드는 CardStack 과 같은 열(<see cref="CardStack.Column"/>)에 놓고, 높이는 카드에 맞춘다.
+/// </summary>
+sealed class PinnedCardHost : Panel
+{
+    const int TopGap = 4, BottomGap = 8;
+
+    public PinnedCardHost() { DoubleBuffered = true; TabStop = false; }
+
+    float DpiScale => DeviceDpi / 96f;
+    int Px(int logical) => (int)Math.Round(logical * DpiScale);
+
+    /// <summary>폭이 <paramref name="panelWidth"/> 일 때 <paramref name="card"/> 를 여기에 놓으면 차지할 높이(위아래 간격 포함).</summary>
+    public int HeightFor(Control card, int panelWidth) =>
+        Px(TopGap) + card.GetPreferredSize(new Size(CardStack.Column(panelWidth, DpiScale).width, 0)).Height + Px(BottomGap);
+
+    protected override void OnLayout(LayoutEventArgs levent)
+    {
+        base.OnLayout(levent);
+        if (Controls.Count == 0) return;
+        var (x, width) = CardStack.Column(Width, DpiScale);
+        var card = Controls[0];
+        int h = card.GetPreferredSize(new Size(width, 0)).Height;
+        card.SetBounds(x, Px(TopGap), width, h);
+        int want = Px(TopGap) + h + Px(BottomGap);
+        if (Height != want) Height = want;   // Dock=Top 이라 높이만 정하면 아래 페이지가 그만큼 줄어든다
+    }
 }
 
 /// <summary>페이지 제목(크게)과 한 줄 설명. 본문 카드와 같은 왼쪽 선에 맞춘다.</summary>

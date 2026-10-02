@@ -141,7 +141,10 @@ public static class Strings
 
         // ── 모양 페이지 (니모닉: V M L Z O H E) ──
         ["group.preview"] = "미리보기",
-        ["group.preview.desc"] = "창 밖 배지와 똑같이 그립니다. 왼쪽은 밝은 편집기, 오른쪽은 어두운 편집기에서의 모습입니다.",
+        ["preview.collapse"] = "접기",
+        ["preview.expand"] = "펼치기",
+        ["preview.collapse.name"] = "미리보기 접기",
+        ["preview.expand.name"] = "미리보기 펼치기",
         ["preview.tip"] = "왼쪽은 밝은 배경(메모장), 오른쪽은 어두운 배경(VS Code 등)에서의 모습입니다.\n배지가 옆줄 글자를 얼마나 가리는지, 불투명도를 낮추면 얼마나 비치는지도 볼 수 있습니다.",
         ["preview.light"] = "밝은 배경",
         ["preview.dark"] = "어두운 배경",
@@ -417,7 +420,10 @@ public static class Strings
 
         // ── Appearance page (mnemonics: V S L Z O K E) ──
         ["group.preview"] = "Preview",
-        ["group.preview.desc"] = "Drawn exactly like the real badge. Left: a light editor, right: a dark editor.",
+        ["preview.collapse"] = "Collapse",
+        ["preview.expand"] = "Expand",
+        ["preview.collapse.name"] = "Collapse preview",
+        ["preview.expand.name"] = "Expand preview",
         ["preview.tip"] = "Left: on a light background (Notepad). Right: on a dark background (VS Code etc.).\nIt also shows how much of the neighboring line the badge covers, and how much shows through at lower opacity.",
         ["preview.light"] = "Light background",
         ["preview.dark"] = "Dark background",
