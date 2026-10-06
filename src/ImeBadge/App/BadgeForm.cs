@@ -924,7 +924,7 @@ sealed class BadgeForm : Form, IExperimentHost
         long t0 = Environment.TickCount64;
         try
         {
-            TrackUserInput();
+            if (TracksUserInput) TrackUserInput();
             CheckFocusSteal();
             // 일시 중지 중에도 재야 다시 켰을 때 "예전에 누르기 시작한 Shift" 로 잘못 세지 않는다.
             // "누르는 즉시 표시" 면 0.3초를 기다리지 않는다(누른 것이 보이는 첫 폴링, 기본 0.1초 안).
@@ -1102,6 +1102,9 @@ sealed class BadgeForm : Form, IExperimentHost
     }
 
     // ── 실험 기능: 커서 소나·말풍선 ──
+    /// <summary>마우스·Alt·Win·Ctrl 을 지켜볼 필요가 있는 실험 기능("창을 바꾸면 저절로", 포커스 뺏김 경고)이 켜져 있다. 꺼져 있으면 읽지 않는다.</summary>
+    bool TracksUserInput => (_settings.CaretSonar && _settings.CaretSonarOnSwitch) || _settings.FocusStealWarning;
+
     /// <summary>
     /// 마우스를 움직였거나 버튼을 누르고 있으면, 또는 Alt·Win·Ctrl 을 누르고 있으면 그 시각을 적는다. 창을 사용자가 바꿨는지(마우스·단축키)
     /// 가리는 데 쓴다. 폴링(기본 0.1초)마다 보므로 아주 짧게 누른 키는 놓칠 수 있다.
@@ -1125,7 +1128,7 @@ sealed class BadgeForm : Form, IExperimentHost
     /// </summary>
     void OnForegroundChanged()
     {
-        TrackUserInput();
+        if (TracksUserInput) TrackUserInput();
         // 입력칸 기억: 다른 창에 다녀오면 같은 입력칸으로 돌아와도 "들어온" 것으로 본다(그사이 한/영을 바꿨을 수 있다).
         if (_settings.RememberFieldMode) { _fieldMemory?.Observe(null, null, false, DateTime.UtcNow); HideFieldHint(); }
         if (_settings.PasswordWarning) { _passwordGuard.Reset(); _callout?.Hide("password"); }

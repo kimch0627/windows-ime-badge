@@ -73,7 +73,7 @@ winget install kimch0627.ImeBadge
 
 ### 설정 창
 
-Windows 11 설정 앱처럼 왼쪽 메뉴에서 페이지(**모양 · 표시 · 일반 · 제외 앱 · 정보**)를 고르고, 항목마다 아이콘·이름·설명이 붙은 카드로 보여 줍니다.
+Windows 11 설정 앱처럼 왼쪽 메뉴에서 페이지(**모양 · 표시 · 일반 · 제외 앱 · 실험 기능 · 정보**)를 고르고, 항목마다 아이콘·이름·설명이 붙은 카드로 보여 줍니다.
 Ctrl+Tab / Ctrl+Shift+Tab 으로 다음·이전 페이지로 옮기고, 창 크기를 바꾸거나 최대화할 수 있습니다.
 
 | 페이지 | 항목 | 설명 |
@@ -101,6 +101,11 @@ Ctrl+Tab / Ctrl+Shift+Tab 으로 다음·이전 페이지로 옮기고, 창 크�
 | | 설정 백업 | **가져오기** / **내보내기**로 설정을 파일(`.json`)로 저장하거나 다른 PC 에서 불러옴. 가져온 설정은 설정 창에 채워지고, **확인**을 눌러야 저장됨 |
 | | 기본값 복원 | 고른 테마는 그대로 두고 나머지를 기본값으로. [취소]하면 원래대로 |
 | 제외 앱 | 배지를 띄우지 않을 앱 | 입력칸 오른쪽 단추(Alt+↓)로 실행 중인 앱 목록을 펼쳐 고르거나, 이름을 직접 입력하고 Enter. `.exe` 생략 가능, 끝에 `*` 는 앞부분 일치. 예: `mstsc`, `Unreal*`. 앱마다 카드 한 장이고 [삭제]로 뺌 |
+| 실험 기능 | 커서 소나 | 단축키(기본 Ctrl+Alt+J, 바꿀 수 있음)를 누르면 원 두 개가 커서 자리로 좁혀 들고 커서가 잠깐 빛남. 원의 색은 지금 한/영 배지 색이고 [보기]로 미리 볼 수 있음. 배지를 일시 중지한 동안에도 동작. 커서를 못 찾으면 마우스 포인터 옆 말풍선. 하위 옵션 **창을 바꾸면 저절로**(기본 켜짐): Alt+Tab 처럼 키보드로 창을 바꾸면 한 번 재생하고, 마우스로 고르면 재생하지 않음 (기본 꺼짐) |
+| | 입력칸별 한/영 기억 | 같은 입력칸에서 몇 자 치면 그때의 한/영을 기억했다가, 다시 들어왔을 때 지금과 다르면 "이 칸에서는 보통 영문으로 썼어요" 말풍선(그 모드의 배지와 함께). 알려 준 대로 바꾸면 바로 사라지고, 한/영을 대신 바꾸지는 않음. 입력칸은 앱 이름과 입력칸 이름의 해시로 알아봄. 비밀번호 칸은 기억하지 않음. 기억한 입력칸 수를 보고 [지우기] 가능 (기본 꺼짐) |
+| | 선택 영역 덮어쓰기 표시 | 선택한 글이 있어 다음 글자가 그 글을 지우는 입력칸에서는 배지 테두리가 흰·검 점선(그림판의 선택 영역 모양). 밑줄 모양은 막대가 점선. 메모장 같은 기본 입력칸, Notepad++, 크롬·엣지·VS Code 에서 동작 (기본 꺼짐) |
+| | 비밀번호 칸 경고 | 비밀번호 칸에 들어갔을 때 한글 입력이거나 Caps Lock 이 켜져 있으면 커서 옆 주의 말풍선, 배지가 한 번 살짝 커짐. 머무는 동안 바뀌면 다시 알리고, 영문으로 바꾸고 Caps Lock 을 끄면 사라짐 (기본 꺼짐) |
+| | 포커스 뺏김 경고 | 글자를 치는 도중 다른 창이 스스로 앞으로 나와 입력이 그리로 가기 시작하면, 쓰던 자리에 "입력이 다른 창으로 가고 있어요" 말풍선(앞으로 나온 앱 이름과 함께). 마우스나 Alt·Win·Ctrl 로 바꾼 것은 알리지 않음. 키 내용은 읽지 않고 Windows 의 마지막 입력 시각만 봄 (기본 꺼짐) |
 | 정보 | | 버전, 새 버전 확인(마지막 확인 시각), 릴리스·저장소 링크, 설정·로그 폴더 열기, 진단 정보 복사 |
 
 Alt 를 누르면 항목마다 단축키 글자가 나타나고, Alt+글자로 지금 페이지의 그 항목으로 바로 갑니다(토글은 바로 켜고 끔).
@@ -111,6 +116,7 @@ Alt 를 누르면 항목마다 단축키 글자가 나타나고, Alt+글자로 �
 설정 창은 Windows 의 밝게/어둡게 앱 모드를 따릅니다.
 
 설정은 `%APPDATA%\ImeBadge\settings.json` 에 저장됩니다. 0.x 버전이 exe 옆에 남긴 `imebadge.settings.json` 은 첫 실행 때 자동으로 옮겨 옵니다.
+실험 기능 "입력칸별 한/영 기억" 을 켜면 기억한 내용이 같은 폴더의 `fields.json` 에 따로 저장됩니다(설정 내보내기에는 들어가지 않습니다).
 
 ### 문제가 생기면
 
@@ -130,7 +136,7 @@ dotnet build ImeBadge.sln                    # 전체 빌드 (경고 = 오류)
 dotnet test                                  # Core 단위 테스트 (Windows 없이도 돌아감)
 dotnet run --project src/ImeBadge            # 실행
 dotnet run --project src/ImeBadge -- --debug # 디버그 로그 켜고 실행
-dotnet run --project src/ImeBadge -- --render-sheet sheet.png   # 모든 테마·모양의 배지를 한 장의 PNG 로(창 없이)
+dotnet run --project src/ImeBadge -- --render-sheet sheet.png   # 모든 테마·모양의 배지와 실험 기능 그림(소나·말풍선·선택 영역)을 한 장의 PNG 로(창 없이)
 dotnet run --project src/ImeBadge -- --render-hero hero.png     # README 소개 그림(docs/images/hero.png)
 ```
 
@@ -153,6 +159,11 @@ src/ImeBadge.Core/      순수 로직. WinForms·Win32 의존 없음 → Linux �
   Hotkey.cs             "Ctrl+Alt+H" ↔ (보조키, 가상 키) 변환·검증
   ShiftHold.cs          Shift 를 떼지 않고 300 ms 이상 누르고 있는지 판정 (배지의 ▲ 표시)
   InsertToggle.cs       Insert 토글 비트가 바뀐 순간을 활성 창마다 세어 겹쳐 쓰기 상태를 추적 (배지의 ■ 표시)
+  Sonar.cs              실험 기능 커서 소나의 움직임(시각별 원의 반지름·짙기, 끝의 빛)
+  CalloutLayout.cs      커서 옆 말풍선 위치 계산(배지 반대쪽, 꼬리가 커서를 가리킴, 화면 끝에서 뒤집기)
+  FieldMemory.cs        실험 기능 입력칸별 한/영 기억: 몇 자 친 뒤 기억, 다시 들어오면 알릴 모드, 해시 키, fields.json 읽기·쓰기
+  FocusStealGuard.cs    실험 기능 포커스 뺏김 경고 판정(직전 타이핑, 사용자가 바꾸지 않음, 바뀐 뒤에도 입력이 이어짐)
+  PasswordGuard.cs      실험 기능 비밀번호 칸 경고 판정(들어올 때·위험이 바뀔 때만 알리고, 없어지면 내림)
   DeadlineWorker.cs     오래 걸릴 수 있는 일을 전용 스레드에서 돌리고 정해진 시간까지만 기다리기 (caret 찾기가 UI 를 멈추지 않게)
   VersionInfo.cs        "v1.2.3" 비교 (업데이트 확인)
   UpdatePackage.cs      릴리스 첨부 파일 중 내 설치 형태에 맞는 것 고르기 + SHA256SUMS.txt 해석 (자동 업그레이드)
@@ -164,10 +175,13 @@ src/ImeBadge/           Windows 앱
   Native/Tsf.cs         TSF(msctf) 전역 compartment 로 한/영 상태 읽기 (IMM32 의 대체 경로)
   Ime/UiaCaret.cs       UIA 로 caret 찾기 (Chrome/Electron/UWP)
   Ime/A11yCaret.cs      UIA·MSAA caret 찾기를 UI 스레드 밖(DeadlineWorker)에서 하고 최대 0.4초만 기다리기
+  Ime/FocusFacts.cs     실험 기능이 쓰는 포커스된 입력칸 정보(입력칸 키·비밀번호 칸·선택 영역)를 caret 을 찾은 경로마다 만들기
   Ime/ImeReader.cs      활성 창의 caret + 한/영 상태를 Snapshot 으로
   Render/BadgeRenderer.cs  GDI+ 로 투명 비트맵 그리기
+  Render/OverlayRenderer.cs  실험 기능 그림: 커서 소나의 한 장면, 커서 옆 말풍선(정보·주의)
   App/BadgeForm.cs      레이어드 창 + 타이머·이벤트 훅 + 트레이 메뉴 + 단축키 + 업데이트 알림
-  App/SettingsForm.cs   설정 창: 페이지(모양·표시·일반·제외 앱·정보) 구성, 편집·취소, 미리보기
+  App/CaretOverlays.cs  소나·말풍선을 띄우는 클릭 통과 레이어드 창과 재생기(SonarPlayer, CalloutPlayer)
+  App/SettingsForm.cs   설정 창: 페이지(모양·표시·일반·제외 앱·실험 기능·정보) 구성, 편집·취소, 미리보기
   App/SettingsControls.cs  설정 창 뼈대: 탐색 목록, 설정 카드, 카드를 쌓는 페이지, 페이지 제목, 버튼 줄, 고르기 상자, 입력칸 틀
   App/AboutInfo.cs      정보 페이지·트레이 메뉴·오류 대화상자가 함께 쓰는 웹 페이지·폴더 열기와 진단 정보
   App/Autostart.cs      HKCU Run 키
@@ -308,6 +322,22 @@ installer/ImeBadge.iss  Inno Setup 스크립트
 
 `ApplicationHighDpiMode=PerMonitorV2`(csproj)가 없으면 DPI 스케일링이 켜진 모니터에서
 caret 좌표와 배지 위치가 어긋납니다.
+
+### 실험 기능
+
+설정 창 → 실험 기능의 다섯 가지는 모두 기본 꺼짐이고, 꺼져 있으면 대상 앱에 더 묻는 것이 없습니다(`Focus.QueryFor` 가 빈 질문을 만들고,
+마우스·보조키도 읽지 않습니다). 켜면 caret 을 찾을 때 함께 묻습니다.
+
+| 기능 | 어떻게 아는가 | 어디에 보이나 |
+|---|---|---|
+| 커서 소나 | 단축키(`RegisterHotKey`, ID 2)를 누르면 `ImeReader.Read` 로 caret 을 새로 읽는다. "창을 바꾸면 저절로" 는 `EVENT_SYSTEM_FOREGROUND` 때 직전 0.7초 안에 마우스를 쓰지 않았으면 예약하고, 1.5초 안에 새 창에서 caret(근사 위치 제외)을 찾으면 재생 | `SonarPlayer`: 클릭 통과 레이어드 창에 16ms 마다 `OverlayRenderer.Sonar` 한 장(0.8초). 애니메이션 효과를 끄면 멈춘 한 장 |
+| 입력칸별 한/영 기억 | 입력칸 키 = 앱 이름 + (Win32: 최상위 창·입력칸 클래스와 자식 창의 컨트롤 ID / UIA: 컨트롤 종류·자동화 ID·이름 앞 64자, 둘 다 비면 클래스) 를 SHA-256 앞 12바이트로. 같은 칸에서 같은 모드로 caret 이 3번 움직이면 기억(`FieldMemory`), 다른 창에 다녀오면 "들어온" 것으로 다시 셈 | `CalloutPlayer` 의 정보 말풍선(기억한 모드의 배지). 알려 준 모드가 되면 내림 |
+| 선택 영역 덮어쓰기 표시 | Win32 표준 입력칸 `EM_GETSEL`(65535 넘으면 모름), Scintilla `SCI_GETSELECTIONSTART/END`, UIA 는 선택 범위를 접기 전 `CompareEndpoints`. 크롬 주소창처럼 "문서 처음~커서" 를 주는 컨트롤 때문에 `TextCaret.Pick` 이 커서 사각형을 버린 경우(CaretRejected)는 선택으로 보지 않음 | 배지 테두리(`BadgeMark.Selection`): 흰 펜 위 짙은 점선 펜. 밑줄은 막대를 흰 칸으로 끊음. 그림 크기·자리는 그대로 |
+| 비밀번호 칸 경고 | UIA `IsPassword`, Win32 표준 입력칸의 `ES_PASSWORD` 스타일·`EM_GETPASSWORDCHAR`. 위험 = 한글 입력 또는 Caps Lock(표시 설정과 무관) | 주의 말풍선 + 펄스. `PasswordGuard` 가 들어올 때·위험이 바뀔 때만 알림 |
+| 포커스 뺏김 경고 | 활성 창이 바뀔 때 직전 1초 안에 타이핑했고 1초 안에 마우스·Alt·Win·Ctrl 을 쓰지 않았으면 지켜보기 시작, 0.04~0.7초 사이에 `GetLastInputInfo` 의 마지막 입력 시각이 갱신되고 마우스를 움직이지 않았으면 경고(`FocusStealGuard`). 작업 표시줄·시작·검색·Alt+Tab·바탕화면·이모지 패널은 제외 | 바뀌기 전 창의 caret 자리에 주의 말풍선(앞으로 나온 앱의 파일 설명 또는 실행 파일 이름) |
+
+말풍선은 배지의 반대쪽(배지가 커서 위면 아래, 아래쪽 위치·밑줄 모양이면 위)에 두고 꼬리가 커서 왼쪽 끝을 가리킵니다(`CalloutLayout`).
+색은 정보 = 테마의 카드색·강조색, 주의 = Windows 11 InfoBar 의 주의 색, 고대비면 시스템 색입니다.
 
 ### UI 언어
 
