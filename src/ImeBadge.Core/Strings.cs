@@ -255,7 +255,7 @@ public static class Strings
         ["exclude.removeItem.name"] = "{0} 삭제",
         ["exclude.empty"] = "아직 제외한 앱이 없습니다.",
 
-        // ── 실험 기능 페이지 (니모닉: S V K W M C F L) ──
+        // ── 실험 기능 페이지 (니모닉: S V K W M C F L P) ──
         ["nav.experimental"] = "실험 기능",
         ["page.experimental.desc"] = "아직 다듬는 중인 커서 관련 기능입니다. 모두 처음에는 꺼져 있고, 앱에 따라 잘 맞지 않을 수 있습니다.",
         ["section.exp.caret"] = "커서 찾기",
@@ -290,6 +290,13 @@ public static class Strings
         ["exp.selection"] = "선택 영역 덮어쓰기 표시(&L)",
         ["exp.selection.desc"] = "글을 선택해 둔 입력칸에서는 다음에 치는 글자가 그 글을 지운다는 뜻으로 배지 테두리가 점선(선택 영역 모양)으로 바뀝니다.",
         ["exp.selection.tip"] = "Ctrl+A 로 전체 선택한 것을 잊고 치기 시작해 글이 사라지는 일을 막습니다. 메모장 같은 기본 입력칸, Notepad++, 그리고 크롬·엣지·VS Code 처럼 UI Automation 으로 커서를 찾는 앱에서 동작합니다. 워드·한글처럼 자체 편집기를 쓰는 앱에서는 알 수 없고, 크롬 주소창처럼 선택 범위를 정확히 알려 주지 않는 입력칸에서는 보이지 않을 수 있습니다. 밑줄 모양은 막대가 점선이 됩니다.",
+        ["exp.password"] = "비밀번호 칸 경고(&P)",
+        ["exp.password.desc"] = "비밀번호 칸에 들어갔는데 한글 입력이거나 Caps Lock 이 켜져 있으면 커서 옆에 경고를 띄우고 배지를 한 번 살짝 키웁니다.",
+        ["exp.password.tip"] = "한글 모드나 Caps Lock 때문에 비밀번호가 틀리는 일을 막습니다. 웹 페이지와 앱이 비밀번호 칸이라고 알려 주는 칸(UI Automation)과 Windows 기본 비밀번호 칸에서 동작합니다. 브라우저 중에는 비밀번호 칸에서 한글 입력을 저절로 끄는 것도 있어, 그때는 영문으로 보고 경고하지 않습니다. 입력한 글자는 읽지 않습니다.",
+        ["password.title"] = "비밀번호 칸이에요",
+        ["password.hangul"] = "지금 한글 입력이에요. 한/영 키로 영문으로 바꾸세요.",
+        ["password.caps"] = "Caps Lock 이 켜져 있어요.",
+        ["password.both"] = "지금 한글 입력이고 Caps Lock 도 켜져 있어요.",
 
         // ── 정보 페이지 ──
         ["about.update"] = "업데이트",
@@ -579,7 +586,7 @@ public static class Strings
         ["exclude.removeItem.name"] = "Remove {0}",
         ["exclude.empty"] = "No apps are excluded yet.",
 
-        // ── Experimental page (mnemonics: S V K W M C F L) ──
+        // ── Experimental page (mnemonics: S V K W M C F L P) ──
         ["nav.experimental"] = "Experimental",
         ["page.experimental.desc"] = "Caret features that are still being polished. They are all off at first and may not work well in every app.",
         ["section.exp.caret"] = "Finding the caret",
@@ -614,6 +621,13 @@ public static class Strings
         ["exp.selection"] = "Show se&lection overwrite",
         ["exp.selection.desc"] = "When text is selected in the field, the badge border turns into a dashed line (the selection look) because the next key you type will replace that text.",
         ["exp.selection.tip"] = "Helps you avoid typing over everything after a forgotten Ctrl+A. Works in standard text fields such as Notepad, in Notepad++, and in apps where the caret is found through UI Automation, such as Chrome, Edge and VS Code. Apps with their own editors, such as Word or Hangul, cannot report it, and fields that do not report the selection correctly, such as the Chrome address bar, may not show it. The underline shape turns dashed.",
+        ["exp.password"] = "&Password field warning",
+        ["exp.password.desc"] = "When you enter a password field while input is Korean or Caps Lock is on, a warning appears next to the caret and the badge grows briefly.",
+        ["exp.password.tip"] = "Helps you avoid wrong passwords caused by Korean input or Caps Lock. Works in fields that web pages and apps report as password fields (UI Automation) and in standard Windows password fields. Some browsers turn Korean input off in password fields by themselves; then the input counts as English and no warning appears. What you type is never read.",
+        ["password.title"] = "This is a password field",
+        ["password.hangul"] = "Input is Korean now. Press the Korean/English key to switch to English.",
+        ["password.caps"] = "Caps Lock is on.",
+        ["password.both"] = "Input is Korean and Caps Lock is on.",
 
         // ── About page ──
         ["about.update"] = "Updates",

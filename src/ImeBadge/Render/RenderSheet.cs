@@ -270,6 +270,8 @@ static class RenderSheet
             ("입력칸 기억: 보통 영문", new(CalloutKind.Info, Strings.Get("field.hint.english"), Strings.Get("field.hint.english.detail"), Badge: ImeState.English)),
             ("입력칸 기억: 보통 한글", new(CalloutKind.Info, Strings.Get("field.hint.hangul"), Strings.Get("field.hint.hangul.detail"), Badge: ImeState.Hangul)),
             ("포커스 뺏김 경고", new(CalloutKind.Warning, Strings.Get("steal.title"), Strings.Format("steal.detail", "KakaoTalk"), Glyphs.Shield)),
+            ("비밀번호 칸: 한글", new(CalloutKind.Warning, Strings.Get("password.title"), Strings.Get("password.hangul"), Glyphs.Lock)),
+            ("비밀번호 칸: 둘 다", new(CalloutKind.Warning, Strings.Get("password.title"), Strings.Get("password.both"), Glyphs.Lock)),
         };
         foreach (var (name, content) in calloutCases)
         {

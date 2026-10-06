@@ -65,6 +65,7 @@ static class Glyphs
     public const string Memory = "\uE81C";       // History (되돌아가는 시계)
     public const string Shield = "\uE730";       // 느낌표 방패(경고)
     public const string Selection = "\uE8B3";    // SelectAll (점선 상자)
+    public const string Lock = "\uE72E";         // Lock
 }
 
 /// <summary>

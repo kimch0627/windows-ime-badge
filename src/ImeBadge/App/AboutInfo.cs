@@ -41,6 +41,7 @@ static class AboutInfo
         if (s.RememberFieldMode) on.Add("field memory");
         if (s.FocusStealWarning) on.Add("focus steal");
         if (s.ShowSelection) on.Add("selection");
+        if (s.PasswordWarning) on.Add("password");
         return on.Count == 0 ? Strings.Get("diag.none") : string.Join(", ", on);
     }
 

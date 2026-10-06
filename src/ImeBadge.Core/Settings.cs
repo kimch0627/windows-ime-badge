@@ -109,6 +109,8 @@ public sealed class Settings
     public bool FocusStealWarning { get; set; }
     /// <summary>선택 영역 덮어쓰기 표시: 선택한 글이 있으면(다음 글자가 그 글을 지운다) 배지 테두리를 점선으로 바꾼다(<see cref="BadgeMark.Selection"/>).</summary>
     public bool ShowSelection { get; set; }
+    /// <summary>비밀번호 칸 경고: 비밀번호 칸에서 한글 입력이거나 Caps Lock 이 켜져 있으면 커서 옆에 알린다(<see cref="PasswordGuard"/>).</summary>
+    public bool PasswordWarning { get; set; }
 
     // ── 동작 ──
     /// <summary>활성 창이 모니터 전체를 덮는(게임·전체 화면 동영상) 경우 배지를 숨긴다.</summary>
@@ -178,6 +180,7 @@ public sealed class Settings
         RememberFieldMode = other.RememberFieldMode;
         FocusStealWarning = other.FocusStealWarning;
         ShowSelection = other.ShowSelection;
+        PasswordWarning = other.PasswordWarning;
         HideOnFullscreen = other.HideOnFullscreen;
         ExcludedProcesses = new List<string>(other.ExcludedProcesses);
         HotkeyEnabled = other.HotkeyEnabled; Hotkey = other.Hotkey; PollIntervalMs = other.PollIntervalMs; TrayShowsState = other.TrayShowsState;

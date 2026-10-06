@@ -95,6 +95,8 @@ sealed class BadgeForm : Form, IExperimentHost
     Point _stealPointer;         // 지켜보기 시작할 때의 마우스 위치. 움직였으면 사용자가 알아챘다고 본다
     long _lastSwitchKeyMs = long.MinValue;   // Alt·Win·Ctrl 을 마지막으로 누르고 있던 때
     const int StealWarningMs = 5000;
+    readonly PasswordGuard _passwordGuard = new();   // 비밀번호 칸 경고: 들어올 때·위험이 바뀔 때만 알린다
+    const int PasswordWarningMs = 6000;
 
     ToolStripMenuItem _pauseItem = null!, _autostartItem = null!;
     ToolStripLabel _statusItem = null!;   // 누를 수 없는 상태 줄. 비활성 메뉴 항목과 달리 아이콘이 회색으로 바래지 않는다
@@ -636,6 +638,7 @@ sealed class BadgeForm : Form, IExperimentHost
         if (!_settings.CaretSonar) _sonarPendingFg = IntPtr.Zero;
         if (!_settings.RememberFieldMode) HideFieldHint();
         if (!_settings.FocusStealWarning) { _stealGuard.Disarm(); _callout?.Hide("steal"); }
+        if (!_settings.PasswordWarning) { _passwordGuard.Reset(); _callout?.Hide("password"); }
 
         var tray = (_settings.HangulColor, _settings.EnglishColor, _settings.TrayShowsState, _settings.Theme);
         if (tray != _appliedTray) { _appliedTray = tray; RefreshTray(); }
@@ -662,6 +665,7 @@ sealed class BadgeForm : Form, IExperimentHost
         Log.Write(_paused ? "paused" : "resumed");
         _callout?.Hide();
         _stealGuard.Disarm();
+        _passwordGuard.Reset();
         UpdateTray(ImeState.Unknown, force: true);
         Poll();
     }
@@ -1006,6 +1010,7 @@ sealed class BadgeForm : Form, IExperimentHost
         else if (s.Caret is { } cr && _lastCaret is { } prev && cr != prev) { _lastTypingMs = now; typed = true; }
         _lastCaret = s.Caret;
         if (_settings.RememberFieldMode) RememberField(s, caret, typed);
+        if (_settings.PasswordWarning) WarnPassword(s, caret);
         // 선택한 글이 생기면(다음 글자가 그 글을 지운다) "바뀔 때만" 표시 방식에서도 잠깐 보이고, "타이핑 중 옅게" 에서도 잠깐 또렷하다.
         if (s.Facts.Selection && !_lastSelection) _lastChangeMs = now;
         _lastSelection = s.Facts.Selection;
@@ -1123,6 +1128,7 @@ sealed class BadgeForm : Form, IExperimentHost
         TrackUserInput();
         // 입력칸 기억: 다른 창에 다녀오면 같은 입력칸으로 돌아와도 "들어온" 것으로 본다(그사이 한/영을 바꿨을 수 있다).
         if (_settings.RememberFieldMode) { _fieldMemory?.Observe(null, null, false, DateTime.UtcNow); HideFieldHint(); }
+        if (_settings.PasswordWarning) { _passwordGuard.Reset(); _callout?.Hide("password"); }
         WatchForFocusSteal();
         _sonarPendingFg = IntPtr.Zero;
         if (!_settings.CaretSonar || !_settings.CaretSonarOnSwitch || _paused || _sessionLocked) return;
@@ -1305,6 +1311,27 @@ sealed class BadgeForm : Form, IExperimentHost
         if (_fieldHint is null) return;
         _fieldHint = null;
         _callout?.Hide("field");
+    }
+
+    // ── 실험 기능: 비밀번호 칸 경고 ──
+    /// <summary>
+    /// 비밀번호 칸에서 한글 입력이거나 Caps Lock 이 켜져 있으면 커서 옆에 경고하고 배지를 한 번 살짝 키운다. 들어올 때와 위험이 바뀔 때만
+    /// 알리고(<see cref="PasswordGuard"/>), 영문으로 바꾸고 Caps Lock 을 끄면 바로 내린다. Caps Lock 은 "Caps Lock 표시" 설정과 상관없이 본다.
+    /// </summary>
+    void WarnPassword(in Snapshot s, Rectangle caret)
+    {
+        var risk = (s.State == ImeState.Hangul ? PasswordRisk.Hangul : PasswordRisk.None) | (Native.IsCapsLockOn() ? PasswordRisk.CapsLock : PasswordRisk.None);
+        if (_passwordGuard.Update(s.Facts.Password, (long)s.Foreground, risk) is not { } todo) return;
+        if (todo == PasswordRisk.None) { _callout?.Hide("password"); return; }
+        string detail = todo switch
+        {
+            PasswordRisk.Hangul | PasswordRisk.CapsLock => "password.both",
+            PasswordRisk.Hangul => "password.hangul",
+            _ => "password.caps",
+        };
+        ShowCallout("password", new CalloutContent(CalloutKind.Warning, Strings.Get("password.title"), Strings.Get(detail), Glyphs.Lock),
+            caret, PasswordWarningMs);
+        if (AnimationsOn && _anim == Anim.None) StartAnim(Anim.Pulse);
     }
 
     /// <summary>위치·크기는 그대로 두고 z-order만 최상위 창들 중 맨 위로 올린다. 포커스는 건드리지 않는다.</summary>

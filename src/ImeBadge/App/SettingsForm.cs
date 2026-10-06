@@ -52,7 +52,8 @@ sealed class SettingsForm : Form
     ColorSwatches _hangulColor = null!, _englishColor = null!;
     Label _hangulHex = null!, _englishHex = null!;
     ToggleSwitch _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!, _shiftHold = null!,
-        _shiftNow = null!, _insert = null!, _sonar = null!, _sonarSwitch = null!, _fieldMemory = null!, _focusSteal = null!, _selection = null!;
+        _shiftNow = null!, _insert = null!, _sonar = null!, _sonarSwitch = null!, _fieldMemory = null!, _focusSteal = null!, _selection = null!,
+        _password = null!;
     HotkeyBox _hotkeyBox = null!, _sonarHotkeyBox = null!;
     SettingsCard _fieldClearCard = null!;
     AccentButton _fieldClear = null!;
@@ -583,6 +584,10 @@ sealed class SettingsForm : Form
         _tips.SetToolTip(_selection, Strings.Get("exp.selection.tip"));
         page.Controls.Add(Card(Glyphs.Selection, "exp.selection", action: _selection));
 
+        _password = Toggle(v => { _draft.PasswordWarning = v; Touch(); });
+        _tips.SetToolTip(_password, Strings.Get("exp.password.tip"));
+        page.Controls.Add(Card(Glyphs.Lock, "exp.password", action: _password));
+
         _focusSteal = Toggle(v => { _draft.FocusStealWarning = v; Touch(); });
         _tips.SetToolTip(_focusSteal, Strings.Get("exp.focusSteal.tip"));
         page.Controls.Add(Card(Glyphs.Shield, "exp.focusSteal", action: _focusSteal));
@@ -1022,6 +1027,7 @@ sealed class SettingsForm : Form
         _fieldMemory.Checked = _draft.RememberFieldMode;
         _focusSteal.Checked = _draft.FocusStealWarning;
         _selection.Checked = _draft.ShowSelection;
+        _password.Checked = _draft.PasswordWarning;
         SyncExperimentalEnabled();
         ReloadExcluded();
     }
