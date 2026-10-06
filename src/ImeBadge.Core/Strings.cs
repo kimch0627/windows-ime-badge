@@ -255,7 +255,7 @@ public static class Strings
         ["exclude.removeItem.name"] = "{0} 삭제",
         ["exclude.empty"] = "아직 제외한 앱이 없습니다.",
 
-        // ── 실험 기능 페이지 (니모닉: S V K W) ──
+        // ── 실험 기능 페이지 (니모닉: S V K W M C) ──
         ["nav.experimental"] = "실험 기능",
         ["page.experimental.desc"] = "아직 다듬는 중인 커서 관련 기능입니다. 모두 처음에는 꺼져 있고, 앱에 따라 잘 맞지 않을 수 있습니다.",
         ["section.exp.caret"] = "커서 찾기",
@@ -270,6 +270,18 @@ public static class Strings
         ["exp.sonarOnSwitch.desc"] = "Alt+Tab 처럼 키보드로 다른 창에 오면 단축키 없이도 한 번 보여 줍니다. 마우스로 창을 고르면 보여 주지 않습니다.",
         ["sonar.notFound"] = "커서를 찾지 못했어요",
         ["sonar.notFound.detail"] = "글자를 입력하는 칸을 클릭한 뒤 다시 눌러 보세요.",
+        ["section.exp.typing"] = "입력 도우미",
+        ["exp.fieldMemory"] = "입력칸별 한/영 기억(&M)",
+        ["exp.fieldMemory.desc"] = "입력칸마다 마지막으로 쓴 한/영을 기억했다가, 다시 들어왔을 때 지금과 다르면 커서 옆에 알려 줍니다. 한/영을 대신 바꾸지는 않습니다.",
+        ["exp.fieldMemory.tip"] = "같은 칸에서 글자를 몇 자 치면 그때의 한/영을 기억합니다. 입력칸은 앱 이름과 입력칸 이름으로 알아보고, 그 값을 알아볼 수 없게 바꾼 값(해시)과 한/영만 이 PC 의 설정 폴더(fields.json)에 저장합니다. 입력한 글자는 저장하지 않고, 비밀번호 칸은 기억하지 않습니다. 웹 페이지는 사이트를 구별하지 못해 이름이 같은 입력칸(예: '검색')은 한 칸으로 봅니다.",
+        ["exp.fieldMemoryClear"] = "기억한 입력칸",
+        ["exp.fieldMemoryClear.desc"] = "{0}개를 기억하고 있습니다. 지우면 처음부터 다시 배웁니다.",
+        ["exp.fieldMemoryClear.empty"] = "아직 기억한 입력칸이 없습니다.",
+        ["exp.fieldMemoryClear.button"] = "지우기(&C)",
+        ["field.hint.hangul"] = "이 칸에서는 보통 한글로 썼어요",
+        ["field.hint.hangul.detail"] = "지금은 영문 입력이에요. 한/영 키로 바꿀 수 있어요.",
+        ["field.hint.english"] = "이 칸에서는 보통 영문으로 썼어요",
+        ["field.hint.english.detail"] = "지금은 한글 입력이에요. 한/영 키로 바꿀 수 있어요.",
 
         // ── 정보 페이지 ──
         ["about.update"] = "업데이트",
@@ -559,7 +571,7 @@ public static class Strings
         ["exclude.removeItem.name"] = "Remove {0}",
         ["exclude.empty"] = "No apps are excluded yet.",
 
-        // ── Experimental page (mnemonics: S V K W) ──
+        // ── Experimental page (mnemonics: S V K W M C) ──
         ["nav.experimental"] = "Experimental",
         ["page.experimental.desc"] = "Caret features that are still being polished. They are all off at first and may not work well in every app.",
         ["section.exp.caret"] = "Finding the caret",
@@ -574,6 +586,18 @@ public static class Strings
         ["exp.sonarOnSwitch.desc"] = "Plays once, without the hotkey, when you move to another window with the keyboard, such as Alt+Tab. It does not play when you pick a window with the mouse.",
         ["sonar.notFound"] = "Caret not found",
         ["sonar.notFound.detail"] = "Click a text field, then press the hotkey again.",
+        ["section.exp.typing"] = "Typing helpers",
+        ["exp.fieldMemory"] = "Re&member Korean/English per field",
+        ["exp.fieldMemory.desc"] = "Remembers the input mode you last used in each text field. When you come back and the mode differs, a note appears next to the caret. It never switches the mode for you.",
+        ["exp.fieldMemory.tip"] = "The mode is remembered after you type a few characters in a field. Fields are recognized by app name and field name; only an unreadable hash of those plus Korean/English is stored in the settings folder on this PC (fields.json). What you type is never stored, and password fields are not remembered. Web pages are not told apart by site, so fields with the same name (for example 'Search') count as one.",
+        ["exp.fieldMemoryClear"] = "Remembered fields",
+        ["exp.fieldMemoryClear.desc"] = "{0} fields remembered. Clearing them starts learning from scratch.",
+        ["exp.fieldMemoryClear.empty"] = "No fields remembered yet.",
+        ["exp.fieldMemoryClear.button"] = "&Clear",
+        ["field.hint.hangul"] = "You usually type Korean here",
+        ["field.hint.hangul.detail"] = "Input is English now. Press the Korean/English key to switch.",
+        ["field.hint.english"] = "You usually type English here",
+        ["field.hint.english.detail"] = "Input is Korean now. Press the Korean/English key to switch.",
 
         // ── About page ──
         ["about.update"] = "Updates",

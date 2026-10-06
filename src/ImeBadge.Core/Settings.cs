@@ -100,6 +100,11 @@ public sealed class Settings
     public string CaretSonarHotkey { get; set; } = HotkeySpec.SonarDefault.ToString();
     /// <summary><see cref="CaretSonar"/> 의 하위 옵션: 키보드(Alt+Tab 등)로 다른 창에 오면 단축키 없이도 한 번 보여 준다.</summary>
     public bool CaretSonarOnSwitch { get; set; } = true;
+    /// <summary>
+    /// 입력칸별 한/영 기억: 입력칸마다 마지막으로 쓴 한/영을 기억했다가 다시 들어왔을 때 지금과 다르면 커서 옆에 알려 준다(<see cref="FieldMemory"/>).
+    /// 기억은 설정 파일이 아니라 <see cref="FieldMemoryStore"/> 의 파일에 둔다(내보내기·가져오기에 따라가지 않는다).
+    /// </summary>
+    public bool RememberFieldMode { get; set; }
 
     // ── 동작 ──
     /// <summary>활성 창이 모니터 전체를 덮는(게임·전체 화면 동영상) 경우 배지를 숨긴다.</summary>
@@ -166,6 +171,7 @@ public sealed class Settings
         ShowShiftHold = other.ShowShiftHold; ShowShiftImmediately = other.ShowShiftImmediately; ShowInsert = other.ShowInsert;
         Theme = other.Theme; Character = other.Character; Visibility = other.Visibility;
         CaretSonar = other.CaretSonar; CaretSonarHotkey = other.CaretSonarHotkey; CaretSonarOnSwitch = other.CaretSonarOnSwitch;
+        RememberFieldMode = other.RememberFieldMode;
         HideOnFullscreen = other.HideOnFullscreen;
         ExcludedProcesses = new List<string>(other.ExcludedProcesses);
         HotkeyEnabled = other.HotkeyEnabled; Hotkey = other.Hotkey; PollIntervalMs = other.PollIntervalMs; TrayShowsState = other.TrayShowsState;

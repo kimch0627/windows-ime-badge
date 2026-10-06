@@ -16,6 +16,12 @@ interface IExperimentHost
 {
     /// <summary>화면의 이 사각형(설정 창의 [보기] 단추) 둘레에서 커서 소나를 한 번 보여 준다.</summary>
     void PreviewSonar(Rectangle screen);
+
+    /// <summary>입력칸별 한/영 기억이 기억하고 있는 입력칸 수.</summary>
+    int FieldMemoryCount { get; }
+
+    /// <summary>기억한 입력칸을 모두 지운다(파일도).</summary>
+    void ClearFieldMemory();
 }
 
 /// <summary>
@@ -46,8 +52,10 @@ sealed class SettingsForm : Form
     ColorSwatches _hangulColor = null!, _englishColor = null!;
     Label _hangulHex = null!, _englishHex = null!;
     ToggleSwitch _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!, _shiftHold = null!,
-        _shiftNow = null!, _insert = null!, _sonar = null!, _sonarSwitch = null!;
+        _shiftNow = null!, _insert = null!, _sonar = null!, _sonarSwitch = null!, _fieldMemory = null!;
     HotkeyBox _hotkeyBox = null!, _sonarHotkeyBox = null!;
+    SettingsCard _fieldClearCard = null!;
+    AccentButton _fieldClear = null!;
     PreviewPanel _preview = null!;
     SettingsCard _previewCard = null!;
     AccentButton _previewToggle = null!;
@@ -317,6 +325,7 @@ sealed class SettingsForm : Form
         PlacePreview();
         page.PerformLayout();
         if (index == (int)SettingsPage.About) RefreshUpdateCard();
+        if (index == (int)SettingsPage.Experimental) RefreshFieldMemoryCard();
     }
 
     CardStack BuildAppearancePage()
@@ -559,7 +568,25 @@ sealed class SettingsForm : Form
         var onSwitch = Card(Glyphs.Switch, "exp.sonarOnSwitch", action: _sonarSwitch);
         onSwitch.Indent = 1;
         page.Controls.Add(onSwitch);
+
+        page.Controls.Add(Section("section.exp.typing"));
+        _fieldMemory = Toggle(v => { _draft.RememberFieldMode = v; Touch(); });
+        _tips.SetToolTip(_fieldMemory, Strings.Get("exp.fieldMemory.tip"));
+        page.Controls.Add(Card(Glyphs.Memory, "exp.fieldMemory", action: _fieldMemory));
+        // 기억 지우기: 설정 값이 아니라 기억 파일을 지우므로 [확인]을 기다리지 않고 바로 지운다([취소]로 되돌리지 않는다).
+        _fieldClear = Button("exp.fieldMemoryClear.button", () => { _experiments.ClearFieldMemory(); RefreshFieldMemoryCard(); });
+        _fieldClearCard = Card(Glyphs.Delete, "exp.fieldMemoryClear", action: _fieldClear);
+        _fieldClearCard.Indent = 1;
+        page.Controls.Add(_fieldClearCard);
         return page;
+    }
+
+    /// <summary>기억한 입력칸 수를 보여 주고, 없으면 [지우기] 를 끈다. 페이지를 열 때마다 새로 센다(그사이 배웠을 수 있다).</summary>
+    void RefreshFieldMemoryCard()
+    {
+        int count = _experiments.FieldMemoryCount;
+        _fieldClearCard.Description = count > 0 ? Strings.Format("exp.fieldMemoryClear.desc", count) : Strings.Get("exp.fieldMemoryClear.empty");
+        _fieldClear.Enabled = count > 0;
     }
 
     /// <summary>실험 기능의 하위 옵션을 위 옵션에 맞춰 켜고 끈다(흐리게). 꺼 둔 하위 옵션의 값은 그대로 남는다.</summary>
@@ -984,6 +1011,7 @@ sealed class SettingsForm : Form
         _sonar.Checked = _draft.CaretSonar;
         _sonarHotkeyBox.Text = _draft.CaretSonarHotkey;
         _sonarSwitch.Checked = _draft.CaretSonarOnSwitch;
+        _fieldMemory.Checked = _draft.RememberFieldMode;
         SyncExperimentalEnabled();
         ReloadExcluded();
     }

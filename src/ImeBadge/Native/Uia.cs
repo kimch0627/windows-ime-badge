@@ -18,8 +18,11 @@ static class Uia
 {
     public const int UIA_BoundingRectanglePropertyId = 30001;
     public const int UIA_ControlTypePropertyId = 30003;
+    public const int UIA_NamePropertyId = 30005;
+    public const int UIA_AutomationIdPropertyId = 30011;
     public const int UIA_ClassNamePropertyId = 30012;
     public const int UIA_HasKeyboardFocusPropertyId = 30008;
+    public const int UIA_IsPasswordPropertyId = 30019;
     public const int UIA_FrameworkIdPropertyId = 30024;
     public const int UIA_ValuePatternId = 10002;
     public const int UIA_TextPatternId = 10014;

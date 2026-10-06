@@ -62,6 +62,7 @@ static class Glyphs
     public const string Sonar = "\uF272";        // 과녁(소나)
     public const string Switch = "\uE8AB";       // Switch (⇄, 창 바꾸기)
     public const string Delete = "\uE74D";       // Delete (휴지통)
+    public const string Memory = "\uE81C";       // History (되돌아가는 시계)
 }
 
 /// <summary>

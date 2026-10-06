@@ -49,6 +49,7 @@ public sealed class SettingsStoreTests : IDisposable
             CaretSonar = true,
             CaretSonarHotkey = "Ctrl+Shift+F8",
             CaretSonarOnSwitch = false,
+            RememberFieldMode = true,
             LastUpdateCheckUtc = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc),
             SkippedUpdateTag = "v9.9.9",
         };
@@ -73,6 +74,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.True(back.CaretSonar);
         Assert.Equal("Ctrl+Shift+F8", back.CaretSonarHotkey);
         Assert.False(back.CaretSonarOnSwitch);
+        Assert.True(back.RememberFieldMode);
         Assert.Equal(s.LastUpdateCheckUtc, back.LastUpdateCheckUtc);
         Assert.Equal("v9.9.9", back.SkippedUpdateTag);
         Assert.False(File.Exists(P("settings.json.tmp")));   // 임시 파일은 남지 않는다
@@ -164,6 +166,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.False(s.CaretSonar);                      // 실험 기능은 모두 기본 꺼짐
         Assert.Equal("Ctrl+Alt+J", s.CaretSonarHotkey);
         Assert.True(s.CaretSonarOnSwitch);
+        Assert.False(s.RememberFieldMode);
         Assert.Equal(UiLanguage.Auto, s.Language);
         Assert.True(File.Exists(P("new/settings.json"))); // 새 위치에 복사됨
         Assert.True(File.Exists(P("imebadge.settings.json")));
@@ -264,6 +267,7 @@ public sealed class SettingsStoreTests : IDisposable
         b.CaretSonar = true;
         b.CaretSonarHotkey = "Ctrl+Alt+K";
         b.CaretSonarOnSwitch = false;
+        b.RememberFieldMode = true;
         a.CopyFrom(b);
         Assert.Equal(BadgeVisibility.OnChange, a.Visibility);
         Assert.False(a.ShowInsert);
@@ -271,6 +275,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.True(a.CaretSonar);
         Assert.Equal("Ctrl+Alt+K", a.CaretSonarHotkey);
         Assert.False(a.CaretSonarOnSwitch);
+        Assert.True(a.RememberFieldMode);
     }
 
     [Fact]

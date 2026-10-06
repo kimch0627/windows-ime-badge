@@ -267,6 +267,8 @@ static class RenderSheet
         var calloutCases = new (string Name, CalloutContent Content)[]
         {
             ("소나: 커서 못 찾음", new(CalloutKind.Info, Strings.Get("sonar.notFound"), Strings.Get("sonar.notFound.detail"), Glyphs.Sonar)),
+            ("입력칸 기억: 보통 영문", new(CalloutKind.Info, Strings.Get("field.hint.english"), Strings.Get("field.hint.english.detail"), Badge: ImeState.English)),
+            ("입력칸 기억: 보통 한글", new(CalloutKind.Info, Strings.Get("field.hint.hangul"), Strings.Get("field.hint.hangul.detail"), Badge: ImeState.Hangul)),
         };
         foreach (var (name, content) in calloutCases)
         {

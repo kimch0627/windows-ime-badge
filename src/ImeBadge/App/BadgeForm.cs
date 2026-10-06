@@ -86,6 +86,9 @@ sealed class BadgeForm : Form, IExperimentHost
     Point _lastPointer = Cursor.Position;
     long _lastPointerMs;
     const int PointerSwitchMs = 700;
+    FieldMemory? _fieldMemory;   // 입력칸별 한/영 기억. 처음 쓸 때 파일에서 읽는다(Fields)
+    bool? _fieldHint;            // 지금 말풍선으로 알린 모드(한글 true / 영문 false)
+    const int FieldHintMs = 4000;
 
     ToolStripMenuItem _pauseItem = null!, _autostartItem = null!;
     ToolStripLabel _statusItem = null!;   // 누를 수 없는 상태 줄. 비활성 메뉴 항목과 달리 아이콘이 회색으로 바래지 않는다
@@ -624,6 +627,7 @@ sealed class BadgeForm : Form, IExperimentHost
         var hk = (_settings.HotkeyEnabled, _settings.Hotkey, _settings.CaretSonar, _settings.CaretSonarHotkey);
         if (hk != _appliedHotkey || save) { _appliedHotkey = hk; ApplyHotkey(warnOnFailure: save); }
         if (!_settings.CaretSonar) _sonarPendingFg = IntPtr.Zero;
+        if (!_settings.RememberFieldMode) HideFieldHint();
 
         var tray = (_settings.HangulColor, _settings.EnglishColor, _settings.TrayShowsState, _settings.Theme);
         if (tray != _appliedTray) { _appliedTray = tray; RefreshTray(); }
@@ -986,9 +990,11 @@ sealed class BadgeForm : Form, IExperimentHost
         UpdateTray(s.State, s.CapsLock, s.Insert);
 
         long now = Environment.TickCount64;
+        bool typed = false;   // 같은 창 안에서 caret 이 움직였다(글자를 쳤다)
         if (appearing || changed || s.Foreground != _lastFg) _lastChangeMs = now;
-        else if (s.Caret is { } cr && _lastCaret is { } prev && cr != prev) _lastTypingMs = now;
+        else if (s.Caret is { } cr && _lastCaret is { } prev && cr != prev) { _lastTypingMs = now; typed = true; }
         _lastCaret = s.Caret;
+        if (_settings.RememberFieldMode) RememberField(s, caret, typed);
 
         // 나타날 때는 페이드인, 보이는 중에 한/영이 바뀌면 펄스. 둘 다 "지금 바뀌었다"를 눈에 띄게 한다.
         if (AnimationsOn)
@@ -1095,6 +1101,8 @@ sealed class BadgeForm : Form, IExperimentHost
     void OnForegroundChanged()
     {
         TrackPointer();
+        // 입력칸 기억: 다른 창에 다녀오면 같은 입력칸으로 돌아와도 "들어온" 것으로 본다(그사이 한/영을 바꿨을 수 있다).
+        if (_settings.RememberFieldMode) { _fieldMemory?.Observe(null, null, false, DateTime.UtcNow); HideFieldHint(); }
         _sonarPendingFg = IntPtr.Zero;
         if (!_settings.CaretSonar || !_settings.CaretSonarOnSwitch || _paused || _sessionLocked) return;
         long now = Environment.TickCount64;
@@ -1162,6 +1170,52 @@ sealed class BadgeForm : Form, IExperimentHost
     /// <summary>말풍선을 커서 아래에 둘까. 배지가 커서 위(오른쪽 위·왼쪽 위·위)면 아래, 아래쪽 위치이거나 밑줄 모양(커서 바로 아래)이면 위.</summary>
     bool CalloutBelow => _settings.Style != BadgeStyle.Underline
         && _settings.Placement is BadgePlacement.AboveRight or BadgePlacement.AboveLeft or BadgePlacement.Above;
+
+    // ── 실험 기능: 입력칸별 한/영 기억 ──
+    string FieldMemoryPath => System.IO.Path.Combine(_paths.SettingsDir, FieldMemoryStore.FileName);
+
+    FieldMemory Fields => _fieldMemory ??= FieldMemoryStore.Load(FieldMemoryPath);
+
+    public int FieldMemoryCount => Fields.Count;
+
+    public void ClearFieldMemory()
+    {
+        Fields.Clear();
+        Fields.MarkSaved();
+        FieldMemoryStore.Delete(FieldMemoryPath);
+        HideFieldHint();
+        Log.Write("field memory cleared");
+    }
+
+    /// <summary>
+    /// 입력칸에 들어왔을 때 기억한 모드가 지금과 다르면 말풍선으로 알리고(그 모드의 배지를 함께), 알려 준 모드로 바꾸면 바로 내린다.
+    /// 같은 칸에서 몇 자 치면 <see cref="FieldMemory"/> 가 그 모드를 기억하고, 그때마다 파일에 쓴다(드물다: 칸과 모드가 바뀔 때만).
+    /// </summary>
+    void RememberField(in Snapshot s, Rectangle caret, bool typed)
+    {
+        var memory = Fields;
+        bool? hangul = s.State switch { ImeState.Hangul => true, ImeState.English => false, _ => null };
+        bool entered = s.Facts.Field != memory.CurrentField;
+        var hint = memory.Observe(s.Facts.Field, hangul, typed, DateTime.UtcNow);
+        if (memory.Dirty) FieldMemoryStore.Save(memory, FieldMemoryPath);
+        if (entered) HideFieldHint();
+        if (hint is bool usual)
+        {
+            _fieldHint = usual;
+            ShowCallout("field", new CalloutContent(CalloutKind.Info,
+                Strings.Get(usual ? "field.hint.hangul" : "field.hint.english"),
+                Strings.Get(usual ? "field.hint.hangul.detail" : "field.hint.english.detail"),
+                Badge: usual ? ImeState.Hangul : ImeState.English), caret, holdMs: FieldHintMs);
+        }
+        else if (_fieldHint is bool want && hangul == want) HideFieldHint();   // 알려 준 대로 바꿨다
+    }
+
+    void HideFieldHint()
+    {
+        if (_fieldHint is null) return;
+        _fieldHint = null;
+        _callout?.Hide("field");
+    }
 
     /// <summary>위치·크기는 그대로 두고 z-order만 최상위 창들 중 맨 위로 올린다. 포커스는 건드리지 않는다.</summary>
     void RaiseToTop() =>
@@ -1249,6 +1303,7 @@ sealed class BadgeForm : Form, IExperimentHost
             _pulseBase?.Dispose();
             _sonar?.Dispose();
             _callout?.Dispose();
+            if (_fieldMemory is { Dirty: true } fields) FieldMemoryStore.Save(fields, FieldMemoryPath);
             _settingsForm?.Dispose();
             _updateProgress?.Dispose();
             _tray.Visible = false;
