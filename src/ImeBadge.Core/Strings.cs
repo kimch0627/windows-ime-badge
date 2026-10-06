@@ -255,6 +255,22 @@ public static class Strings
         ["exclude.removeItem.name"] = "{0} 삭제",
         ["exclude.empty"] = "아직 제외한 앱이 없습니다.",
 
+        // ── 실험 기능 페이지 (니모닉: S V K W) ──
+        ["nav.experimental"] = "실험 기능",
+        ["page.experimental.desc"] = "아직 다듬는 중인 커서 관련 기능입니다. 모두 처음에는 꺼져 있고, 앱에 따라 잘 맞지 않을 수 있습니다.",
+        ["section.exp.caret"] = "커서 찾기",
+        ["exp.sonar"] = "커서 소나(&S)",
+        ["exp.sonar.desc"] = "단축키를 누르면 원이 커서 자리로 좁혀 들며 지금 어디에 쓰고 있는지 알려 줍니다. 원의 색은 지금 한/영 배지 색입니다.",
+        ["exp.sonar.tip"] = "다른 창을 보다 돌아왔을 때, 큰 화면이나 여러 모니터에서 커서를 놓쳤을 때 쓰세요. 배지를 일시 중지한 동안에도 단축키는 동작합니다. 커서를 찾지 못하면 마우스 포인터 옆에 알려 줍니다. Windows 의 애니메이션 효과가 꺼져 있으면 원이 움직이지 않고 잠깐 보였다 사라집니다.",
+        ["exp.sonar.preview"] = "보기(&V)",
+        ["exp.sonar.preview.tip"] = "이 단추 둘레에서 소나를 한 번 보여 줍니다.",
+        ["exp.sonarHotkey"] = "소나 단축키(&K)",
+        ["exp.sonarHotkey.desc"] = "어디서든 이 키 조합을 누르면 소나가 커서를 찾아 보여 줍니다.",
+        ["exp.sonarOnSwitch"] = "창을 바꾸면 저절로(&W)",
+        ["exp.sonarOnSwitch.desc"] = "Alt+Tab 처럼 키보드로 다른 창에 오면 단축키 없이도 한 번 보여 줍니다. 마우스로 창을 고르면 보여 주지 않습니다.",
+        ["sonar.notFound"] = "커서를 찾지 못했어요",
+        ["sonar.notFound.detail"] = "글자를 입력하는 칸을 클릭한 뒤 다시 눌러 보세요.",
+
         // ── 정보 페이지 ──
         ["about.update"] = "업데이트",
         ["about.lastCheck"] = "마지막 확인: {0}",
@@ -282,6 +298,8 @@ public static class Strings
         ["diag.on"] = "켜짐",
         ["diag.off"] = "꺼짐",
         ["diag.settings"] = "설정: 모양={0}, 위치={1}, 크기={2}%, 불투명도={3}%, 주기={4}ms, 단축키={5}, 제외 앱={6}개",
+        ["diag.experimental"] = "실험 기능: {0}",
+        ["diag.none"] = "없음",
         ["diag.exe"] = "실행 파일: {0}",
         ["diag.settingsFile"] = "설정 파일: {0}",
         ["diag.logDir"] = "로그 폴더: {0}",
@@ -541,6 +559,22 @@ public static class Strings
         ["exclude.removeItem.name"] = "Remove {0}",
         ["exclude.empty"] = "No apps are excluded yet.",
 
+        // ── Experimental page (mnemonics: S V K W) ──
+        ["nav.experimental"] = "Experimental",
+        ["page.experimental.desc"] = "Caret features that are still being polished. They are all off at first and may not work well in every app.",
+        ["section.exp.caret"] = "Finding the caret",
+        ["exp.sonar"] = "Caret &sonar",
+        ["exp.sonar.desc"] = "Press the hotkey and rings close in on the caret to show where you are typing. The rings use the current Korean/English badge color.",
+        ["exp.sonar.tip"] = "Useful when you come back from another window or lose the caret on a large screen or across monitors. The hotkey works even while the badge is paused. If no caret is found, a note appears next to the mouse pointer. When Windows animation effects are off, the rings do not move; they appear briefly and disappear.",
+        ["exp.sonar.preview"] = "Pre&view",
+        ["exp.sonar.preview.tip"] = "Plays the sonar once around this button.",
+        ["exp.sonarHotkey"] = "Sonar hot&key",
+        ["exp.sonarHotkey.desc"] = "Press this key combination anywhere to find the caret with the sonar.",
+        ["exp.sonarOnSwitch"] = "Play when you s&witch windows",
+        ["exp.sonarOnSwitch.desc"] = "Plays once, without the hotkey, when you move to another window with the keyboard, such as Alt+Tab. It does not play when you pick a window with the mouse.",
+        ["sonar.notFound"] = "Caret not found",
+        ["sonar.notFound.detail"] = "Click a text field, then press the hotkey again.",
+
         // ── About page ──
         ["about.update"] = "Updates",
         ["about.lastCheck"] = "Last checked: {0}",
@@ -568,6 +602,8 @@ public static class Strings
         ["diag.on"] = "on",
         ["diag.off"] = "off",
         ["diag.settings"] = "Settings: shape={0}, placement={1}, size={2}%, opacity={3}%, interval={4}ms, hotkey={5}, excluded apps={6}",
+        ["diag.experimental"] = "Experimental: {0}",
+        ["diag.none"] = "none",
         ["diag.exe"] = "Executable: {0}",
         ["diag.settingsFile"] = "Settings file: {0}",
         ["diag.logDir"] = "Log folder: {0}",

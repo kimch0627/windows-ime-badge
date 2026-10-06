@@ -90,6 +90,17 @@ public sealed class Settings
     /// <summary>표시 방식(<see cref="BadgeVisibility"/>): 늘 / 타이핑 중 옅게 / 바뀔 때만. 문자열이라 구버전이 읽어도 무시될 뿐이다.</summary>
     public string Visibility { get; set; } = BadgeVisibility.Always;
 
+    // ── 실험 기능 (설정 창 → 실험 기능) ──
+    // 모두 기본 꺼짐. 구버전은 모르는 항목으로 무시하므로 되돌려도 다른 설정은 그대로 남는다.
+    /// <summary>
+    /// 커서 소나: 단축키(<see cref="CaretSonarHotkey"/>)를 누르면 원이 커서 자리로 좁혀 들며 커서가 어디 있는지 알려 준다(<see cref="Sonar"/>).
+    /// </summary>
+    public bool CaretSonar { get; set; }
+    /// <summary>커서 소나 단축키. "Ctrl+Alt+J" 형식(<see cref="HotkeySpec"/>). 읽을 수 없으면 <see cref="HotkeySpec.SonarDefault"/>.</summary>
+    public string CaretSonarHotkey { get; set; } = HotkeySpec.SonarDefault.ToString();
+    /// <summary><see cref="CaretSonar"/> 의 하위 옵션: 키보드(Alt+Tab 등)로 다른 창에 오면 단축키 없이도 한 번 보여 준다.</summary>
+    public bool CaretSonarOnSwitch { get; set; } = true;
+
     // ── 동작 ──
     /// <summary>활성 창이 모니터 전체를 덮는(게임·전체 화면 동영상) 경우 배지를 숨긴다.</summary>
     public bool HideOnFullscreen { get; set; } = true;
@@ -135,6 +146,7 @@ public sealed class Settings
         Character = BadgeCharacters.Normalize(Character);
         Visibility = BadgeVisibility.Normalize(Visibility);
         Hotkey = HotkeySpec.TryParse(Hotkey, out var hk) ? hk.ToString() : HotkeySpec.Default.ToString();
+        CaretSonarHotkey = HotkeySpec.TryParse(CaretSonarHotkey, out var sonar) ? sonar.ToString() : HotkeySpec.SonarDefault.ToString();
         ExcludedProcesses ??= new();
         ExcludedProcesses.RemoveAll(string.IsNullOrWhiteSpace);
     }
@@ -153,6 +165,7 @@ public sealed class Settings
         HangulColor = other.HangulColor; EnglishColor = other.EnglishColor; Animate = other.Animate; ShowCapsLock = other.ShowCapsLock;
         ShowShiftHold = other.ShowShiftHold; ShowShiftImmediately = other.ShowShiftImmediately; ShowInsert = other.ShowInsert;
         Theme = other.Theme; Character = other.Character; Visibility = other.Visibility;
+        CaretSonar = other.CaretSonar; CaretSonarHotkey = other.CaretSonarHotkey; CaretSonarOnSwitch = other.CaretSonarOnSwitch;
         HideOnFullscreen = other.HideOnFullscreen;
         ExcludedProcesses = new List<string>(other.ExcludedProcesses);
         HotkeyEnabled = other.HotkeyEnabled; Hotkey = other.Hotkey; PollIntervalMs = other.PollIntervalMs; TrayShowsState = other.TrayShowsState;

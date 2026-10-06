@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -25,10 +26,19 @@ static class AboutInfo
             $"{Strings.Code} ({settings.Language})"));
         sb.AppendLine(Strings.Format("diag.settings", settings.Style, settings.Placement, settings.SizePercent, settings.OpacityPercent,
             settings.PollIntervalMs, settings.HotkeyEnabled ? settings.Hotkey : Strings.Get("diag.off"), settings.ExcludedProcesses.Count));
+        sb.AppendLine(Strings.Format("diag.experimental", Experiments(settings)));
         sb.AppendLine(Strings.Format("diag.exe", Shorten(Environment.ProcessPath)));
         sb.AppendLine(Strings.Format("diag.settingsFile", Shorten(paths.SettingsFile)));
         sb.AppendLine(Strings.Format("diag.logDir", Shorten(paths.LogDir)));
         return sb.ToString();
+    }
+
+    /// <summary>켜 둔 실험 기능. 이슈에서 "실험 기능 때문인가" 를 바로 가릴 수 있게 영문 이름으로 적는다.</summary>
+    static string Experiments(Settings s)
+    {
+        var on = new List<string>();
+        if (s.CaretSonar) on.Add($"sonar({s.CaretSonarHotkey}{(s.CaretSonarOnSwitch ? ", on switch" : "")})");
+        return on.Count == 0 ? Strings.Get("diag.none") : string.Join(", ", on);
     }
 
     static string Shorten(string? path)

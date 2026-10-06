@@ -43,6 +43,18 @@ public sealed class HotkeyTests
     public void Default_IsCtrlAltH() => Assert.Equal("Ctrl+Alt+H", HotkeySpec.Default.ToString());
 
     [Fact]
+    public void SonarDefault_IsCtrlAltJ_AndInvalidFallsBack()
+    {
+        Assert.Equal("Ctrl+Alt+J", HotkeySpec.SonarDefault.ToString());
+        var s = new Settings { CaretSonarHotkey = "J" };   // 보조키 없음
+        s.Normalize();
+        Assert.Equal("Ctrl+Alt+J", s.CaretSonarHotkey);
+        s.CaretSonarHotkey = "win+f8";
+        s.Normalize();
+        Assert.Equal("Win+F8", s.CaretSonarHotkey);
+    }
+
+    [Fact]
     public void Settings_InvalidHotkey_NormalizesToDefault()
     {
         var s = new Settings { Hotkey = "banana" };

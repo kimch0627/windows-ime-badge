@@ -247,7 +247,83 @@ static class RenderSheet
             s.Row(name, new[] { new SheetPanel(Light, placedSlot, items.Select(i => PlacedCell(i, classic, Main, place)).ToList()) });
         }
 
+        // 10. 실험 기능
+        s.Section("10. 실험 기능 — 커서 소나",
+            "칸마다 같은 caret(선)에 시각 t 의 한 장면을 그렸다(배율 100%). 원 두 개가 커서로 좁혀 들고 끝에 커서 자리가 빛난다. " +
+            "마지막 칸은 애니메이션 효과를 끈 사용자에게 보이는 멈춘 한 장.");
+        var sonarTimes = new[] { 0.04f, 0.15f, 0.3f, 0.45f, 0.6f, 0.72f, 0.85f, 0.95f, Sonar.StillT };
+        var sonarSlots = sonarTimes.Select((t, i) => i == sonarTimes.Length - 1 ? "멈춤" : $"t={t:0.00}").ToArray();
+        float sonarSlot = SonarCellSize(1f).Width + 4;
+        s.Headers(new[] { ("장면", sonarSlots, sonarSlot) });
+        foreach (var (name, state, bg) in new[] { ("한 · 밝은 배경", ImeState.Hangul, Light), ("a · 밝은 배경", ImeState.English, Light),
+                                                   ("한 · 어두운 배경", ImeState.Hangul, Dark), ("a · 어두운 배경", ImeState.English, Dark) })
+        {
+            var color = state == ImeState.Hangul ? classic.Hangul : classic.English;
+            s.Row(name, new[] { new SheetPanel(bg, sonarSlot, sonarTimes.Select(t => SonarCell(t, color, bg, 1f)).ToList()) });
+        }
+
+        s.Section("11. 실험 기능 — 커서 옆 말풍선",
+            "배율 150%. caret(선) 아래(꼬리가 위)와 위(꼬리가 아래). 정보는 테마 카드색, 주의는 Windows 11 InfoBar 의 주의 색.");
+        var calloutCases = new (string Name, CalloutContent Content)[]
+        {
+            ("소나: 커서 못 찾음", new(CalloutKind.Info, Strings.Get("sonar.notFound"), Strings.Get("sonar.notFound.detail"), Glyphs.Sonar)),
+        };
+        foreach (var (name, content) in calloutCases)
+        {
+            var cells = new[] { (false, true), (false, false), (true, true), (true, false) }
+                .Select(c => CalloutCell(content, Main, c.Item1, c.Item2, classic)).ToList();
+            float w = cells.Max(c => c.Width) + 4;
+            s.Headers(new[] { ("밝게 · 아래", new[] { "" }, w), ("밝게 · 위", new[] { "" }, w), ("어둡게 · 아래", new[] { "" }, w), ("어둡게 · 위", new[] { "" }, w) });
+            s.Row(name, cells.Select((c, i) => new SheetPanel(i < 2 ? Light : Dark, w, new List<Bitmap> { c })).ToList());
+        }
+
         return s.Finish();
+    }
+
+    static Size SonarCellSize(float scale)
+    {
+        int side = (int)Math.Ceiling(2 * (Sonar.StartRadius + 10) * scale);
+        return new Size(side, side);
+    }
+
+    /// <summary>글 한 줄 끝의 caret 과 그 둘레의 소나 한 장면(앱과 같은 렌더러, 같은 좌표 계산).</summary>
+    static Bitmap SonarCell(float t, Color color, Color bg, float scale)
+    {
+        var size = SonarCellSize(scale);
+        var cell = new Bitmap(size.Width, size.Height, PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(cell);
+        g.Clear(bg);
+        g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+        var ink = bg.GetBrightness() > 0.5f ? Color.Black : Color.White;
+        var caret = new Rectangle(size.Width / 2, size.Height / 2 - (int)(8 * scale), Math.Max(1, (int)scale), (int)(16 * scale));
+        using (var font = new Font(BadgeRenderer.FontFamily, 12 * scale, GraphicsUnit.Pixel))
+        using (var brush = new SolidBrush(Color.FromArgb(170, ink)))
+        {
+            const string line = "안녕하세요 hello";
+            var w = g.MeasureString(line, font).Width;
+            g.DrawString(line, font, brush, caret.Left - w, caret.Top);
+        }
+        using (var brush = new SolidBrush(ink)) g.FillRectangle(brush, caret);
+        using var sonar = OverlayRenderer.Sonar(t, caret, scale, color, Color.White, out var origin);
+        g.DrawImage(sonar, new Rectangle(origin, sonar.Size));
+        return cell;
+    }
+
+    /// <summary>caret(선)과, 앱과 같은 위치 계산(<see cref="CalloutLayout"/>)으로 놓은 말풍선 한 칸.</summary>
+    static Bitmap CalloutCell(CalloutContent content, float scale, bool dark, bool below, BadgeTheme theme)
+    {
+        var body = OverlayRenderer.MeasureCallout(content, scale, theme);
+        int tail = OverlayRenderer.TailHeight(scale), h = (int)(16 * scale), margin = (int)(10 * scale);
+        var size = new Size(body.Width + (int)(40 * scale), body.Height + tail + h + 3 * margin);
+        var cell = new Bitmap(size.Width, size.Height, PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(cell);
+        g.Clear(dark ? Dark : Light);
+        var caret = new Rectangle((int)(30 * scale), below ? margin : size.Height - h - margin, Math.Max(1, (int)scale), h);
+        using (var brush = new SolidBrush(dark ? Color.White : Color.Black)) g.FillRectangle(brush, caret);
+        var place = CalloutLayout.Compute(caret, body, tail, (int)Math.Round(3 * scale), new Rectangle(Point.Empty, size), below, OverlayRenderer.TailInset(scale));
+        using var bmp = OverlayRenderer.Callout(content, scale, body, place.Below, place.TailX, theme, out var offset, dark);
+        g.DrawImage(bmp, new Rectangle(place.Location.X - offset.X, place.Location.Y - offset.Y, bmp.Width, bmp.Height));
+        return cell;
     }
 
     /// <summary>

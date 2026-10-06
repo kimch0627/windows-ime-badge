@@ -17,6 +17,9 @@ public readonly record struct HotkeySpec(HotkeyModifiers Modifiers, int Key)
 {
     public static readonly HotkeySpec Default = new(HotkeyModifiers.Control | HotkeyModifiers.Alt, 'H');
 
+    /// <summary>커서 소나(실험 기능) 기본 단축키. 일시 중지(Ctrl+Alt+H) 바로 옆 글쇠라 손이 기억하기 쉽다.</summary>
+    public static readonly HotkeySpec SonarDefault = new(HotkeyModifiers.Control | HotkeyModifiers.Alt, 'J');
+
     public bool IsValid =>
         Key != 0 && KeyName(Key) is not null &&
         (Modifiers & (HotkeyModifiers.Control | HotkeyModifiers.Alt | HotkeyModifiers.Win)) != 0;

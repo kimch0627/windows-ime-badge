@@ -57,6 +57,11 @@ static class Glyphs
     public const string Copy = "\uE8C8";         // Copy
     public const string Add = "\uE710";          // Add
     public const string OpenExternal = "\uE8A7"; // OpenInNewWindow
+    // 실험 기능
+    public const string Experimental = "\uF196"; // TestBeaker (플라스크)
+    public const string Sonar = "\uF272";        // 과녁(소나)
+    public const string Switch = "\uE8AB";       // Switch (⇄, 창 바꾸기)
+    public const string Delete = "\uE74D";       // Delete (휴지통)
 }
 
 /// <summary>
