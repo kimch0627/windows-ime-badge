@@ -30,6 +30,7 @@ static class UiaCaret
             }
 
             Rectangle? caret = null;
+            bool selection = false;
             textPat = el.GetCurrentPattern(Uia.UIA_TextPatternId);
             if (textPat is Uia.IUIAutomationTextPattern tp)
             {
@@ -37,6 +38,9 @@ static class UiaCaret
                 if (sel is not null && sel.get_Length() > 0)
                 {
                     r = sel.GetElement(0);
+                    // 실험 기능 "선택 영역 덮어쓰기 표시": 커서 한 점으로 접기 전에 시작과 끝이 다른지 본다. 크롬 주소창처럼 선택이 없어도
+                    // "문서 처음~커서" 를 주는 컨트롤이 있어, 아래에서 커서 사각형을 믿을 수 있을 때(CaretRejected 가 아님)만 선택으로 본다.
+                    bool spans = (query & FocusQuery.Selection) != 0 && Spans(r, dump);
                     // 크롬 주소창 등은 "문서 처음~커서" 범위를 준다. 시작점을 끝점으로 옮겨 커서 한 점으로 접는다.
                     r.MoveEndpointByRange(Uia.TextPatternRangeEndpoint.Start, r, Uia.TextPatternRangeEndpoint.End);
                     // 후보 셋을 모아 TextCaret.Pick 이 고른다.
@@ -80,6 +84,7 @@ static class UiaCaret
                         };
                         dump?.Append($" uia:{from}({c.Left:F0},{c.Bottom:F0})");
                         caret = new Rectangle((int)c.Left, (int)c.Top, 1, (int)c.Height);
+                        selection = spans && !pick.CaretRejected;
                     }
                 }
             }
@@ -108,7 +113,7 @@ static class UiaCaret
                     return default;
                 }
             }
-            return new A11yHit(caret, query == FocusQuery.None ? default : Facts(el, query, dump));
+            return new A11yHit(caret, query == FocusQuery.None ? default : Facts(el, query, selection, dump));
         }
         catch (Exception ex) { dump?.Append($" uia:EXC {ex.GetType().Name} 0x{ex.HResult:X8}"); }
         finally
@@ -118,6 +123,13 @@ static class UiaCaret
         return default;
     }
 
+    /// <summary>범위의 시작과 끝이 다른가(글이 선택돼 있다). 지원하지 않는 앱이면 false.</summary>
+    static bool Spans(Uia.IUIAutomationTextRange range, StringBuilder? dump)
+    {
+        try { return range.CompareEndpoints(Uia.TextPatternRangeEndpoint.Start, range, Uia.TextPatternRangeEndpoint.End) != 0; }
+        catch (Exception ex) { dump?.Append($" uia:sel-EXC 0x{ex.HResult:X8}"); return false; }
+    }
+
     /// <summary>입력칸 이름 중 키에 쓰는 앞부분의 길이. 이름에 바뀌는 숫자(글자 수 등)가 붙는 앱이 있어 너무 길게 쓰지 않는다.</summary>
     const int NameKeyLength = 64;
 
@@ -125,13 +137,14 @@ static class UiaCaret
     /// 실험 기능이 물은 입력칸 정보. 입력칸 값(해시 전)은 컨트롤 종류·자동화 ID·이름이고, 둘 다 비었을 때만 클래스 이름을 쓴다
     /// (웹 페이지의 클래스 이름은 HTML class 라 포커스·내용에 따라 바뀌기도 한다). 비밀번호 칸은 입력칸 값을 만들지 않는다.
     /// </summary>
-    static FocusFacts Facts(Uia.IUIAutomationElement el, FocusQuery query, StringBuilder? dump)
+    static FocusFacts Facts(Uia.IUIAutomationElement el, FocusQuery query, bool selection, StringBuilder? dump)
     {
         string? field = null;
         bool password = false;
         try
         {
-            password = el.GetCurrentPropertyValue(Uia.UIA_IsPasswordPropertyId) is bool p && p;
+            if ((query & (FocusQuery.Field | FocusQuery.Password)) != 0)
+                password = el.GetCurrentPropertyValue(Uia.UIA_IsPasswordPropertyId) is bool p && p;
             if ((query & FocusQuery.Field) != 0 && !password)
             {
                 int ct = el.GetCurrentPropertyValue(Uia.UIA_ControlTypePropertyId) is int i ? i : 0;
@@ -142,7 +155,7 @@ static class UiaCaret
             }
         }
         catch (Exception ex) { dump?.Append($" uia:facts-EXC 0x{ex.HResult:X8}"); }
-        return new FocusFacts(field, password && (query & FocusQuery.Password) != 0);
+        return new FocusFacts(field, password && (query & FocusQuery.Password) != 0, selection);
     }
 
     static string Text(Uia.IUIAutomationElement el, int property) => (el.GetCurrentPropertyValue(property) as string ?? "").Trim();

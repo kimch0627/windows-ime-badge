@@ -129,9 +129,11 @@ public static class BadgeCharacters
 /// 작은 네모(■, 블록 커서 모양). 셋은 서로 독립이라 함께 켜질 수 있고, 저마다 자리가 정해져 있다(왼쪽부터 ▲ ▁ ■).
 /// 글자 배지·캐릭터: ▲ 는 왼쪽 아래 모서리, ▁ 는 글자 아래, ■ 는 오른쪽 아래 모서리(글자 아래면 마침표처럼 읽힌다).
 /// 글자가 없는 점·밑줄 모양: 몸통 아래 한 줄의 왼쪽·가운데·오른쪽 자리. 없는 기호의 자리는 비워 두어 다른 기호가 움직이지 않는다.
+/// <see cref="Selection"/>(실험 기능: 선택한 글이 있어 다음 글자가 그 글을 지움)은 자리를 차지하지 않고 배지 테두리를 흰 바탕 위 짙은
+/// 점선(그림판의 선택 영역 모양)으로 바꾼다. 밑줄 모양은 막대 자체가 점선이 된다.
 /// </summary>
 [Flags]
-public enum BadgeMark { None = 0, CapsBar = 1, Shift = 2, Insert = 4 }
+public enum BadgeMark { None = 0, CapsBar = 1, Shift = 2, Insert = 4, Selection = 8 }
 
 /// <summary>
 /// 배지에 쓸 글자. Caps Lock 표시가 켜져 있으면(기본) 글자로 대소문자를 구별한다:

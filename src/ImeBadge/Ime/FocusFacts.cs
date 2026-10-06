@@ -24,12 +24,17 @@ readonly record struct A11yHit(Rectangle? Caret, FocusFacts Facts = default);
 /// </summary>
 static class Focus
 {
-    public static FocusQuery QueryFor(Settings s) => s.RememberFieldMode ? FocusQuery.Field : FocusQuery.None;
+    public static FocusQuery QueryFor(Settings s) =>
+        (s.RememberFieldMode ? FocusQuery.Field : FocusQuery.None) | (s.ShowSelection ? FocusQuery.Selection : FocusQuery.None);
 
-    /// <summary>Win32 caret 을 만드는 앱(메모장·워드 등). 창 관리자에게만 묻는다.</summary>
+    /// <summary>
+    /// Win32 caret 을 만드는 앱(메모장·워드 등). 입력칸 키는 창 관리자에게만 묻는다. 선택 영역은 표준 입력칸(클래스 이름에 Edit 가 든
+    /// Edit·RichEdit 계열)과 Scintilla(Notepad++)에만, 포인터가 없는 메시지로 묻는다(다른 프로세스에도 그대로 전달된다).
+    /// </summary>
     public static FocusFacts FromWin32(IntPtr focus, string process, FocusQuery query)
     {
         if (query == FocusQuery.None || focus == IntPtr.Zero) return default;
+        string cls = Native.ClassName(focus);
         string? field = null;
         if ((query & FocusQuery.Field) != 0)
         {
@@ -37,9 +42,39 @@ static class Focus
             // 최상위 창의 GetDlgCtrlID 는 컨트롤 ID 가 아니다(메뉴 핸들일 수 있어 실행할 때마다 다르다). 자식 창일 때만 쓴다.
             bool child = ((long)Native.GetWindowLongPtr(focus, Native.GWL_STYLE) & Native.WS_CHILD) != 0;
             int id = child ? Native.GetDlgCtrlID(focus) : 0;
-            field = FieldMemory.KeyOf($"w32|{process}|{Native.ClassName(root)}|{Native.ClassName(focus)}|{id}");
+            field = FieldMemory.KeyOf($"w32|{process}|{Native.ClassName(root)}|{cls}|{id}");
         }
-        return new FocusFacts(field);
+        bool selection = (query & FocusQuery.Selection) != 0 && HasWin32Selection(focus, cls);
+        return new FocusFacts(field, Selection: selection);
+    }
+
+    const uint EM_GETSEL = 0x00B0, SCI_GETSELECTIONSTART = 2143, SCI_GETSELECTIONEND = 2145;
+    const uint AskTimeoutMs = 50;
+
+    static bool IsEdit(string cls) => cls.Contains("edit", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 표준 입력칸: EM_GETSEL 의 반환값(아래 16비트 = 시작, 위 16비트 = 끝). 둘 중 하나가 65535 를 넘으면 -1 이라 알 수 없음(선택 없음으로 본다).
+    /// Scintilla: 선택 시작·끝 위치. 응답 없는 앱은 기다리지 않는다(SMTO_ABORTIFHUNG, 50ms).
+    /// </summary>
+    static bool HasWin32Selection(IntPtr focus, string cls)
+    {
+        if (IsEdit(cls))
+        {
+            if (!Ask(focus, EM_GETSEL, out long v)) return false;
+            uint packed = unchecked((uint)v);
+            return packed != 0xFFFFFFFF && (packed & 0xFFFF) != (packed >> 16);
+        }
+        if (cls.StartsWith("Scintilla", StringComparison.OrdinalIgnoreCase))
+            return Ask(focus, SCI_GETSELECTIONSTART, out long start) && Ask(focus, SCI_GETSELECTIONEND, out long end) && start != end;
+        return false;
+    }
+
+    static bool Ask(IntPtr hwnd, uint msg, out long result)
+    {
+        bool ok = Native.SendMessageTimeout(hwnd, msg, IntPtr.Zero, IntPtr.Zero, Native.SMTO_ABORTIFHUNG, AskTimeoutMs, out var r) != IntPtr.Zero;
+        result = (long)r;
+        return ok;
     }
 
     /// <summary>커서를 자식 창으로 그리는 터미널(Xshell). 입력칸은 터미널 화면 하나뿐이다.</summary>

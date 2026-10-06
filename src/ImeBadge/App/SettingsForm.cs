@@ -52,7 +52,7 @@ sealed class SettingsForm : Form
     ColorSwatches _hangulColor = null!, _englishColor = null!;
     Label _hangulHex = null!, _englishHex = null!;
     ToggleSwitch _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!, _shiftHold = null!,
-        _shiftNow = null!, _insert = null!, _sonar = null!, _sonarSwitch = null!, _fieldMemory = null!, _focusSteal = null!;
+        _shiftNow = null!, _insert = null!, _sonar = null!, _sonarSwitch = null!, _fieldMemory = null!, _focusSteal = null!, _selection = null!;
     HotkeyBox _hotkeyBox = null!, _sonarHotkeyBox = null!;
     SettingsCard _fieldClearCard = null!;
     AccentButton _fieldClear = null!;
@@ -579,6 +579,10 @@ sealed class SettingsForm : Form
         _fieldClearCard.Indent = 1;
         page.Controls.Add(_fieldClearCard);
 
+        _selection = Toggle(v => { _draft.ShowSelection = v; Touch(); });
+        _tips.SetToolTip(_selection, Strings.Get("exp.selection.tip"));
+        page.Controls.Add(Card(Glyphs.Selection, "exp.selection", action: _selection));
+
         _focusSteal = Toggle(v => { _draft.FocusStealWarning = v; Touch(); });
         _tips.SetToolTip(_focusSteal, Strings.Get("exp.focusSteal.tip"));
         page.Controls.Add(Card(Glyphs.Shield, "exp.focusSteal", action: _focusSteal));
@@ -1017,6 +1021,7 @@ sealed class SettingsForm : Form
         _sonarSwitch.Checked = _draft.CaretSonarOnSwitch;
         _fieldMemory.Checked = _draft.RememberFieldMode;
         _focusSteal.Checked = _draft.FocusStealWarning;
+        _selection.Checked = _draft.ShowSelection;
         SyncExperimentalEnabled();
         ReloadExcluded();
     }

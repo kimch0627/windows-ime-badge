@@ -47,7 +47,7 @@ static class RenderSheet
 
     /// <summary>한 칸에 그릴 배지.</summary>
     readonly record struct Item(string Caption, ImeState State, BadgeStyle Style = BadgeStyle.Pill, bool Caps = false, string Character = "",
-        bool Shift = false, bool Insert = false);
+        bool Shift = false, bool Insert = false, bool Selection = false);
 
     static readonly Item Han = new("한", ImeState.Hangul), EnA = new("a", ImeState.English),
         EnCaps = new("A Caps", ImeState.English, Caps: true), HanCaps = new("꺆 Caps", ImeState.Hangul, Caps: true),
@@ -67,7 +67,7 @@ static class RenderSheet
 
     static Bitmap Draw()
     {
-        using var s = new Sheet(2200, 9000);
+        using var s = new Sheet(2200, 13000);   // 다 그린 뒤 쓴 만큼만 잘라 낸다(Finish)
         const float Main = 1.5f;   // 125~150% 배율 노트북이 흔하다
         var themes = DesignThemes.All;
 
@@ -280,6 +280,26 @@ static class RenderSheet
             s.Row(name, cells.Select((c, i) => new SheetPanel(i < 2 ? Light : Dark, w, new List<Bitmap> { c })).ToList());
         }
 
+        s.Section("12. 실험 기능 — 선택 영역 덮어쓰기 표시",
+            "선택한 글이 있으면 배지 테두리가 흰 칸·짙은 칸이 번갈아 끊긴 점선(선택 영역 모양)이 된다. 밑줄은 막대가 점선이 된다. 배율 150%, 마지막 판은 100% ×3.");
+        var selMarks = new (string Caption, bool Sel, bool Caps, bool Insert)[]
+        {
+            ("없음", false, false, false), ("선택", true, false, false), ("선택+Caps", true, true, false), ("선택+Ins", true, false, true), ("선택+둘 다", true, true, true),
+        };
+        var selSlots = selMarks.Select(m => m.Caption).ToArray();
+        s.Headers(new[] { ("밝은 배경", selSlots, slot), ("어두운 배경", selSlots, slot), ("100% ×3 확대", selSlots, 96f) });
+        foreach (var row in markRows.Where(r => r.Name is "둥근 · 한" or "둥근 · a" or "사각 · 한" or "고양이 · 한" or "별 · a" or "점 · 한" or "점 · a"
+                                             or "밑줄 · 한" or "고대비(밤하늘) 둥근 · 한" or "고대비(밤하늘) 점 · a" or "고대비(밤하늘) 밑줄 · 한"))
+        {
+            var items = selMarks.Select(m => new Item(m.Caption, row.State, row.Style, m.Caps, row.Character, Insert: m.Insert, Selection: m.Sel)).ToArray();
+            s.Row(row.Name, new[]
+            {
+                Panel(row.Bg, slot, items, row.Theme, Main, row.Opacity),
+                Panel(row.DarkBg, slot, items, row.Theme, Main, row.Opacity),
+                new SheetPanel(row.Bg, 96, items.Select(i => Zoom(RenderItem(i, row.Theme, 1f, row.Opacity), 3)).ToList()),
+            });
+        }
+
         return s.Finish();
     }
 
@@ -377,7 +397,7 @@ static class RenderSheet
     }
 
     static Bitmap RenderItem(in Item it, BadgeTheme theme, float scale, int opacity) =>
-        BadgeRenderer.Render(it.State, it.Style, scale, theme with { Character = it.Character }, opacity, it.Caps, it.Shift, it.Insert);
+        BadgeRenderer.Render(it.State, it.Style, scale, theme with { Character = it.Character }, opacity, it.Caps, it.Shift, it.Insert, it.Selection);
 
     static Size PlacedCellSize(float scale) => new((int)Math.Ceiling(44 * scale), (int)Math.Ceiling(68 * scale));
 

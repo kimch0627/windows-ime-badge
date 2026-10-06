@@ -104,9 +104,9 @@ static class BadgeRenderer
     /// 겹쳐 쓰기(■)는 입력 언어와 상관없이 더한다(다른 언어 "?" 배지에도).
     /// </summary>
     public static (string text, Color color, BadgeMark mark) Look(ImeState s, in BadgeTheme theme, bool capsLock = false, bool shift = false,
-                                                                  bool insert = false)
+                                                                  bool insert = false, bool selection = false)
     {
-        var overtype = insert ? BadgeMark.Insert : BadgeMark.None;
+        var overtype = (insert ? BadgeMark.Insert : BadgeMark.None) | (selection ? BadgeMark.Selection : BadgeMark.None);
         if (s is not (ImeState.Hangul or ImeState.English)) return ("?", theme.Other, overtype);
         var (text, mark) = BadgeText.For(s == ImeState.Hangul, capsLock, theme.ShowCapsLock, shift);
         return (text, s == ImeState.Hangul ? theme.Hangul : theme.English, mark | overtype);
@@ -133,9 +133,9 @@ static class BadgeRenderer
         theme.Contrast is { } hc ? (state == ImeState.Hangul ? hc.HangulInk : hc.OtherInk) : TextColorOn(background, theme.Finish);
 
     public static Bitmap Render(ImeState state, BadgeStyle style, float scale, in BadgeTheme theme, int opacityPercent = 100, bool capsLock = false,
-                                bool shift = false, bool insert = false)
+                                bool shift = false, bool insert = false, bool selection = false)
     {
-        var (text, color, mark) = Look(state, theme, capsLock, shift, insert);
+        var (text, color, mark) = Look(state, theme, capsLock, shift, insert, selection);
         // 고대비는 불투명도 설정과 상관없이 늘 불투명(비치면 사용자가 고른 대비가 깨진다).
         var fill = theme.Contrast is null ? Color.FromArgb(Math.Clamp(255 * opacityPercent / 100, 30, 255), color) : color;
         var ink = InkFor(state, color, theme);
@@ -205,6 +205,28 @@ static class BadgeRenderer
 
     /// <summary>림의 가장 밝은 곳(맨 위)의 흰색 알파. 파스텔(Soft)은 바탕이 밝아 조금 더 세게.</summary>
     const int RimAlphaFlat = 140, RimAlphaSoft = 160;
+
+    /// <summary>선택 영역 점선의 짙은 칸 색. 흰 칸과 번갈아 어떤 바탕에서도 보인다.</summary>
+    static readonly Color AntsInk = Color.FromArgb(0x1F, 0x1F, 0x1F);
+
+    /// <summary>
+    /// 선택 영역 표시(실험 기능): 배지 윤곽을 흰 바탕 위 짙은 점선으로 두른다. 그림판·포토샵이 선택 영역을 보여 주는 "개미 행렬" 모양이라
+    /// 다음 글자가 선택한 글을 지운다는 뜻이 바로 읽히고, 흰 칸·짙은 칸이 번갈아 밝은 문서와 어두운 편집기 어디서나 보인다.
+    /// 윤곽 위에 그리므로 그림 크기와 배지 자리는 그대로다. 고대비는 창 바탕색 위 창 글자색 점선.
+    /// </summary>
+    static void DrawSelectionAnts(Graphics g, GraphicsPath path, float width, in BadgeTheme theme)
+    {
+        var (light, dark) = theme.Contrast is { } hc ? (theme.English, hc.Edge) : (Color.White, AntsInk);
+        using var under = new Pen(light, width) { LineJoin = LineJoin.Round };
+        using var over = new Pen(dark, width) { LineJoin = LineJoin.Round, DashPattern = new[] { 2f, 1.6f } };
+        g.DrawPath(under, path);
+        g.DrawPath(over, path);
+    }
+
+    static bool HasSelection(BadgeMark mark) => (mark & BadgeMark.Selection) != 0;
+
+    /// <summary>점선 굵기(px). 1px 이면 점선이 흐려져 잘 안 보인다.</summary>
+    static float AntsWidth(float scale) => Math.Max(1.25f, 1.4f * scale);
 
     /// <summary>
     /// 안쪽 위 가장자리의 밝은 림(Fluent 의 윗면 하이라이트). 유리컵 윗면에 형광등이 한 줄 비친 것처럼, 배지 모양을 가운데 쪽으로
@@ -321,6 +343,7 @@ static class BadgeRenderer
             g.FillPath(brush, path);
             g.DrawPath(pen, path);
             DrawRim(g, path, rect, line, line, color, theme);
+            if (HasSelection(mark)) DrawSelectionAnts(g, path, AntsWidth(scale), theme);
             DrawMarksBelow(g, mark, rect.X + rect.Width / 2, rect.Bottom + OutsideGap * scale, scale, color, theme);
         }
         return bmp;
@@ -361,6 +384,15 @@ static class BadgeRenderer
                 var state = g.Save();
                 g.SetClip(path);   // 둥근 양 끝을 따라 자른다
                 g.FillRectangle(edge, rect.X, rect.Bottom - line, rect.Width, line);
+                g.Restore(state);
+            }
+            if (HasSelection(mark))
+            {
+                // 밑줄은 둘레에 점선을 두를 자리가 없어 막대 자체를 배지 색·흰색이 번갈아 끊긴 점선으로 만든다.
+                var state = g.Save();
+                g.SetClip(path);
+                using var gaps = new Pen(theme.Contrast is null ? Color.White : theme.English, h) { DashPattern = new[] { 1f, 1f } };
+                g.DrawLine(gaps, rect.X + h, rect.Y + h / 2f, rect.Right, rect.Y + h / 2f);
                 g.Restore(state);
             }
             DrawMarksBelow(g, mark, rect.X + rect.Width / 2, rect.Bottom + OutsideGap * scale, scale, color, theme);
@@ -482,6 +514,7 @@ static class BadgeRenderer
             g.DrawPath(pen, path);
             float rimWidth = Math.Max(1f, scale);
             DrawRim(g, path, rect, 0.5f + rimWidth / 2, rimWidth, color, theme);
+            if (HasSelection(mark)) DrawSelectionAnts(g, path, AntsWidth(scale), theme);
 
             // 글자와 그 아래 Caps Lock 밑줄을 한 덩어리로 보고 배지 가운데에 둔다. Shift ▲·겹쳐 쓰기 ■ 는 아래 모서리(DrawCornerMark).
             float cx = pad + w / 2f, cy = pad + h / 2f;
@@ -622,6 +655,7 @@ static class BadgeRenderer
             }
             // 림: 테두리의 바깥 절반(0.8 단위) 안쪽에. 별은 둥근 선(2.4)이 몸통 밖으로 1.2 나와 있어 그만큼 바깥쪽에 긋는다.
             DrawRim(g, body, body.GetBounds(), star ? -0.6f : 0.6f, 1f, color, theme);
+            if (HasSelection(mark)) DrawSelectionAnts(g, body, AntsWidth(scale) / scale, theme);
 
             // 글자와 그 아래 Caps Lock 밑줄의 한 덩어리 중심을 몸통의 글자 자리(TextX, TextY)에. Shift ▲·겹쳐 쓰기 ■ 는 아래 모서리.
             using var font = new Font(BadgeFonts.For(text), fig.FontSize, FontStyle.Bold, GraphicsUnit.Pixel);

@@ -40,6 +40,7 @@ static class AboutInfo
         if (s.CaretSonar) on.Add($"sonar({s.CaretSonarHotkey}{(s.CaretSonarOnSwitch ? ", on switch" : "")})");
         if (s.RememberFieldMode) on.Add("field memory");
         if (s.FocusStealWarning) on.Add("focus steal");
+        if (s.ShowSelection) on.Add("selection");
         return on.Count == 0 ? Strings.Get("diag.none") : string.Join(", ", on);
     }
 

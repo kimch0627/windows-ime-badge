@@ -255,7 +255,7 @@ public static class Strings
         ["exclude.removeItem.name"] = "{0} 삭제",
         ["exclude.empty"] = "아직 제외한 앱이 없습니다.",
 
-        // ── 실험 기능 페이지 (니모닉: S V K W M C F) ──
+        // ── 실험 기능 페이지 (니모닉: S V K W M C F L) ──
         ["nav.experimental"] = "실험 기능",
         ["page.experimental.desc"] = "아직 다듬는 중인 커서 관련 기능입니다. 모두 처음에는 꺼져 있고, 앱에 따라 잘 맞지 않을 수 있습니다.",
         ["section.exp.caret"] = "커서 찾기",
@@ -287,6 +287,9 @@ public static class Strings
         ["exp.focusSteal.tip"] = "직전까지 글자를 치고 있었고, 마우스나 Alt·Win·Ctrl 없이 활성 창이 바뀌었고, 바뀐 직후에도 입력이 이어질 때만 알립니다. 입력은 Windows 가 알려 주는 '마지막 입력 시각' 만 보고 어떤 키를 눌렀는지는 읽지 않습니다(키보드 훅 없음). Enter 로 프로그램을 연 뒤 곧바로 치기 시작하면 경고가 뜰 수도 있습니다.",
         ["steal.title"] = "입력이 다른 창으로 가고 있어요",
         ["steal.detail"] = "{0} 창이 앞으로 나왔어요. 쓰던 곳으로 돌아가려면 Alt+Tab 을 누르세요.",
+        ["exp.selection"] = "선택 영역 덮어쓰기 표시(&L)",
+        ["exp.selection.desc"] = "글을 선택해 둔 입력칸에서는 다음에 치는 글자가 그 글을 지운다는 뜻으로 배지 테두리가 점선(선택 영역 모양)으로 바뀝니다.",
+        ["exp.selection.tip"] = "Ctrl+A 로 전체 선택한 것을 잊고 치기 시작해 글이 사라지는 일을 막습니다. 메모장 같은 기본 입력칸, Notepad++, 그리고 크롬·엣지·VS Code 처럼 UI Automation 으로 커서를 찾는 앱에서 동작합니다. 워드·한글처럼 자체 편집기를 쓰는 앱에서는 알 수 없고, 크롬 주소창처럼 선택 범위를 정확히 알려 주지 않는 입력칸에서는 보이지 않을 수 있습니다. 밑줄 모양은 막대가 점선이 됩니다.",
 
         // ── 정보 페이지 ──
         ["about.update"] = "업데이트",
@@ -576,7 +579,7 @@ public static class Strings
         ["exclude.removeItem.name"] = "Remove {0}",
         ["exclude.empty"] = "No apps are excluded yet.",
 
-        // ── Experimental page (mnemonics: S V K W M C F) ──
+        // ── Experimental page (mnemonics: S V K W M C F L) ──
         ["nav.experimental"] = "Experimental",
         ["page.experimental.desc"] = "Caret features that are still being polished. They are all off at first and may not work well in every app.",
         ["section.exp.caret"] = "Finding the caret",
@@ -608,6 +611,9 @@ public static class Strings
         ["exp.focusSteal.tip"] = "It warns only when you were typing just before, the active window changed without the mouse or Alt, Win or Ctrl, and input kept coming right after the change. Only the 'last input time' that Windows reports is used; which keys you press is never read (no keyboard hook). Opening a program with Enter and typing right away may also show the warning.",
         ["steal.title"] = "Your typing is going to another window",
         ["steal.detail"] = "{0} came to the front. Press Alt+Tab to go back.",
+        ["exp.selection"] = "Show se&lection overwrite",
+        ["exp.selection.desc"] = "When text is selected in the field, the badge border turns into a dashed line (the selection look) because the next key you type will replace that text.",
+        ["exp.selection.tip"] = "Helps you avoid typing over everything after a forgotten Ctrl+A. Works in standard text fields such as Notepad, in Notepad++, and in apps where the caret is found through UI Automation, such as Chrome, Edge and VS Code. Apps with their own editors, such as Word or Hangul, cannot report it, and fields that do not report the selection correctly, such as the Chrome address bar, may not show it. The underline shape turns dashed.",
 
         // ── About page ──
         ["about.update"] = "Updates",

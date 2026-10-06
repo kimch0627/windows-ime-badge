@@ -49,7 +49,7 @@ sealed class BadgeForm : Form, IExperimentHost
     const int EventPollMinGapMs = 15;           // 이보다 촘촘한 이벤트는 건너뛴다(타이머가 곧 따라잡는다)
 
     ImeState _lastState = ImeState.Unknown;
-    bool _lastCaps, _lastInsert;
+    bool _lastCaps, _lastInsert, _lastSelection;
     readonly ShiftHold _shiftHold = new();   // Shift 를 누른 지 얼마나 됐나. 매 폴링마다 갱신해야 하므로 여기서 잰다
     readonly InsertToggle _insertToggle = new();   // 창마다 Insert 로 켠 겹쳐 쓰기. 매 폴링마다 토글 비트를 봐야 하므로 여기서 잰다
     IntPtr _insertFg;                               // InsertToggle 에 마지막으로 넘긴 활성 창. 바뀌면 닫힌 창을 정리한다
@@ -58,9 +58,9 @@ sealed class BadgeForm : Form, IExperimentHost
     // 바뀜 = 한/영·Caps Lock·겹쳐 쓰기 변경, 배지가 새로 나타남, 활성 창이 바뀜.
     long _lastTypingMs = long.MinValue, _lastChangeMs = long.MinValue;
     Rectangle? _lastCaret;
-    (ImeState state, bool caps, bool shift, bool insert, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character) _renderKey;
+    (ImeState state, bool caps, bool shift, bool insert, bool selection, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character) _renderKey;
     Size _bitmapSize;
-    (ImeState state, bool caps, bool shift, bool insert, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character) _pulseBaseKey;
+    (ImeState state, bool caps, bool shift, bool insert, bool selection, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character) _pulseBaseKey;
     Point _lastPos = new(int.MinValue, int.MinValue);
     IntPtr _lastFg;
     bool _allowShow;
@@ -505,11 +505,12 @@ sealed class BadgeForm : Form, IExperimentHost
     /// </summary>
     Bitmap PulseFrame(in Snapshot s, BadgeStyle style, float baseScale, float pulse)
     {
-        var baseKey = (s.State, s.CapsLock, s.Shift, s.Insert, style, baseScale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor, _settings.Theme, _settings.Character);
+        var baseKey = (s.State, s.CapsLock, s.Shift, s.Insert, s.Facts.Selection, style, baseScale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor, _settings.Theme, _settings.Character);
         if (_pulseBase is null || baseKey != _pulseBaseKey)
         {
             _pulseBase?.Dispose();
-            _pulseBase = BadgeRenderer.Render(s.State, style, baseScale, BadgeTheme.From(_settings), _settings.OpacityPercent, s.CapsLock, s.Shift, s.Insert);
+            _pulseBase = BadgeRenderer.Render(s.State, style, baseScale, BadgeTheme.From(_settings), _settings.OpacityPercent, s.CapsLock, s.Shift, s.Insert,
+                                              s.Facts.Selection);
             _pulseBaseKey = baseKey;
         }
         return BadgeRenderer.ScaleFrame(_pulseBase, pulse);
@@ -652,7 +653,7 @@ sealed class BadgeForm : Form, IExperimentHost
         UpdateTray(_trayState, _trayCaps, _trayInsert, force: true);
     }
 
-    void ResetRenderKey() => _renderKey = (ImeState.Unknown, false, false, false, (BadgeStyle)(-1), 0, -1, "", "", "", "");
+    void ResetRenderKey() => _renderKey = (ImeState.Unknown, false, false, false, false, (BadgeStyle)(-1), 0, -1, "", "", "", "");
 
     // ── 일시 중지 / 설정 / 정보 ──
     void TogglePause()
@@ -1005,6 +1006,9 @@ sealed class BadgeForm : Form, IExperimentHost
         else if (s.Caret is { } cr && _lastCaret is { } prev && cr != prev) { _lastTypingMs = now; typed = true; }
         _lastCaret = s.Caret;
         if (_settings.RememberFieldMode) RememberField(s, caret, typed);
+        // 선택한 글이 생기면(다음 글자가 그 글을 지운다) "바뀔 때만" 표시 방식에서도 잠깐 보이고, "타이핑 중 옅게" 에서도 잠깐 또렷하다.
+        if (s.Facts.Selection && !_lastSelection) _lastChangeMs = now;
+        _lastSelection = s.Facts.Selection;
 
         // 나타날 때는 페이드인, 보이는 중에 한/영이 바뀌면 펄스. 둘 다 "지금 바뀌었다"를 눈에 띄게 한다.
         if (AnimationsOn)
@@ -1027,7 +1031,7 @@ sealed class BadgeForm : Form, IExperimentHost
         float baseScale = Native.DpiScaleAt(caret.Location) * _settings.SizePercent / 100f;
         float scale = baseScale * pulse;
 
-        var key = (s.State, s.CapsLock, s.Shift, s.Insert, style, scale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor, _settings.Theme, _settings.Character);
+        var key = (s.State, s.CapsLock, s.Shift, s.Insert, s.Facts.Selection, style, scale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor, _settings.Theme, _settings.Character);
         bool needRender = key != _renderKey || _lastBmp is null;
 
         Size bs = needRender ? Size.Empty : _bitmapSize;
@@ -1035,7 +1039,8 @@ sealed class BadgeForm : Form, IExperimentHost
         if (needRender)
         {
             bmp = pulse == 1f
-                ? BadgeRenderer.Render(s.State, style, scale, BadgeTheme.From(_settings), _settings.OpacityPercent, s.CapsLock, s.Shift, s.Insert)
+                ? BadgeRenderer.Render(s.State, style, scale, BadgeTheme.From(_settings), _settings.OpacityPercent, s.CapsLock, s.Shift, s.Insert,
+                                       s.Facts.Selection)
                 : PulseFrame(s, style, baseScale, pulse);
             bs = bmp.Size;
         }

@@ -97,7 +97,8 @@ static class Uia
     {
         void _Slot_Clone();
         void _Slot_Compare();
-        void _Slot_CompareEndpoints();
+        /// <summary>이 범위의 한 끝점과 다른 범위의 한 끝점을 비교한다. 같으면 0, 앞이면 음수, 뒤면 양수.</summary>
+        int CompareEndpoints(TextPatternRangeEndpoint srcEndPoint, IUIAutomationTextRange range, TextPatternRangeEndpoint targetEndPoint);
         void ExpandToEnclosingUnit(TextUnit unit);
         void _Slot_FindAttribute();
         void _Slot_FindText();
