@@ -89,6 +89,12 @@ sealed class BadgeForm : Form, IExperimentHost
     FieldMemory? _fieldMemory;   // 입력칸별 한/영 기억. 처음 쓸 때 파일에서 읽는다(Fields)
     bool? _fieldHint;            // 지금 말풍선으로 알린 모드(한글 true / 영문 false)
     const int FieldHintMs = 4000;
+    // 포커스 뺏김 경고: 창이 바뀐 순간을 기억해 두고, 바뀐 직후에도 입력이 이어지는지 폴링마다 본다(CheckFocusSteal).
+    readonly FocusStealGuard _stealGuard = new();
+    Rectangle? _stealCaret;      // 글자를 치던 자리(바뀌기 전 창의 caret). 경고를 여기에 띄운다
+    Point _stealPointer;         // 지켜보기 시작할 때의 마우스 위치. 움직였으면 사용자가 알아챘다고 본다
+    long _lastSwitchKeyMs = long.MinValue;   // Alt·Win·Ctrl 을 마지막으로 누르고 있던 때
+    const int StealWarningMs = 5000;
 
     ToolStripMenuItem _pauseItem = null!, _autostartItem = null!;
     ToolStripLabel _statusItem = null!;   // 누를 수 없는 상태 줄. 비활성 메뉴 항목과 달리 아이콘이 회색으로 바래지 않는다
@@ -628,6 +634,7 @@ sealed class BadgeForm : Form, IExperimentHost
         if (hk != _appliedHotkey || save) { _appliedHotkey = hk; ApplyHotkey(warnOnFailure: save); }
         if (!_settings.CaretSonar) _sonarPendingFg = IntPtr.Zero;
         if (!_settings.RememberFieldMode) HideFieldHint();
+        if (!_settings.FocusStealWarning) { _stealGuard.Disarm(); _callout?.Hide("steal"); }
 
         var tray = (_settings.HangulColor, _settings.EnglishColor, _settings.TrayShowsState, _settings.Theme);
         if (tray != _appliedTray) { _appliedTray = tray; RefreshTray(); }
@@ -653,6 +660,7 @@ sealed class BadgeForm : Form, IExperimentHost
         _paused = !_paused;
         Log.Write(_paused ? "paused" : "resumed");
         _callout?.Hide();
+        _stealGuard.Disarm();
         UpdateTray(ImeState.Unknown, force: true);
         Poll();
     }
@@ -911,7 +919,8 @@ sealed class BadgeForm : Form, IExperimentHost
         long t0 = Environment.TickCount64;
         try
         {
-            TrackPointer();
+            TrackUserInput();
+            CheckFocusSteal();
             // 일시 중지 중에도 재야 다시 켰을 때 "예전에 누르기 시작한 Shift" 로 잘못 세지 않는다.
             // "누르는 즉시 표시" 면 0.3초를 기다리지 않는다(누른 것이 보이는 첫 폴링, 기본 0.1초 안).
             bool shift = _shiftHold.Update(Native.IsShiftAloneDown(), Environment.TickCount64,
@@ -963,7 +972,8 @@ sealed class BadgeForm : Form, IExperimentHost
     void AdjustIdleInterval()
     {
         int want = _settings.PollIntervalMs;
-        if (!Visible && Environment.TickCount64 - _hiddenSince > IdleAfterMs)
+        // 포커스 뺏김을 지켜보는 동안(1초 미만)은 느리게 하지 않는다.
+        if (!Visible && Environment.TickCount64 - _hiddenSince > IdleAfterMs && !_stealGuard.Armed)
             want = Math.Max(want * 3, 300);
         if (_timer.Interval != want) _timer.Interval = want;
     }
@@ -1082,14 +1092,19 @@ sealed class BadgeForm : Form, IExperimentHost
     }
 
     // ── 실험 기능: 커서 소나·말풍선 ──
-    /// <summary>마우스를 움직였거나 버튼을 누르고 있으면 그 시각을 적는다. 창을 마우스로 바꿨는지 가리는 데 쓴다.</summary>
-    void TrackPointer()
+    /// <summary>
+    /// 마우스를 움직였거나 버튼을 누르고 있으면, 또는 Alt·Win·Ctrl 을 누르고 있으면 그 시각을 적는다. 창을 사용자가 바꿨는지(마우스·단축키)
+    /// 가리는 데 쓴다. 폴링(기본 0.1초)마다 보므로 아주 짧게 누른 키는 놓칠 수 있다.
+    /// </summary>
+    void TrackUserInput()
     {
         try
         {
+            long now = Environment.TickCount64;
             var p = Cursor.Position;
-            if (p != _lastPointer || Native.IsMouseButtonDown()) _lastPointerMs = Environment.TickCount64;
+            if (p != _lastPointer || Native.IsMouseButtonDown()) _lastPointerMs = now;
             _lastPointer = p;
+            if (Native.IsSwitchKeyDown()) _lastSwitchKeyMs = now;
         }
         catch { }   // 보안 데스크톱(UAC 창) 등에서 포인터를 못 읽어도 다른 일은 계속한다
     }
@@ -1100,9 +1115,10 @@ sealed class BadgeForm : Form, IExperimentHost
     /// </summary>
     void OnForegroundChanged()
     {
-        TrackPointer();
+        TrackUserInput();
         // 입력칸 기억: 다른 창에 다녀오면 같은 입력칸으로 돌아와도 "들어온" 것으로 본다(그사이 한/영을 바꿨을 수 있다).
         if (_settings.RememberFieldMode) { _fieldMemory?.Observe(null, null, false, DateTime.UtcNow); HideFieldHint(); }
+        WatchForFocusSteal();
         _sonarPendingFg = IntPtr.Zero;
         if (!_settings.CaretSonar || !_settings.CaretSonarOnSwitch || _paused || _sessionLocked) return;
         long now = Environment.TickCount64;
@@ -1170,6 +1186,75 @@ sealed class BadgeForm : Form, IExperimentHost
     /// <summary>말풍선을 커서 아래에 둘까. 배지가 커서 위(오른쪽 위·왼쪽 위·위)면 아래, 아래쪽 위치이거나 밑줄 모양(커서 바로 아래)이면 위.</summary>
     bool CalloutBelow => _settings.Style != BadgeStyle.Underline
         && _settings.Placement is BadgePlacement.AboveRight or BadgePlacement.AboveLeft or BadgePlacement.Above;
+
+    // ── 실험 기능: 포커스 뺏김 경고 ──
+    /// <summary>
+    /// 활성 창이 바뀐 순간: 직전까지 글자를 치고 있었고 사용자가 바꾼 것 같지 않으면(<see cref="FocusStealGuard"/>) 지켜보기 시작한다.
+    /// 작업 표시줄·시작 메뉴·Alt+Tab 화면·바탕화면처럼 사용자가 여는 셸 화면과 이 프로그램의 창은 보지 않는다.
+    /// </summary>
+    void WatchForFocusSteal()
+    {
+        _stealGuard.Disarm();
+        if (!_settings.FocusStealWarning || _paused || _sessionLocked) return;
+        var fg = Native.GetForegroundWindow();
+        if (fg == IntPtr.Zero || IsShellOrSelf(fg)) return;
+        long now = Environment.TickCount64;
+        if (!_stealGuard.OnForegroundChanged(now, (long)fg, (long)_lastFg, _lastTypingMs, Math.Max(_lastPointerMs, _lastSwitchKeyMs))) return;
+        _stealCaret = _lastCaret;
+        _stealPointer = _lastPointer;
+        if (_timer.Interval != _settings.PollIntervalMs) _timer.Interval = _settings.PollIntervalMs;   // 지켜보는 동안은 빠르게
+        Log.Write($"focus steal: watching fg='{Native.ClassName(fg)}'");
+    }
+
+    /// <summary>지켜보는 중이면, 창이 바뀐 직후에도 입력이 이어졌는지 본다. 이어졌으면 글자를 치던 자리에 경고를 띄운다.</summary>
+    void CheckFocusSteal()
+    {
+        if (!_stealGuard.Armed) return;
+        var fg = Native.GetForegroundWindow();
+        bool pointerUsed = _lastPointer != _stealPointer || Native.IsMouseButtonDown();
+        if (!_stealGuard.Check(Environment.TickCount64, (long)fg, Native.LastInputMs(), pointerUsed)) return;
+        if (_stealCaret is not { } anchor) return;
+        string app = AppTitle(fg);
+        Log.Write($"focus steal: warned fg='{Native.ClassName(fg)}'");
+        ShowCallout("steal", new CalloutContent(CalloutKind.Warning, Strings.Get("steal.title"), Strings.Format("steal.detail", app), Glyphs.Shield),
+            anchor, holdMs: StealWarningMs);
+    }
+
+    static readonly string[] ShellClasses =
+    {
+        "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "NotifyIconOverflowWindow", "TopLevelWindowForOverflowXamlIsland",
+        "XamlExplorerHostIslandWindow", "MultitaskingViewFrame", "TaskSwitcherWnd", "ForegroundStaging", "Progman", "WorkerW",
+    };
+
+    static readonly string[] ShellProcesses =
+    {
+        "SearchHost", "SearchApp", "StartMenuExperienceHost", "ShellExperienceHost", "TextInputHost", "LockApp",
+    };
+
+    /// <summary>작업 표시줄·시작 메뉴·검색·Alt+Tab·바탕화면·이모지 패널처럼 사용자가 여는 셸 화면이거나 이 프로그램의 창인가.</summary>
+    static bool IsShellOrSelf(IntPtr window)
+    {
+        if (Array.IndexOf(ShellClasses, Native.ClassName(window)) >= 0) return true;
+        Native.GetWindowThreadProcessId(window, out uint pid);
+        if (pid == (uint)Environment.ProcessId) return true;
+        return Array.IndexOf(ShellProcesses, ImeReader.ProcessName(pid)) >= 0;
+    }
+
+    /// <summary>경고에 쓸 앱 이름: 실행 파일의 설명(예: "Google Chrome"), 없으면 실행 파일 이름. UWP 앱은 안쪽 앱 프로세스의 것.</summary>
+    static string AppTitle(IntPtr window)
+    {
+        var core = Native.UwpCoreWindow(window);
+        Native.GetWindowThreadProcessId(core != IntPtr.Zero ? core : window, out uint pid);
+        try
+        {
+            if (Native.ProcessImagePath(pid) is { } path
+                && System.Diagnostics.FileVersionInfo.GetVersionInfo(path).FileDescription?.Trim() is { Length: > 0 } description)
+                return description.Length > 40 ? description[..40] + "…" : description;
+        }
+        catch { }
+        string name = ImeReader.ProcessName(pid);
+        return name.Length > 0 ? name : Strings.Get("diag.unknown");
+    }
 
     // ── 실험 기능: 입력칸별 한/영 기억 ──
     string FieldMemoryPath => System.IO.Path.Combine(_paths.SettingsDir, FieldMemoryStore.FileName);

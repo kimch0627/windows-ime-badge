@@ -104,7 +104,7 @@ static class OverlayRenderer
     /// <summary>몸통 왼쪽 끝에서 꼬리 끝까지의 최소 거리(px). 둥근 모서리에 꼬리가 걸리지 않게.</summary>
     public static int TailInset(float scale) => (int)Math.Ceiling((Radius + TailW / 2 + 4) * scale);
 
-    /// <summary>글자 배치: 줄바꿈 없이, 넘치면 말줄임표.</summary>
+    /// <summary>제목 배치: 줄바꿈 없이, 넘치면 말줄임표.</summary>
     static StringFormat TextFormat()
     {
         var f = (StringFormat)StringFormat.GenericTypographic.Clone();
@@ -113,11 +113,23 @@ static class OverlayRenderer
         return f;
     }
 
+    /// <summary>설명 배치: 낱말 단위로 줄바꿈해 <see cref="DetailLines"/> 줄까지, 넘치면 마지막 줄 끝에 말줄임표.</summary>
+    static StringFormat DetailFormat()
+    {
+        var f = (StringFormat)StringFormat.GenericTypographic.Clone();
+        f.FormatFlags |= StringFormatFlags.LineLimit;
+        f.Trimming = StringTrimming.EllipsisWord;
+        return f;
+    }
+
+    const int DetailLines = 2;
+
     sealed class CalloutFonts : IDisposable
     {
         public readonly Font Title, Detail;
         public readonly Font? Icon;
         public readonly StringFormat Format = TextFormat();
+        public readonly StringFormat Wrap = DetailFormat();
 
         public CalloutFonts(float scale)
         {
@@ -127,7 +139,7 @@ static class OverlayRenderer
             Icon = Theme.IconFont((int)Math.Round(IconBox * scale));
         }
 
-        public void Dispose() { Title.Dispose(); Detail.Dispose(); Icon?.Dispose(); Format.Dispose(); }
+        public void Dispose() { Title.Dispose(); Detail.Dispose(); Icon?.Dispose(); Format.Dispose(); Wrap.Dispose(); }
     }
 
     /// <summary>말풍선 색: 바탕, 테두리, 제목, 설명, 아이콘.</summary>
@@ -179,7 +191,8 @@ static class OverlayRenderer
     {
         var max = new SizeF(MaxText * scale, 1000);
         var title = g.MeasureString(c.Title, f.Title, max, f.Format);
-        var detail = c.Detail is { Length: > 0 } d ? g.MeasureString(d, f.Detail, max, f.Format) : SizeF.Empty;
+        var detailMax = new SizeF(Math.Max(MaxText * scale, title.Width), f.Detail.GetHeight(g) * DetailLines + 1);
+        var detail = c.Detail is { Length: > 0 } d ? g.MeasureString(d, f.Detail, detailMax, f.Wrap) : SizeF.Empty;
         return (title, detail);
     }
 
@@ -257,7 +270,7 @@ static class OverlayRenderer
         if (!detail.IsEmpty)
         {
             using var brush = new SolidBrush(colors.Detail);
-            g.DrawString(c.Detail!, fonts.Detail, brush, new RectangleF(x, y + title.Height + LineGap * scale, maxW + 1, detail.Height + 1), fonts.Format);
+            g.DrawString(c.Detail!, fonts.Detail, brush, new RectangleF(x, y + title.Height + LineGap * scale, maxW + 1, detail.Height + 1), fonts.Wrap);
         }
         return bmp;
     }

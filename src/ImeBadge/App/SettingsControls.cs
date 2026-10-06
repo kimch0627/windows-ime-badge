@@ -63,6 +63,7 @@ static class Glyphs
     public const string Switch = "\uE8AB";       // Switch (⇄, 창 바꾸기)
     public const string Delete = "\uE74D";       // Delete (휴지통)
     public const string Memory = "\uE81C";       // History (되돌아가는 시계)
+    public const string Shield = "\uE730";       // 느낌표 방패(경고)
 }
 
 /// <summary>

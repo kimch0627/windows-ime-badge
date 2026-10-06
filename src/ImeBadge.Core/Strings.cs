@@ -255,7 +255,7 @@ public static class Strings
         ["exclude.removeItem.name"] = "{0} 삭제",
         ["exclude.empty"] = "아직 제외한 앱이 없습니다.",
 
-        // ── 실험 기능 페이지 (니모닉: S V K W M C) ──
+        // ── 실험 기능 페이지 (니모닉: S V K W M C F) ──
         ["nav.experimental"] = "실험 기능",
         ["page.experimental.desc"] = "아직 다듬는 중인 커서 관련 기능입니다. 모두 처음에는 꺼져 있고, 앱에 따라 잘 맞지 않을 수 있습니다.",
         ["section.exp.caret"] = "커서 찾기",
@@ -282,6 +282,11 @@ public static class Strings
         ["field.hint.hangul.detail"] = "지금은 영문 입력이에요. 한/영 키로 바꿀 수 있어요.",
         ["field.hint.english"] = "이 칸에서는 보통 영문으로 썼어요",
         ["field.hint.english.detail"] = "지금은 한글 입력이에요. 한/영 키로 바꿀 수 있어요.",
+        ["exp.focusSteal"] = "포커스 뺏김 경고(&F)",
+        ["exp.focusSteal.desc"] = "글자를 치는 도중에 다른 창이 앞으로 튀어나와 입력이 그 창으로 가기 시작하면, 쓰던 자리에 경고를 띄웁니다.",
+        ["exp.focusSteal.tip"] = "직전까지 글자를 치고 있었고, 마우스나 Alt·Win·Ctrl 없이 활성 창이 바뀌었고, 바뀐 직후에도 입력이 이어질 때만 알립니다. 입력은 Windows 가 알려 주는 '마지막 입력 시각' 만 보고 어떤 키를 눌렀는지는 읽지 않습니다(키보드 훅 없음). Enter 로 프로그램을 연 뒤 곧바로 치기 시작하면 경고가 뜰 수도 있습니다.",
+        ["steal.title"] = "입력이 다른 창으로 가고 있어요",
+        ["steal.detail"] = "{0} 창이 앞으로 나왔어요. 쓰던 곳으로 돌아가려면 Alt+Tab 을 누르세요.",
 
         // ── 정보 페이지 ──
         ["about.update"] = "업데이트",
@@ -571,7 +576,7 @@ public static class Strings
         ["exclude.removeItem.name"] = "Remove {0}",
         ["exclude.empty"] = "No apps are excluded yet.",
 
-        // ── Experimental page (mnemonics: S V K W M C) ──
+        // ── Experimental page (mnemonics: S V K W M C F) ──
         ["nav.experimental"] = "Experimental",
         ["page.experimental.desc"] = "Caret features that are still being polished. They are all off at first and may not work well in every app.",
         ["section.exp.caret"] = "Finding the caret",
@@ -598,6 +603,11 @@ public static class Strings
         ["field.hint.hangul.detail"] = "Input is English now. Press the Korean/English key to switch.",
         ["field.hint.english"] = "You usually type English here",
         ["field.hint.english.detail"] = "Input is Korean now. Press the Korean/English key to switch.",
+        ["exp.focusSteal"] = "&Focus-steal warning",
+        ["exp.focusSteal.desc"] = "If another window jumps to the front while you are typing and starts receiving your keystrokes, a warning appears where you were typing.",
+        ["exp.focusSteal.tip"] = "It warns only when you were typing just before, the active window changed without the mouse or Alt, Win or Ctrl, and input kept coming right after the change. Only the 'last input time' that Windows reports is used; which keys you press is never read (no keyboard hook). Opening a program with Enter and typing right away may also show the warning.",
+        ["steal.title"] = "Your typing is going to another window",
+        ["steal.detail"] = "{0} came to the front. Press Alt+Tab to go back.",
 
         // ── About page ──
         ["about.update"] = "Updates",

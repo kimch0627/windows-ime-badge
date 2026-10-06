@@ -198,6 +198,27 @@ static class Native
         (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 || (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0
         || (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
 
+    /// <summary>지금 Alt·Win·Ctrl 중 하나라도 눌려 있는가(실제 키 상태). 창을 바꾸는 단축키(Alt+Tab, Win+숫자 등)를 쓰는 중인지 가린다.</summary>
+    public static bool IsSwitchKeyDown() =>
+        IsKeyDown(VK_MENU) || IsKeyDown(VK_LWIN) || IsKeyDown(VK_RWIN) || IsKeyDown(VK_CONTROL);
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+
+    [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
+
+    /// <summary>
+    /// 이 세션의 마지막 입력(키보드·마우스) 시각을 Environment.TickCount64 기준 ms 로. 어떤 키인지는 알 수 없고 시각만 있다.
+    /// 못 읽으면 <see cref="long.MinValue"/>. (GetLastInputInfo 의 시각은 49.7일마다 돌아오는 32비트 GetTickCount 라 차이로 바꾼다.)
+    /// </summary>
+    public static long LastInputMs()
+    {
+        var info = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf<LASTINPUTINFO>() };
+        if (!GetLastInputInfo(ref info)) return long.MinValue;
+        uint idle = unchecked((uint)Environment.TickCount - info.dwTime);
+        return Environment.TickCount64 - idle;
+    }
+
     public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
     public const uint EVENT_OBJECT_FOCUS = 0x8005;
     public const uint EVENT_OBJECT_LOCATIONCHANGE = 0x800B;      // 창·caret·마우스 포인터 등의 위치 변경. idObject 로 걸러 써야 한다
