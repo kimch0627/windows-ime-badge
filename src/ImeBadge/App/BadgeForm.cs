@@ -1292,24 +1292,35 @@ sealed class BadgeForm : Form, IExperimentHost
     /// 마지막으로 고른 한/영을 다른 프로그램에도 맞춘다(<see cref="ImeModeKeeper"/> 가 언제·무엇으로 바꿀지 정한다). 입력칸이 잡힌 뒤에만 바꾸고,
     /// 먼저 IME 에 요청한 뒤 그대로면 한/영 키를 한 번 보낸다(<see cref="ImeWriter"/>). 바뀐 결과는 다음 갱신에 읽혀 배지가 펄스로 보여 준다.
     /// 비밀번호 칸은 한글로 바꾸지 않고, 거기서 바꾼 모드는 기억하지 않는다. 제외 앱·전체 화면·이 프로그램 창(Suppressed)과 다른 언어는 건드리지 않는다.
+    /// 포커스를 가진 칸도 넘겨, 프로그램이 활성화되며 포커스를 이리저리 옮길 때(Xshell) 바뀐 모드를 한/영 키로 착각하지 않게 한다.
     /// </summary>
     void KeepImeMode(in Snapshot s)
     {
         bool? hangul = s.Suppressed is not null ? null : s.State switch { ImeState.Hangul => true, ImeState.English => false, _ => null };
         bool password = s.Facts.Password;
         bool canSwitch = s.Caret is not null && !(password && _modeKeeper.Desired == true);
-        if (_modeKeeper.Observe((long)s.Foreground, hangul, canSwitch, learn: !password, Environment.TickCount64) is not bool want) return;
+        bool? before = _modeKeeper.Desired;
+        bool? want = _modeKeeper.Observe((long)s.Foreground, (long)s.Focus, hangul, canSwitch, learn: !password, Environment.TickCount64);
+        if (before is not null && _modeKeeper.Desired is bool chosen && chosen != before)
+            Log.Write($"keep mode: remember {(chosen ? "Hangul" : "English")} (Korean/English key in fg='{Native.ClassName(s.Foreground)}')");
+        if (want is not bool target) return;
 
-        string mode = want ? "Hangul" : "English", window = Native.ClassName(s.Foreground);
-        if (_modeKeeper.Attempts == 1 && !s.PreferTsf && ImeWriter.RequestImm(s.Focus, want))
+        string mode = target ? "Hangul" : "English", window = Native.ClassName(s.Foreground);
+        if (_modeKeeper.Attempts == 1 && !s.PreferTsf && ImeWriter.RequestImm(s.Focus, target))
         {
             Log.Write($"keep mode: {mode} via IME request fg='{window}'");
             return;   // 다음 갱신에 바뀌었는지 본다. 그대로면 한/영 키로 한 번 더(ImeModeKeeper.RetryMs 뒤)
         }
+        if (!_modeKeeper.KeyAllowed)
+        {
+            Log.Write($"keep mode: {mode} not applied, Korean/English key already sent fg='{window}'");
+            _modeKeeper.GiveUp();   // 한/영 키는 뒤집기라 한 창에 두 번 보내면 반대가 될 수 있다
+            return;
+        }
         if (ImeWriter.TapHangulKey()) Log.Write($"keep mode: {mode} via Korean/English key fg='{window}'");
         else if (Native.IsModifierDown()) { _modeKeeper.NotSent(); return; }   // Alt+Tab 의 Alt 등을 아직 누르고 있다: 다음 갱신에
         else Log.Write($"keep mode: could not send key fg='{window}'");
-        _modeKeeper.GiveUp();   // 한/영 키는 누를 때마다 뒤집으므로 이 창에서는 이것으로 끝낸다
+        _modeKeeper.GiveUp();   // 한/영 키는 누를 때마다 뒤집으므로 이 창에서는 다시 보내지 않는다
     }
 
     /// <summary>위치·크기는 그대로 두고 z-order만 최상위 창들 중 맨 위로 올린다. 포커스는 건드리지 않는다.</summary>
