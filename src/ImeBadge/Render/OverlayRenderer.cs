@@ -11,10 +11,10 @@ namespace ImeBadge;
 enum CalloutKind { Info, Warning }
 
 /// <summary>
-/// 커서 옆 말풍선의 내용: 굵은 제목 한 줄과 설명 한 줄(없어도 됨). 왼쪽 아이콘은 <paramref name="Glyph"/>(아이콘 글꼴 글자)이고,
-/// <paramref name="Badge"/> 가 있으면 아이콘 대신 그 상태의 배지를 그린다(입력칸별 한/영 기억: "이 칸은 보통 [a]").
+/// 커서 옆 말풍선의 내용: 굵은 제목 한 줄과 설명(두 줄까지, 없어도 됨). 왼쪽 아이콘은 <paramref name="Glyph"/>(아이콘 글꼴 글자),
+/// 없으면 종류의 기본 아이콘(정보 ⓘ, 주의 ⚠).
 /// </summary>
-sealed record CalloutContent(CalloutKind Kind, string Title, string? Detail = null, string? Glyph = null, ImeState? Badge = null);
+sealed record CalloutContent(CalloutKind Kind, string Title, string? Detail = null, string? Glyph = null);
 
 /// <summary>
 /// 실험 기능의 그림: 커서 소나(<see cref="Sonar"/>)의 한 장면과 커서 옆 말풍선. 배지처럼 미리 곱한 알파(PArgb) 비트맵이라
@@ -174,18 +174,8 @@ static class OverlayRenderer
 
     static string DefaultGlyph(CalloutKind kind) => kind == CalloutKind.Warning ? "\uE7BA" : "\uE946";   // Warning / Info
 
-    /// <summary>아이콘 자리의 크기. 배지를 그리면 그 배지 그림의 크기, 아니면 아이콘 글꼴 한 칸.</summary>
-    static SizeF IconSize(CalloutContent c, float scale, in BadgeTheme theme, CalloutFonts fonts)
-    {
-        if (c.Badge is ImeState st)
-        {
-            using var b = BadgeRenderer.Render(st, BadgeStyle.Pill, BadgeScale(scale), theme);
-            return new SizeF(b.Width, b.Height);
-        }
-        return fonts.Icon is null ? SizeF.Empty : new SizeF(IconBox * scale, IconBox * scale);
-    }
-
-    static float BadgeScale(float scale) => 0.9f * scale;
+    /// <summary>아이콘 자리의 크기: 아이콘 글꼴 한 칸. 아이콘 글꼴이 없으면(드묾) 비운다.</summary>
+    static SizeF IconSize(float scale, CalloutFonts fonts) => fonts.Icon is null ? SizeF.Empty : new SizeF(IconBox * scale, IconBox * scale);
 
     static (SizeF Title, SizeF Detail) TextSizes(Graphics g, CalloutContent c, CalloutFonts f, float scale)
     {
@@ -197,14 +187,14 @@ static class OverlayRenderer
     }
 
     /// <summary>몸통(꼬리·그림자 제외) 크기. 위치(<see cref="CalloutLayout"/>)를 정한 뒤 <see cref="Callout"/> 으로 그린다.</summary>
-    public static Size MeasureCallout(CalloutContent c, float scale, in BadgeTheme theme)
+    public static Size MeasureCallout(CalloutContent c, float scale)
     {
         using var fonts = new CalloutFonts(scale);
         using var probe = new Bitmap(1, 1);
         using var g = Graphics.FromImage(probe);
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
         var (title, detail) = TextSizes(g, c, fonts, scale);
-        var icon = IconSize(c, scale, theme, fonts);
+        var icon = IconSize(scale, fonts);
         float textW = Math.Max(title.Width, detail.Width);
         float textH = title.Height + (detail.IsEmpty ? 0 : LineGap * scale + detail.Height);
         float w = PadX * scale + (icon.IsEmpty ? 0 : icon.Width + IconGap * scale) + textW + PadX * scale;
@@ -217,7 +207,7 @@ static class OverlayRenderer
     /// <see cref="CalloutLayout"/> 의 결과다. 그림 안에서 몸통의 왼쪽 위(<paramref name="bodyOffset"/>)를 함께 돌려준다:
     /// 창 위치 = 몸통 위치 − bodyOffset. <paramref name="dark"/> 를 주지 않으면 Windows 앱 모드(밝게/어둡게)를 따른다.
     /// </summary>
-    public static Bitmap Callout(CalloutContent c, float scale, Size body, bool below, int tailX, in BadgeTheme theme, out Point bodyOffset, bool? dark = null)
+    public static Bitmap Callout(CalloutContent c, float scale, Size body, bool below, int tailX, out Point bodyOffset, bool? dark = null)
     {
         using var fonts = new CalloutFonts(scale);
         int pad = (int)Math.Ceiling(Shadow * scale), tail = TailHeight(scale);
@@ -247,14 +237,9 @@ static class OverlayRenderer
         using (var border = new Pen(colors.Border, Math.Max(1f, scale)) { LineJoin = LineJoin.Round }) g.DrawPath(border, path);
 
         var (title, detail) = TextSizes(g, c, fonts, scale);
-        var icon = IconSize(c, scale, theme, fonts);
+        var icon = IconSize(scale, fonts);
         float x = rect.X + PadX * scale, cy = rect.Y + rect.Height / 2;
-        if (c.Badge is ImeState st)
-        {
-            using var b = BadgeRenderer.Render(st, BadgeStyle.Pill, BadgeScale(scale), theme);
-            g.DrawImage(b, new Rectangle((int)Math.Round(x), (int)Math.Round(cy - b.Height / 2f), b.Width, b.Height));
-        }
-        else if (fonts.Icon is not null)
+        if (fonts.Icon is not null)
         {
             using var brush = new SolidBrush(colors.Icon);
             using var center = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };

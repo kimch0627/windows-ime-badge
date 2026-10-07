@@ -86,9 +86,6 @@ sealed class BadgeForm : Form, IExperimentHost
     Point _lastPointer = Cursor.Position;
     long _lastPointerMs;
     const int PointerSwitchMs = 700;
-    FieldMemory? _fieldMemory;   // 입력칸별 한/영 기억. 처음 쓸 때 파일에서 읽는다(Fields)
-    bool? _fieldHint;            // 지금 말풍선으로 알린 모드(한글 true / 영문 false)
-    const int FieldHintMs = 4000;
     // 포커스 뺏김 경고: 창이 바뀐 순간을 기억해 두고, 바뀐 직후에도 입력이 이어지는지 폴링마다 본다(CheckFocusSteal).
     readonly FocusStealGuard _stealGuard = new();
     Rectangle? _stealCaret;      // 글자를 치던 자리(바뀌기 전 창의 caret). 경고를 여기에 띄운다
@@ -637,7 +634,6 @@ sealed class BadgeForm : Form, IExperimentHost
         var hk = (_settings.HotkeyEnabled, _settings.Hotkey, _settings.CaretSonar, _settings.CaretSonarHotkey);
         if (hk != _appliedHotkey || save) { _appliedHotkey = hk; ApplyHotkey(warnOnFailure: save); }
         if (!_settings.CaretSonar) _sonarPendingFg = IntPtr.Zero;
-        if (!_settings.RememberFieldMode) HideFieldHint();
         if (!_settings.FocusStealWarning) { _stealGuard.Disarm(); _callout?.Hide("steal"); }
         if (!_settings.PasswordWarning) { _passwordGuard.Reset(); _callout?.Hide("password"); }
         if (!_settings.KeepImeMode) _modeKeeper.Reset();
@@ -1009,11 +1005,9 @@ sealed class BadgeForm : Form, IExperimentHost
         UpdateTray(s.State, s.CapsLock, s.Insert);
 
         long now = Environment.TickCount64;
-        bool typed = false;   // 같은 창 안에서 caret 이 움직였다(글자를 쳤다)
         if (appearing || changed || s.Foreground != _lastFg) _lastChangeMs = now;
-        else if (s.Caret is { } cr && _lastCaret is { } prev && cr != prev) { _lastTypingMs = now; typed = true; }
+        else if (s.Caret is { } cr && _lastCaret is { } prev && cr != prev) _lastTypingMs = now;
         _lastCaret = s.Caret;
-        if (_settings.RememberFieldMode) RememberField(s, caret, typed);
         if (_settings.PasswordWarning) WarnPassword(s, caret);
         // 선택한 글이 생기면(다음 글자가 그 글을 지운다) "바뀔 때만" 표시 방식에서도 잠깐 보이고, "타이핑 중 옅게" 에서도 잠깐 또렷하다.
         if (s.Facts.Selection && !_lastSelection) _lastChangeMs = now;
@@ -1133,8 +1127,6 @@ sealed class BadgeForm : Form, IExperimentHost
     void OnForegroundChanged()
     {
         if (TracksUserInput) TrackUserInput();
-        // 입력칸 기억: 다른 창에 다녀오면 같은 입력칸으로 돌아와도 "들어온" 것으로 본다(그사이 한/영을 바꿨을 수 있다).
-        if (_settings.RememberFieldMode) { _fieldMemory?.Observe(null, null, false, DateTime.UtcNow); HideFieldHint(); }
         if (_settings.PasswordWarning) { _passwordGuard.Reset(); _callout?.Hide("password"); }
         WatchForFocusSteal();
         _sonarPendingFg = IntPtr.Zero;
@@ -1197,7 +1189,7 @@ sealed class BadgeForm : Form, IExperimentHost
     /// </summary>
     void ShowCallout(string tag, CalloutContent content, Rectangle anchor, int holdMs, bool? preferBelow = null)
     {
-        try { (_callout ??= new CalloutPlayer()).Show(tag, content, anchor, preferBelow ?? CalloutBelow, holdMs, AnimationsOn, BadgeTheme.From(_settings)); }
+        try { (_callout ??= new CalloutPlayer()).Show(tag, content, anchor, preferBelow ?? CalloutBelow, holdMs, AnimationsOn); }
         catch (Exception ex) { Log.Error("callout failed", ex); }
     }
 
@@ -1272,52 +1264,6 @@ sealed class BadgeForm : Form, IExperimentHost
         catch { }
         string name = ImeReader.ProcessName(pid);
         return name.Length > 0 ? name : Strings.Get("diag.unknown");
-    }
-
-    // ── 실험 기능: 입력칸별 한/영 기억 ──
-    string FieldMemoryPath => System.IO.Path.Combine(_paths.SettingsDir, FieldMemoryStore.FileName);
-
-    FieldMemory Fields => _fieldMemory ??= FieldMemoryStore.Load(FieldMemoryPath);
-
-    public int FieldMemoryCount => Fields.Count;
-
-    public void ClearFieldMemory()
-    {
-        Fields.Clear();
-        Fields.MarkSaved();
-        FieldMemoryStore.Delete(FieldMemoryPath);
-        HideFieldHint();
-        Log.Write("field memory cleared");
-    }
-
-    /// <summary>
-    /// 입력칸에 들어왔을 때 기억한 모드가 지금과 다르면 말풍선으로 알리고(그 모드의 배지를 함께), 알려 준 모드로 바꾸면 바로 내린다.
-    /// 같은 칸에서 몇 자 치면 <see cref="FieldMemory"/> 가 그 모드를 기억하고, 그때마다 파일에 쓴다(드물다: 칸과 모드가 바뀔 때만).
-    /// </summary>
-    void RememberField(in Snapshot s, Rectangle caret, bool typed)
-    {
-        var memory = Fields;
-        bool? hangul = s.State switch { ImeState.Hangul => true, ImeState.English => false, _ => null };
-        bool entered = s.Facts.Field != memory.CurrentField;
-        var hint = memory.Observe(s.Facts.Field, hangul, typed, DateTime.UtcNow);
-        if (memory.Dirty) FieldMemoryStore.Save(memory, FieldMemoryPath);
-        if (entered) HideFieldHint();
-        if (hint is bool usual)
-        {
-            _fieldHint = usual;
-            ShowCallout("field", new CalloutContent(CalloutKind.Info,
-                Strings.Get(usual ? "field.hint.hangul" : "field.hint.english"),
-                Strings.Get(usual ? "field.hint.hangul.detail" : "field.hint.english.detail"),
-                Badge: usual ? ImeState.Hangul : ImeState.English), caret, holdMs: FieldHintMs);
-        }
-        else if (_fieldHint is bool want && hangul == want) HideFieldHint();   // 알려 준 대로 바꿨다
-    }
-
-    void HideFieldHint()
-    {
-        if (_fieldHint is null) return;
-        _fieldHint = null;
-        _callout?.Hide("field");
     }
 
     // ── 실험 기능: 비밀번호 칸 경고 ──
@@ -1452,7 +1398,6 @@ sealed class BadgeForm : Form, IExperimentHost
             _pulseBase?.Dispose();
             _sonar?.Dispose();
             _callout?.Dispose();
-            if (_fieldMemory is { Dirty: true } fields) FieldMemoryStore.Save(fields, FieldMemoryPath);
             _settingsForm?.Dispose();
             _updateProgress?.Dispose();
             _tray.Visible = false;

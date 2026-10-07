@@ -152,14 +152,14 @@ sealed class CalloutPlayer : IDisposable
     /// <param name="anchor">가리킬 커서 사각형(화면 좌표).</param>
     /// <param name="preferBelow">자리가 있으면 커서 아래에(배지가 커서 위에 있을 때).</param>
     /// <param name="holdMs">보이는 시간. 0 이하면 <see cref="Hide"/> 할 때까지.</param>
-    public void Show(string tag, CalloutContent content, Rectangle anchor, bool preferBelow, int holdMs, bool animate, in BadgeTheme theme)
+    public void Show(string tag, CalloutContent content, Rectangle anchor, bool preferBelow, int holdMs, bool animate)
     {
         float scale = Native.DpiScaleAt(anchor.Location);
-        var body = OverlayRenderer.MeasureCallout(content, scale, theme);
+        var body = OverlayRenderer.MeasureCallout(content, scale);
         var area = Screen.FromPoint(anchor.Location).WorkingArea;
         var place = CalloutLayout.Compute(anchor, body, OverlayRenderer.TailHeight(scale), (int)Math.Round(3 * scale), area, preferBelow,
             OverlayRenderer.TailInset(scale));
-        var bmp = OverlayRenderer.Callout(content, scale, body, place.Below, place.TailX, theme, out var offset);
+        var bmp = OverlayRenderer.Callout(content, scale, body, place.Below, place.TailX, out var offset);
         _bmp?.Dispose();
         _bmp = bmp;
         _pos = new Point(place.Location.X - offset.X, place.Location.Y - offset.Y);

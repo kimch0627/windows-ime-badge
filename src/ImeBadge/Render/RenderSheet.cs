@@ -267,8 +267,6 @@ static class RenderSheet
         var calloutCases = new (string Name, CalloutContent Content)[]
         {
             ("소나: 커서 못 찾음", new(CalloutKind.Info, Strings.Get("sonar.notFound"), Strings.Get("sonar.notFound.detail"), Glyphs.Sonar)),
-            ("입력칸 기억: 보통 영문", new(CalloutKind.Info, Strings.Get("field.hint.english"), Strings.Get("field.hint.english.detail"), Badge: ImeState.English)),
-            ("입력칸 기억: 보통 한글", new(CalloutKind.Info, Strings.Get("field.hint.hangul"), Strings.Get("field.hint.hangul.detail"), Badge: ImeState.Hangul)),
             ("포커스 뺏김 경고", new(CalloutKind.Warning, Strings.Get("steal.title"), Strings.Format("steal.detail", "KakaoTalk"), Glyphs.Shield)),
             ("비밀번호 칸: 한글", new(CalloutKind.Warning, Strings.Get("password.title"), Strings.Get("password.hangul"), Glyphs.Lock)),
             ("비밀번호 칸: 둘 다", new(CalloutKind.Warning, Strings.Get("password.title"), Strings.Get("password.both"), Glyphs.Lock)),
@@ -276,7 +274,7 @@ static class RenderSheet
         foreach (var (name, content) in calloutCases)
         {
             var cells = new[] { (false, true), (false, false), (true, true), (true, false) }
-                .Select(c => CalloutCell(content, Main, c.Item1, c.Item2, classic)).ToList();
+                .Select(c => CalloutCell(content, Main, c.Item1, c.Item2)).ToList();
             float w = cells.Max(c => c.Width) + 4;
             s.Headers(new[] { ("밝게 · 아래", new[] { "" }, w), ("밝게 · 위", new[] { "" }, w), ("어둡게 · 아래", new[] { "" }, w), ("어둡게 · 위", new[] { "" }, w) });
             s.Row(name, cells.Select((c, i) => new SheetPanel(i < 2 ? Light : Dark, w, new List<Bitmap> { c })).ToList());
@@ -335,9 +333,9 @@ static class RenderSheet
     }
 
     /// <summary>caret(선)과, 앱과 같은 위치 계산(<see cref="CalloutLayout"/>)으로 놓은 말풍선 한 칸.</summary>
-    static Bitmap CalloutCell(CalloutContent content, float scale, bool dark, bool below, BadgeTheme theme)
+    static Bitmap CalloutCell(CalloutContent content, float scale, bool dark, bool below)
     {
-        var body = OverlayRenderer.MeasureCallout(content, scale, theme);
+        var body = OverlayRenderer.MeasureCallout(content, scale);
         int tail = OverlayRenderer.TailHeight(scale), h = (int)(16 * scale), margin = (int)(10 * scale);
         var size = new Size(body.Width + (int)(40 * scale), body.Height + tail + h + 3 * margin);
         var cell = new Bitmap(size.Width, size.Height, PixelFormat.Format32bppArgb);
@@ -346,7 +344,7 @@ static class RenderSheet
         var caret = new Rectangle((int)(30 * scale), below ? margin : size.Height - h - margin, Math.Max(1, (int)scale), h);
         using (var brush = new SolidBrush(dark ? Color.White : Color.Black)) g.FillRectangle(brush, caret);
         var place = CalloutLayout.Compute(caret, body, tail, (int)Math.Round(3 * scale), new Rectangle(Point.Empty, size), below, OverlayRenderer.TailInset(scale));
-        using var bmp = OverlayRenderer.Callout(content, scale, body, place.Below, place.TailX, theme, out var offset, dark);
+        using var bmp = OverlayRenderer.Callout(content, scale, body, place.Below, place.TailX, out var offset, dark);
         g.DrawImage(bmp, new Rectangle(place.Location.X - offset.X, place.Location.Y - offset.Y, bmp.Width, bmp.Height));
         return cell;
     }

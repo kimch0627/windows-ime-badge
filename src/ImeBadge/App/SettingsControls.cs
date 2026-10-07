@@ -61,8 +61,6 @@ static class Glyphs
     public const string Experimental = "\uF196"; // TestBeaker (플라스크)
     public const string Sonar = "\uF272";        // 과녁(소나)
     public const string Switch = "\uE8AB";       // Switch (⇄, 창 바꾸기)
-    public const string Delete = "\uE74D";       // Delete (휴지통)
-    public const string Memory = "\uE81C";       // History (되돌아가는 시계)
     public const string Shield = "\uE730";       // 느낌표 방패(경고)
     public const string Selection = "\uE8B3";    // SelectAll (점선 상자)
     public const string Lock = "\uE72E";         // Lock

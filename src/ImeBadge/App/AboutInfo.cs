@@ -39,7 +39,6 @@ static class AboutInfo
         var on = new List<string>();
         if (s.CaretSonar) on.Add($"sonar({s.CaretSonarHotkey}{(s.CaretSonarOnSwitch ? ", on switch" : "")})");
         if (s.KeepImeMode) on.Add("keep mode");
-        if (s.RememberFieldMode) on.Add("field memory");
         if (s.FocusStealWarning) on.Add("focus steal");
         if (s.ShowSelection) on.Add("selection");
         if (s.PasswordWarning) on.Add("password");

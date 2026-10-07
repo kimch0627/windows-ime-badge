@@ -75,7 +75,7 @@ static class ImeReader
             Native.ClientToScreen(gti.hwndCaret, ref br);
             caret = Rectangle.FromLTRB(tl.X, tl.Y, Math.Max(br.X, tl.X + 1), br.Y);
             dump?.Append($" caret:win32('{Native.ClassName(gti.hwndCaret)}')");
-            facts = Focus.FromWin32(gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : gti.hwndCaret, process, query);
+            facts = Focus.FromWin32(gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : gti.hwndCaret, query);
         }
         else
         {
@@ -86,14 +86,13 @@ static class ImeReader
             {
                 caret = cw.Rect;
                 caretWindow = cw.Hwnd;
-                facts = Focus.FromCursorWindow(gti.hwndFocus, process, query);
             }
             else
             {
                 // UI Automation(→ 필요하면 MSAA). 대상 앱이 바쁘면 오래 걸릴 수 있어 UI 스레드 밖에서 묻고 잠깐만 기다린다.
                 var hit = A11yCaret.Find(gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target, process, query, dump);
                 caret = hit.Caret;
-                facts = Focus.FromUia(hit.Facts, process);
+                facts = hit.Facts;
             }
         }
         Focus.Describe(facts, dump);

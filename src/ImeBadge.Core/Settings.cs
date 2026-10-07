@@ -100,11 +100,6 @@ public sealed class Settings
     public string CaretSonarHotkey { get; set; } = HotkeySpec.SonarDefault.ToString();
     /// <summary><see cref="CaretSonar"/> 의 하위 옵션: 키보드(Alt+Tab 등)로 다른 창에 오면 단축키 없이도 한 번 보여 준다.</summary>
     public bool CaretSonarOnSwitch { get; set; } = true;
-    /// <summary>
-    /// 입력칸별 한/영 기억: 입력칸마다 마지막으로 쓴 한/영을 기억했다가 다시 들어왔을 때 지금과 다르면 커서 옆에 알려 준다(<see cref="FieldMemory"/>).
-    /// 기억은 설정 파일이 아니라 <see cref="FieldMemoryStore"/> 의 파일에 둔다(내보내기·가져오기에 따라가지 않는다).
-    /// </summary>
-    public bool RememberFieldMode { get; set; }
     /// <summary>포커스 뺏김 경고: 글자를 치는 도중 다른 창이 앞으로 나와 입력이 그 창으로 가기 시작하면 쓰던 자리에 알린다(<see cref="FocusStealGuard"/>).</summary>
     public bool FocusStealWarning { get; set; }
     /// <summary>선택 영역 덮어쓰기 표시: 선택한 글이 있으면(다음 글자가 그 글을 지운다) 배지 테두리를 점선으로 바꾼다(<see cref="BadgeMark.Selection"/>).</summary>
@@ -182,7 +177,6 @@ public sealed class Settings
         ShowShiftHold = other.ShowShiftHold; ShowShiftImmediately = other.ShowShiftImmediately; ShowInsert = other.ShowInsert;
         Theme = other.Theme; Character = other.Character; Visibility = other.Visibility;
         CaretSonar = other.CaretSonar; CaretSonarHotkey = other.CaretSonarHotkey; CaretSonarOnSwitch = other.CaretSonarOnSwitch;
-        RememberFieldMode = other.RememberFieldMode;
         FocusStealWarning = other.FocusStealWarning;
         ShowSelection = other.ShowSelection;
         PasswordWarning = other.PasswordWarning;

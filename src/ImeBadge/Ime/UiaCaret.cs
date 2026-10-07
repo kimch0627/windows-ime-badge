@@ -130,35 +130,17 @@ static class UiaCaret
         catch (Exception ex) { dump?.Append($" uia:sel-EXC 0x{ex.HResult:X8}"); return false; }
     }
 
-    /// <summary>입력칸 이름 중 키에 쓰는 앞부분의 길이. 이름에 바뀌는 숫자(글자 수 등)가 붙는 앱이 있어 너무 길게 쓰지 않는다.</summary>
-    const int NameKeyLength = 64;
-
-    /// <summary>
-    /// 실험 기능이 물은 입력칸 정보. 입력칸 값(해시 전)은 컨트롤 종류·자동화 ID·이름이고, 둘 다 비었을 때만 클래스 이름을 쓴다
-    /// (웹 페이지의 클래스 이름은 HTML class 라 포커스·내용에 따라 바뀌기도 한다). 비밀번호 칸은 입력칸 값을 만들지 않는다.
-    /// </summary>
+    /// <summary>실험 기능이 물은 입력칸 정보: 비밀번호 칸인지(물었을 때만)와 선택 영역(<see cref="Find"/> 이 알아낸 것).</summary>
     static FocusFacts Facts(Uia.IUIAutomationElement el, FocusQuery query, bool selection, StringBuilder? dump)
     {
-        string? field = null;
         bool password = false;
-        try
+        if ((query & FocusQuery.Password) != 0)
         {
-            if ((query & (FocusQuery.Field | FocusQuery.Password)) != 0)
-                password = el.GetCurrentPropertyValue(Uia.UIA_IsPasswordPropertyId) is bool p && p;
-            if ((query & FocusQuery.Field) != 0 && !password)
-            {
-                int ct = el.GetCurrentPropertyValue(Uia.UIA_ControlTypePropertyId) is int i ? i : 0;
-                string id = Text(el, Uia.UIA_AutomationIdPropertyId), name = Text(el, Uia.UIA_NamePropertyId);
-                if (name.Length > NameKeyLength) name = name[..NameKeyLength];
-                string cls = id.Length == 0 && name.Length == 0 ? Text(el, Uia.UIA_ClassNamePropertyId) : "";
-                field = $"{ct}|{cls}|{id}|{name}";
-            }
+            try { password = el.GetCurrentPropertyValue(Uia.UIA_IsPasswordPropertyId) is bool p && p; }
+            catch (Exception ex) { dump?.Append($" uia:facts-EXC 0x{ex.HResult:X8}"); }
         }
-        catch (Exception ex) { dump?.Append($" uia:facts-EXC 0x{ex.HResult:X8}"); }
-        return new FocusFacts(field, password && (query & FocusQuery.Password) != 0, selection);
+        return new FocusFacts(password, selection);
     }
-
-    static string Text(Uia.IUIAutomationElement el, int property) => (el.GetCurrentPropertyValue(property) as string ?? "").Trim();
 
     /// <summary>텍스트 범위의 첫 사각형(화면 좌표). 없거나 높이가 0이면 null.</summary>
     static RectangleF? FirstRect(Uia.IUIAutomationTextRange range)

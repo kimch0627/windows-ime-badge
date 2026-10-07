@@ -255,7 +255,7 @@ public static class Strings
         ["exclude.removeItem.name"] = "{0} 삭제",
         ["exclude.empty"] = "아직 제외한 앱이 없습니다.",
 
-        // ── 실험 기능 페이지 (니모닉: S V K W H M C F L P) ──
+        // ── 실험 기능 페이지 (니모닉: S V K W H F L P) ──
         ["nav.experimental"] = "실험 기능",
         ["page.experimental.desc"] = "아직 다듬는 중인 커서 관련 기능입니다. 모두 처음에는 꺼져 있고, 앱에 따라 잘 맞지 않을 수 있습니다.",
         ["section.exp.caret"] = "커서 찾기",
@@ -274,17 +274,6 @@ public static class Strings
         ["exp.keepMode"] = "모든 프로그램에서 한/영 유지(&H)",
         ["exp.keepMode.desc"] = "한/영 키로 고른 모드를 기억했다가, 다른 프로그램으로 가도 같은 모드로 맞춰 줍니다. 프로그램마다 한/영이 따로 바뀌는 불편을 없앱니다.",
         ["exp.keepMode.tip"] = "다른 프로그램에서 입력칸이 잡히면 기억한 모드와 비교해 다를 때 바꾸고, 배지가 한 번 살짝 커집니다. 그 프로그램에서 한/영 키를 누르면 그 모드를 새로 기억합니다. 먼저 IME 에 바꿔 달라고 요청하고, 그래도 그대로면 한/영 키를 한 번 누른 것처럼 보냅니다(다른 키는 보내지 않습니다). 비밀번호 칸을 한글로 바꾸지 않고, 제외 앱·다른 언어 입력·관리자 권한으로 실행된 프로그램(Windows 가 막습니다)은 그대로 둡니다. 일시 중지 중에는 동작하지 않습니다.",
-        ["exp.fieldMemory"] = "입력칸별 한/영 기억(&M)",
-        ["exp.fieldMemory.desc"] = "입력칸마다 마지막으로 쓴 한/영을 기억했다가, 다시 들어왔을 때 지금과 다르면 커서 옆에 알려 줍니다. 한/영을 대신 바꾸지는 않습니다.",
-        ["exp.fieldMemory.tip"] = "같은 칸에서 글자를 몇 자 치면 그때의 한/영을 기억합니다. 입력칸은 앱 이름과 입력칸 이름으로 알아보고, 그 값을 알아볼 수 없게 바꾼 값(해시)과 한/영만 이 PC 의 설정 폴더(fields.json)에 저장합니다. 입력한 글자는 저장하지 않고, 비밀번호 칸은 기억하지 않습니다. 웹 페이지는 사이트를 구별하지 못해 이름이 같은 입력칸(예: '검색')은 한 칸으로 봅니다.",
-        ["exp.fieldMemoryClear"] = "기억한 입력칸",
-        ["exp.fieldMemoryClear.desc"] = "{0}개를 기억하고 있습니다. 지우면 처음부터 다시 배웁니다.",
-        ["exp.fieldMemoryClear.empty"] = "아직 기억한 입력칸이 없습니다.",
-        ["exp.fieldMemoryClear.button"] = "지우기(&C)",
-        ["field.hint.hangul"] = "이 칸에서는 보통 한글로 썼어요",
-        ["field.hint.hangul.detail"] = "지금은 영문 입력이에요. 한/영 키로 바꿀 수 있어요.",
-        ["field.hint.english"] = "이 칸에서는 보통 영문으로 썼어요",
-        ["field.hint.english.detail"] = "지금은 한글 입력이에요. 한/영 키로 바꿀 수 있어요.",
         ["exp.focusSteal"] = "포커스 뺏김 경고(&F)",
         ["exp.focusSteal.desc"] = "글자를 치는 도중에 다른 창이 앞으로 튀어나와 입력이 그 창으로 가기 시작하면, 쓰던 자리에 경고를 띄웁니다.",
         ["exp.focusSteal.tip"] = "직전까지 글자를 치고 있었고, 마우스나 Alt·Win·Ctrl 없이 활성 창이 바뀌었고, 바뀐 직후에도 입력이 이어질 때만 알립니다. 입력은 Windows 가 알려 주는 '마지막 입력 시각' 만 보고 어떤 키를 눌렀는지는 읽지 않습니다(키보드 훅 없음). Enter 로 프로그램을 연 뒤 곧바로 치기 시작하면 경고가 뜰 수도 있습니다.",
@@ -589,7 +578,7 @@ public static class Strings
         ["exclude.removeItem.name"] = "Remove {0}",
         ["exclude.empty"] = "No apps are excluded yet.",
 
-        // ── Experimental page (mnemonics: S V K W H M C F L P) ──
+        // ── Experimental page (mnemonics: S V K W H F L P) ──
         ["nav.experimental"] = "Experimental",
         ["page.experimental.desc"] = "Caret features that are still being polished. They are all off at first and may not work well in every app.",
         ["section.exp.caret"] = "Finding the caret",
@@ -608,17 +597,6 @@ public static class Strings
         ["exp.keepMode"] = "&Hold Korean/English across apps",
         ["exp.keepMode.desc"] = "Remembers the mode you pick with the Korean/English key and applies the same mode when you move to another app, so each app no longer keeps its own mode.",
         ["exp.keepMode.tip"] = "When a text field gets focus in another app, its mode is compared with the remembered one and switched if different; the badge grows briefly. Pressing the Korean/English key in that app remembers the new mode. ImeBadge first asks the IME to switch, and if nothing changes it sends a single Korean/English key press (no other keys). Password fields are never switched to Korean, and excluded apps, other input languages and apps running as administrator (Windows blocks it) are left alone. It does not work while the badge is paused.",
-        ["exp.fieldMemory"] = "Re&member Korean/English per field",
-        ["exp.fieldMemory.desc"] = "Remembers the input mode you last used in each text field. When you come back and the mode differs, a note appears next to the caret. It never switches the mode for you.",
-        ["exp.fieldMemory.tip"] = "The mode is remembered after you type a few characters in a field. Fields are recognized by app name and field name; only an unreadable hash of those plus Korean/English is stored in the settings folder on this PC (fields.json). What you type is never stored, and password fields are not remembered. Web pages are not told apart by site, so fields with the same name (for example 'Search') count as one.",
-        ["exp.fieldMemoryClear"] = "Remembered fields",
-        ["exp.fieldMemoryClear.desc"] = "{0} fields remembered. Clearing them starts learning from scratch.",
-        ["exp.fieldMemoryClear.empty"] = "No fields remembered yet.",
-        ["exp.fieldMemoryClear.button"] = "&Clear",
-        ["field.hint.hangul"] = "You usually type Korean here",
-        ["field.hint.hangul.detail"] = "Input is English now. Press the Korean/English key to switch.",
-        ["field.hint.english"] = "You usually type English here",
-        ["field.hint.english.detail"] = "Input is Korean now. Press the Korean/English key to switch.",
         ["exp.focusSteal"] = "&Focus-steal warning",
         ["exp.focusSteal.desc"] = "If another window jumps to the front while you are typing and starts receiving your keystrokes, a warning appears where you were typing.",
         ["exp.focusSteal.tip"] = "It warns only when you were typing just before, the active window changed without the mouse or Alt, Win or Ctrl, and input kept coming right after the change. Only the 'last input time' that Windows reports is used; which keys you press is never read (no keyboard hook). Opening a program with Enter and typing right away may also show the warning.",

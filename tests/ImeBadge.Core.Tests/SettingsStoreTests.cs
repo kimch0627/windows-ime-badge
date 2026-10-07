@@ -49,7 +49,6 @@ public sealed class SettingsStoreTests : IDisposable
             CaretSonar = true,
             CaretSonarHotkey = "Ctrl+Shift+F8",
             CaretSonarOnSwitch = false,
-            RememberFieldMode = true,
             FocusStealWarning = true,
             ShowSelection = true,
             PasswordWarning = true,
@@ -78,7 +77,6 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.True(back.CaretSonar);
         Assert.Equal("Ctrl+Shift+F8", back.CaretSonarHotkey);
         Assert.False(back.CaretSonarOnSwitch);
-        Assert.True(back.RememberFieldMode);
         Assert.True(back.FocusStealWarning);
         Assert.True(back.ShowSelection);
         Assert.True(back.PasswordWarning);
@@ -174,7 +172,6 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.False(s.CaretSonar);                      // 실험 기능은 모두 기본 꺼짐
         Assert.Equal("Ctrl+Alt+J", s.CaretSonarHotkey);
         Assert.True(s.CaretSonarOnSwitch);
-        Assert.False(s.RememberFieldMode);
         Assert.False(s.FocusStealWarning);
         Assert.False(s.ShowSelection);
         Assert.False(s.PasswordWarning);
@@ -279,7 +276,6 @@ public sealed class SettingsStoreTests : IDisposable
         b.CaretSonar = true;
         b.CaretSonarHotkey = "Ctrl+Alt+K";
         b.CaretSonarOnSwitch = false;
-        b.RememberFieldMode = true;
         b.FocusStealWarning = true;
         b.ShowSelection = true;
         b.PasswordWarning = true;
@@ -291,7 +287,6 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.True(a.CaretSonar);
         Assert.Equal("Ctrl+Alt+K", a.CaretSonarHotkey);
         Assert.False(a.CaretSonarOnSwitch);
-        Assert.True(a.RememberFieldMode);
         Assert.True(a.FocusStealWarning);
         Assert.True(a.ShowSelection);
         Assert.True(a.PasswordWarning);
