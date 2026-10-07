@@ -53,7 +53,7 @@ sealed class SettingsForm : Form
     Label _hangulHex = null!, _englishHex = null!;
     ToggleSwitch _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!, _shiftHold = null!,
         _shiftNow = null!, _insert = null!, _sonar = null!, _sonarSwitch = null!, _fieldMemory = null!, _focusSteal = null!, _selection = null!,
-        _password = null!;
+        _password = null!, _keepMode = null!;
     HotkeyBox _hotkeyBox = null!, _sonarHotkeyBox = null!;
     SettingsCard _fieldClearCard = null!;
     AccentButton _fieldClear = null!;
@@ -571,6 +571,10 @@ sealed class SettingsForm : Form
         page.Controls.Add(onSwitch);
 
         page.Controls.Add(Section("section.exp.typing"));
+        _keepMode = Toggle(v => { _draft.KeepImeMode = v; Touch(); });
+        _tips.SetToolTip(_keepMode, Strings.Get("exp.keepMode.tip"));
+        page.Controls.Add(Card(Glyphs.InputMode, "exp.keepMode", action: _keepMode));
+
         _fieldMemory = Toggle(v => { _draft.RememberFieldMode = v; Touch(); });
         _tips.SetToolTip(_fieldMemory, Strings.Get("exp.fieldMemory.tip"));
         page.Controls.Add(Card(Glyphs.Memory, "exp.fieldMemory", action: _fieldMemory));
@@ -1028,6 +1032,7 @@ sealed class SettingsForm : Form
         _focusSteal.Checked = _draft.FocusStealWarning;
         _selection.Checked = _draft.ShowSelection;
         _password.Checked = _draft.PasswordWarning;
+        _keepMode.Checked = _draft.KeepImeMode;
         SyncExperimentalEnabled();
         ReloadExcluded();
     }

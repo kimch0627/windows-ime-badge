@@ -26,7 +26,7 @@ static class Focus
 {
     public static FocusQuery QueryFor(Settings s) =>
         (s.RememberFieldMode ? FocusQuery.Field : FocusQuery.None) | (s.ShowSelection ? FocusQuery.Selection : FocusQuery.None)
-        | (s.PasswordWarning ? FocusQuery.Password : FocusQuery.None);
+        | (s.PasswordWarning || s.KeepImeMode ? FocusQuery.Password : FocusQuery.None);   // 한/영 유지는 비밀번호 칸을 한글로 바꾸지 않으려고 묻는다
 
     /// <summary>
     /// Win32 caret 을 만드는 앱(메모장·워드 등). 입력칸 키는 창 관리자에게만 묻는다. 비밀번호 칸·선택 영역은 표준 입력칸(Edit·RichEdit 계열)과

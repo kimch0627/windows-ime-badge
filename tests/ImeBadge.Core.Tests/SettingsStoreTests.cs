@@ -53,6 +53,7 @@ public sealed class SettingsStoreTests : IDisposable
             FocusStealWarning = true,
             ShowSelection = true,
             PasswordWarning = true,
+            KeepImeMode = true,
             LastUpdateCheckUtc = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc),
             SkippedUpdateTag = "v9.9.9",
         };
@@ -81,6 +82,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.True(back.FocusStealWarning);
         Assert.True(back.ShowSelection);
         Assert.True(back.PasswordWarning);
+        Assert.True(back.KeepImeMode);
         Assert.Equal(s.LastUpdateCheckUtc, back.LastUpdateCheckUtc);
         Assert.Equal("v9.9.9", back.SkippedUpdateTag);
         Assert.False(File.Exists(P("settings.json.tmp")));   // 임시 파일은 남지 않는다
@@ -176,6 +178,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.False(s.FocusStealWarning);
         Assert.False(s.ShowSelection);
         Assert.False(s.PasswordWarning);
+        Assert.False(s.KeepImeMode);
         Assert.Equal(UiLanguage.Auto, s.Language);
         Assert.True(File.Exists(P("new/settings.json"))); // 새 위치에 복사됨
         Assert.True(File.Exists(P("imebadge.settings.json")));
@@ -280,6 +283,7 @@ public sealed class SettingsStoreTests : IDisposable
         b.FocusStealWarning = true;
         b.ShowSelection = true;
         b.PasswordWarning = true;
+        b.KeepImeMode = true;
         a.CopyFrom(b);
         Assert.Equal(BadgeVisibility.OnChange, a.Visibility);
         Assert.False(a.ShowInsert);
@@ -291,6 +295,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.True(a.FocusStealWarning);
         Assert.True(a.ShowSelection);
         Assert.True(a.PasswordWarning);
+        Assert.True(a.KeepImeMode);
     }
 
     [Fact]

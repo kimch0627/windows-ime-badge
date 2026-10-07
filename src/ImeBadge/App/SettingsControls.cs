@@ -66,6 +66,7 @@ static class Glyphs
     public const string Shield = "\uE730";       // 느낌표 방패(경고)
     public const string Selection = "\uE8B3";    // SelectAll (점선 상자)
     public const string Lock = "\uE72E";         // Lock
+    public const string InputMode = "\uE8C1";    // Characters (A字, 입력 방식)
 }
 
 /// <summary>

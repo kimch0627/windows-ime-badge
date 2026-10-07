@@ -97,6 +97,7 @@ sealed class BadgeForm : Form, IExperimentHost
     const int StealWarningMs = 5000;
     readonly PasswordGuard _passwordGuard = new();   // 비밀번호 칸 경고: 들어올 때·위험이 바뀔 때만 알린다
     const int PasswordWarningMs = 6000;
+    readonly ImeModeKeeper _modeKeeper = new();      // 모든 프로그램에서 한/영 유지: 마지막으로 고른 모드를 다른 프로그램에 맞춘다
 
     ToolStripMenuItem _pauseItem = null!, _autostartItem = null!;
     ToolStripLabel _statusItem = null!;   // 누를 수 없는 상태 줄. 비활성 메뉴 항목과 달리 아이콘이 회색으로 바래지 않는다
@@ -639,6 +640,7 @@ sealed class BadgeForm : Form, IExperimentHost
         if (!_settings.RememberFieldMode) HideFieldHint();
         if (!_settings.FocusStealWarning) { _stealGuard.Disarm(); _callout?.Hide("steal"); }
         if (!_settings.PasswordWarning) { _passwordGuard.Reset(); _callout?.Hide("password"); }
+        if (!_settings.KeepImeMode) _modeKeeper.Reset();
 
         var tray = (_settings.HangulColor, _settings.EnglishColor, _settings.TrayShowsState, _settings.Theme);
         if (tray != _appliedTray) { _appliedTray = tray; RefreshTray(); }
@@ -932,7 +934,9 @@ sealed class BadgeForm : Form, IExperimentHost
                                            _settings.ShowShiftImmediately ? 0 : ShiftHold.ThresholdMs);
             bool overtype = TrackInsert();
             if (_paused || _sessionLocked) { HideBadge(); return; }
-            Apply(ImeReader.Read(Handle, _settings, shift, overtype));
+            var snapshot = ImeReader.Read(Handle, _settings, shift, overtype);
+            if (_settings.KeepImeMode) KeepImeMode(snapshot);
+            Apply(snapshot);
         }
         catch (Exception ex)
         {
@@ -1335,6 +1339,31 @@ sealed class BadgeForm : Form, IExperimentHost
         ShowCallout("password", new CalloutContent(CalloutKind.Warning, Strings.Get("password.title"), Strings.Get(detail), Glyphs.Lock),
             caret, PasswordWarningMs);
         if (AnimationsOn && _anim == Anim.None) StartAnim(Anim.Pulse);
+    }
+
+    // ── 실험 기능: 모든 프로그램에서 한/영 유지 ──
+    /// <summary>
+    /// 마지막으로 고른 한/영을 다른 프로그램에도 맞춘다(<see cref="ImeModeKeeper"/> 가 언제·무엇으로 바꿀지 정한다). 입력칸이 잡힌 뒤에만 바꾸고,
+    /// 먼저 IME 에 요청한 뒤 그대로면 한/영 키를 한 번 보낸다(<see cref="ImeWriter"/>). 바뀐 결과는 다음 갱신에 읽혀 배지가 펄스로 보여 준다.
+    /// 비밀번호 칸은 한글로 바꾸지 않고, 거기서 바꾼 모드는 기억하지 않는다. 제외 앱·전체 화면·이 프로그램 창(Suppressed)과 다른 언어는 건드리지 않는다.
+    /// </summary>
+    void KeepImeMode(in Snapshot s)
+    {
+        bool? hangul = s.Suppressed is not null ? null : s.State switch { ImeState.Hangul => true, ImeState.English => false, _ => null };
+        bool password = s.Facts.Password;
+        bool canSwitch = s.Caret is not null && !(password && _modeKeeper.Desired == true);
+        if (_modeKeeper.Observe((long)s.Foreground, hangul, canSwitch, learn: !password, Environment.TickCount64) is not bool want) return;
+
+        string mode = want ? "Hangul" : "English", window = Native.ClassName(s.Foreground);
+        if (_modeKeeper.Attempts == 1 && !s.PreferTsf && ImeWriter.RequestImm(s.Focus, want))
+        {
+            Log.Write($"keep mode: {mode} via IME request fg='{window}'");
+            return;   // 다음 갱신에 바뀌었는지 본다. 그대로면 한/영 키로 한 번 더(ImeModeKeeper.RetryMs 뒤)
+        }
+        if (ImeWriter.TapHangulKey()) Log.Write($"keep mode: {mode} via Korean/English key fg='{window}'");
+        else if (Native.IsModifierDown()) { _modeKeeper.NotSent(); return; }   // Alt+Tab 의 Alt 등을 아직 누르고 있다: 다음 갱신에
+        else Log.Write($"keep mode: could not send key fg='{window}'");
+        _modeKeeper.GiveUp();   // 한/영 키는 누를 때마다 뒤집으므로 이 창에서는 이것으로 끝낸다
     }
 
     /// <summary>위치·크기는 그대로 두고 z-order만 최상위 창들 중 맨 위로 올린다. 포커스는 건드리지 않는다.</summary>

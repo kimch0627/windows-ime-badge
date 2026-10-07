@@ -111,6 +111,11 @@ public sealed class Settings
     public bool ShowSelection { get; set; }
     /// <summary>비밀번호 칸 경고: 비밀번호 칸에서 한글 입력이거나 Caps Lock 이 켜져 있으면 커서 옆에 알린다(<see cref="PasswordGuard"/>).</summary>
     public bool PasswordWarning { get; set; }
+    /// <summary>
+    /// 모든 프로그램에서 한/영 유지: 한/영 키로 고른 모드를 기억했다가 다른 프로그램으로 가도 같은 모드로 맞춘다(<see cref="ImeModeKeeper"/>).
+    /// 다른 프로그램의 한/영을 이 프로그램이 직접 바꾸는 유일한 기능이다.
+    /// </summary>
+    public bool KeepImeMode { get; set; }
 
     // ── 동작 ──
     /// <summary>활성 창이 모니터 전체를 덮는(게임·전체 화면 동영상) 경우 배지를 숨긴다.</summary>
@@ -181,6 +186,7 @@ public sealed class Settings
         FocusStealWarning = other.FocusStealWarning;
         ShowSelection = other.ShowSelection;
         PasswordWarning = other.PasswordWarning;
+        KeepImeMode = other.KeepImeMode;
         HideOnFullscreen = other.HideOnFullscreen;
         ExcludedProcesses = new List<string>(other.ExcludedProcesses);
         HotkeyEnabled = other.HotkeyEnabled; Hotkey = other.Hotkey; PollIntervalMs = other.PollIntervalMs; TrayShowsState = other.TrayShowsState;

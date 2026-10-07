@@ -15,8 +15,11 @@ enum ImeState { Unknown, Hangul, English, OtherLang }
 /// BadgeForm 이 이 창의 위치 변경 이벤트를 받아 타이머를 기다리지 않고 배지를 옮긴다.</param>
 /// <param name="Insert">활성 창이 Insert 로 겹쳐 쓰기를 켠 상태인가(<see cref="InsertToggle"/>). 언어와 상관없다. 설정에서 표시를 껐으면 항상 false.</param>
 /// <param name="Facts">실험 기능이 물은 입력칸 정보(<see cref="FocusFacts"/>). 실험 기능을 모두 껐으면 비어 있다.</param>
+/// <param name="Focus">한/영을 읽은 창(포커스 창, 없으면 활성 창. UWP 는 안쪽 CoreWindow). 한/영 유지가 같은 창에 바꾸라고 보낸다.</param>
+/// <param name="PreferTsf">IMM 대신 TSF 로 읽는 앱(UWP, Windows Terminal). IMM 으로 바꾸라는 요청도 통하지 않는다.</param>
 readonly record struct Snapshot(ImeState State, Rectangle? Caret, IntPtr Foreground = default, string? Suppressed = null, bool CapsLock = false,
-                                bool Shift = false, IntPtr CaretWindow = default, bool Insert = false, FocusFacts Facts = default);
+                                bool Shift = false, IntPtr CaretWindow = default, bool Insert = false, FocusFacts Facts = default,
+                                IntPtr Focus = default, bool PreferTsf = false);
 
 /// <summary>활성 창의 caret 위치와 한/영 상태를 한 번 읽어 <see cref="Snapshot"/> 으로 돌려준다.</summary>
 static class ImeReader
@@ -117,7 +120,8 @@ static class ImeReader
             Log.WriteIfChanged($"fg='{Native.ClassName(fg)}' focus='{Native.ClassName(gti.hwndFocus)}' tid={tid} pid={pid} => {state}{dump}");
         }
 
-        return new(state, caret, fg, CapsLock: caps, Shift: shift, CaretWindow: caretWindow, Insert: insert, Facts: facts);
+        return new(state, caret, fg, CapsLock: caps, Shift: shift, CaretWindow: caretWindow, Insert: insert, Facts: facts,
+                   Focus: gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target, PreferTsf: preferTsf);
     }
 
     /// <summary>
