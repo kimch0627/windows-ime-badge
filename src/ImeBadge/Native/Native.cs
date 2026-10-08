@@ -59,6 +59,13 @@ static class Native
     [DllImport("user32.dll")]
     public static extern IntPtr SendMessageTimeout(
         IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, uint flags, uint timeoutMs, out IntPtr result);
+    /// <summary>
+    /// 결과를 두 포인터로 받는 메시지(EM_GETSEL)용. 다른 프로세스(32·64비트 사이 포함)에 보내도 Windows 가 값을 옮겨 준다.
+    /// EM_GETSEL 을 포인터 없이 SendMessageTimeout 으로 보내면 반환값이 선택과 상관없이 엉뚱하게 온다(SendMessage 는 맞다).
+    /// </summary>
+    [DllImport("user32.dll")]
+    public static extern IntPtr SendMessageTimeout(
+        IntPtr hWnd, uint msg, out int wParam, out int lParam, uint flags, uint timeoutMs, out IntPtr result);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern int GetClassName(IntPtr hWnd, StringBuilder sb, int max);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]

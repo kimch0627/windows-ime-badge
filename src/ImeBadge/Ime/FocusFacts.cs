@@ -56,19 +56,17 @@ static class Focus
     }
 
     /// <summary>
-    /// 표준 입력칸: EM_GETSEL 의 반환값(아래 16비트 = 시작, 위 16비트 = 끝). 둘 중 하나가 65535 를 넘으면 -1 이라 알 수 없음(선택 없음으로 본다).
+    /// 표준 입력칸: EM_GETSEL 로 선택 시작·끝을 두 포인터에 받는다. 반환값(아래 16비트 = 시작, 위 16비트 = 끝)은 쓰지 않는다:
+    /// 다른 프로세스에 SendMessageTimeout 으로 보내면 선택과 상관없이 엉뚱한 값이 와서(카카오톡·Xshell 에서 확인), 글이 있는 칸은 늘 선택이 있어 보였다.
     /// Scintilla: 선택 시작·끝 위치. 응답 없는 앱은 기다리지 않는다(SMTO_ABORTIFHUNG, 50ms).
     /// </summary>
     static bool HasWin32Selection(IntPtr focus, string cls)
     {
         if (IsEdit(cls))
-        {
-            if (!Ask(focus, EM_GETSEL, out long v)) return false;
-            uint packed = unchecked((uint)v);
-            return packed != 0xFFFFFFFF && (packed & 0xFFFF) != (packed >> 16);
-        }
+            return Native.SendMessageTimeout(focus, EM_GETSEL, out int start, out int end, Native.SMTO_ABORTIFHUNG, AskTimeoutMs, out _) != IntPtr.Zero
+                   && start != end;
         if (cls.StartsWith("Scintilla", StringComparison.OrdinalIgnoreCase))
-            return Ask(focus, SCI_GETSELECTIONSTART, out long start) && Ask(focus, SCI_GETSELECTIONEND, out long end) && start != end;
+            return Ask(focus, SCI_GETSELECTIONSTART, out long from) && Ask(focus, SCI_GETSELECTIONEND, out long to) && from != to;
         return false;
     }
 
