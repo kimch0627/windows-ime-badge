@@ -9,7 +9,14 @@ using System.Windows.Forms;
 namespace ImeBadge;
 
 /// <summary>설정 창의 페이지. 순서가 왼쪽 탐색 목록의 순서다.</summary>
-enum SettingsPage { Appearance, Display, General, Excluded, About }
+enum SettingsPage { Appearance, Display, General, Excluded, Experimental, About }
+
+/// <summary>설정 창의 실험 기능 페이지가 트레이 프로그램(<see cref="BadgeForm"/>)에 부탁하는 일.</summary>
+interface IExperimentHost
+{
+    /// <summary>화면의 이 사각형(설정 창의 [보기] 단추) 둘레에서 커서 소나를 한 번 보여 준다.</summary>
+    void PreviewSonar(Rectangle screen);
+}
 
 /// <summary>
 /// 설정 창. Windows 11 설정 앱처럼 왼쪽 탐색 목록에서 페이지를 고르고, 페이지마다 아이콘·제목·설명이 붙은 카드로 항목을 보여 준다.
@@ -26,6 +33,7 @@ sealed class SettingsForm : Form
     readonly Settings _original;   // 취소할 때 되돌릴 값
     readonly AppPaths _paths;
     readonly Action _checkUpdates;
+    readonly IExperimentHost _experiments;
     readonly bool _builtKorean = Strings.IsKorean;   // 이 창을 만들 때의 언어. 바뀌면 새 창으로 갈아 끼운다
     bool _autostart, _dirty, _loading, _detached;
 
@@ -38,8 +46,9 @@ sealed class SettingsForm : Form
     ColorSwatches _hangulColor = null!, _englishColor = null!;
     Label _hangulHex = null!, _englishHex = null!;
     ToggleSwitch _autostartBox = null!, _fullscreen = null!, _hotkey = null!, _updates = null!, _trayStateBox = null!, _animate = null!, _capsLock = null!, _shiftHold = null!,
-        _shiftNow = null!, _insert = null!;
-    HotkeyBox _hotkeyBox = null!;
+        _shiftNow = null!, _insert = null!, _sonar = null!, _sonarSwitch = null!, _focusSteal = null!, _selection = null!,
+        _password = null!, _keepMode = null!;
+    HotkeyBox _hotkeyBox = null!, _sonarHotkeyBox = null!;
     PreviewPanel _preview = null!;
     SettingsCard _previewCard = null!;
     AccentButton _previewToggle = null!;
@@ -73,7 +82,8 @@ sealed class SettingsForm : Form
     /// <summary>페이지마다 탐색 목록의 아이콘과 문구 키(nav.{key}, page.{key}.desc). 순서는 <see cref="SettingsPage"/> 와 같다.</summary>
     static readonly (string glyph, string key)[] Pages =
     {
-        (Glyphs.Appearance, "appearance"), (Glyphs.Display, "display"), (Glyphs.General, "general"), (Glyphs.Apps, "excluded"), (Glyphs.Info, "about"),
+        (Glyphs.Appearance, "appearance"), (Glyphs.Display, "display"), (Glyphs.General, "general"), (Glyphs.Apps, "excluded"),
+        (Glyphs.Experimental, "experimental"), (Glyphs.Info, "about"),
     };
 
     // 창 크기(96 DPI 기준 논리 픽셀). 처음에는 DefaultClient 로 열되 작업 영역보다 크면 줄이고, MinClient 보다 작게는 줄일 수 없다.
@@ -89,18 +99,20 @@ sealed class SettingsForm : Form
     public event Action? LanguageChanged;
 
     /// <param name="checkUpdates">"정보" 페이지의 [새 버전 확인]. 트레이 메뉴의 업데이트 확인과 같다.</param>
-    public SettingsForm(Settings live, AppPaths paths, Action checkUpdates, SettingsPage page = SettingsPage.Appearance)
-        : this(live, live.Clone(), dirty: false, paths, checkUpdates, page) { }
+    /// <param name="experiments">실험 기능 페이지의 [보기] 등을 처리하는 쪽(트레이 프로그램).</param>
+    public SettingsForm(Settings live, AppPaths paths, Action checkUpdates, IExperimentHost experiments, SettingsPage page = SettingsPage.Appearance)
+        : this(live, live.Clone(), dirty: false, paths, checkUpdates, experiments, page) { }
 
     /// <param name="original">취소할 때 되돌릴 값. 새 창이 이전 창의 기준을 이어받을 때 넘긴다.</param>
     /// <param name="dirty">이미 편집이 있었는가(이어받은 창은 true).</param>
-    SettingsForm(Settings live, Settings original, bool dirty, AppPaths paths, Action checkUpdates, SettingsPage page)
+    SettingsForm(Settings live, Settings original, bool dirty, AppPaths paths, Action checkUpdates, IExperimentHost experiments, SettingsPage page)
     {
         _live = live;
         _draft = live.Clone();
         _original = original;
         _paths = paths;
         _checkUpdates = checkUpdates;
+        _experiments = experiments;
         _autostart = Autostart.IsEnabled();
 
         Text = Strings.Format("settings.title", AppInfo.ProductName);
@@ -141,7 +153,7 @@ sealed class SettingsForm : Form
     /// <summary>같은 편집 상태(기준값·자동 시작 체크)를 이어받는 새 창을 현재 언어로 만든다. 위치·크기·페이지·스크롤도 그대로.</summary>
     public SettingsForm Reopen()
     {
-        var next = new SettingsForm(_live, _original, dirty: true, _paths, _checkUpdates, CurrentPage) { _autostart = _autostart };
+        var next = new SettingsForm(_live, _original, dirty: true, _paths, _checkUpdates, _experiments, CurrentPage) { _autostart = _autostart };
         next._autostartBox.Checked = _autostart;
         if (IsHandleCreated)
         {
@@ -270,6 +282,7 @@ sealed class SettingsForm : Form
         _pages[(int)SettingsPage.Display] = BuildDisplayPage();
         _pages[(int)SettingsPage.General] = BuildGeneralPage();
         _pages[(int)SettingsPage.Excluded] = BuildExcludedPage();
+        _pages[(int)SettingsPage.Experimental] = BuildExperimentalPage();
         _pages[(int)SettingsPage.About] = BuildAboutPage();
 
         _header = new PageHeader { Dock = DockStyle.Top };
@@ -517,6 +530,61 @@ sealed class SettingsForm : Form
 
         page.Controls.Add(Note(Strings.Get("about.license")));
         return page;
+    }
+
+    /// <summary>
+    /// 실험 기능: 아직 다듬는 중인 커서 관련 기능. 모두 기본 꺼짐이고, 하위 옵션은 위 옵션이 켜져 있어야 고를 수 있다.
+    /// </summary>
+    CardStack BuildExperimentalPage()
+    {
+        var page = new CardStack();
+
+        page.Controls.Add(Section("section.exp.caret"));
+        // 커서 소나: [보기] 를 누르면 그 단추 둘레에서 한 번 재생해 어떤 모습인지 바로 본다.
+        AccentButton? preview = null;
+        preview = Button("exp.sonar.preview", () => _experiments.PreviewSonar(preview!.RectangleToScreen(preview.ClientRectangle)));
+        preview.Margin = new Padding(0, 0, 16, 0);
+        _tips.SetToolTip(preview, Strings.Get("exp.sonar.preview.tip"));
+        _sonar = Toggle(v => { _draft.CaretSonar = v; SyncExperimentalEnabled(); Touch(); });
+        _tips.SetToolTip(_sonar, Strings.Get("exp.sonar.tip"));
+        page.Controls.Add(Card(Glyphs.Sonar, "exp.sonar", action: Row(preview, _sonar)));
+
+        _sonarHotkeyBox = new HotkeyBox { AccessibleName = Mnemonic.Plain(Strings.Get("exp.sonarHotkey")) };
+        _sonarHotkeyBox.HotkeyChanged += spec => { _draft.CaretSonarHotkey = spec.ToString(); Touch(); };
+        _tips.SetToolTip(_sonarHotkeyBox, Strings.Get("behavior.hotkey.tip"));
+        var hotkey = Card(Glyphs.Keyboard, "exp.sonarHotkey", action: new InputFrame(_sonarHotkeyBox) { Width = 170, Margin = Padding.Empty });
+        hotkey.Indent = 1;
+        page.Controls.Add(hotkey);
+
+        _sonarSwitch = Toggle(v => { _draft.CaretSonarOnSwitch = v; Touch(); });
+        var onSwitch = Card(Glyphs.Switch, "exp.sonarOnSwitch", action: _sonarSwitch);
+        onSwitch.Indent = 1;
+        page.Controls.Add(onSwitch);
+
+        page.Controls.Add(Section("section.exp.typing"));
+        _keepMode = Toggle(v => { _draft.KeepImeMode = v; Touch(); });
+        _tips.SetToolTip(_keepMode, Strings.Get("exp.keepMode.tip"));
+        page.Controls.Add(Card(Glyphs.InputMode, "exp.keepMode", action: _keepMode));
+
+        _selection = Toggle(v => { _draft.ShowSelection = v; Touch(); });
+        _tips.SetToolTip(_selection, Strings.Get("exp.selection.tip"));
+        page.Controls.Add(Card(Glyphs.Selection, "exp.selection", action: _selection));
+
+        _password = Toggle(v => { _draft.PasswordWarning = v; Touch(); });
+        _tips.SetToolTip(_password, Strings.Get("exp.password.tip"));
+        page.Controls.Add(Card(Glyphs.Lock, "exp.password", action: _password));
+
+        _focusSteal = Toggle(v => { _draft.FocusStealWarning = v; Touch(); });
+        _tips.SetToolTip(_focusSteal, Strings.Get("exp.focusSteal.tip"));
+        page.Controls.Add(Card(Glyphs.Shield, "exp.focusSteal", action: _focusSteal));
+        return page;
+    }
+
+    /// <summary>실험 기능의 하위 옵션을 위 옵션에 맞춰 켜고 끈다(흐리게). 꺼 둔 하위 옵션의 값은 그대로 남는다.</summary>
+    void SyncExperimentalEnabled()
+    {
+        if (_sonarHotkeyBox is not null) _sonarHotkeyBox.Enabled = _draft.CaretSonar;
+        if (_sonarSwitch is not null) _sonarSwitch.Enabled = _draft.CaretSonar;
     }
 
     /// <summary>"정보" 페이지의 업데이트 카드 설명: 마지막으로 확인한 시각.</summary>
@@ -931,6 +999,14 @@ sealed class SettingsForm : Form
         _hotkeyBox.Text = _draft.Hotkey;
         _updates.Checked = _draft.CheckForUpdates;
         _language.SelectedIndex = Math.Max(0, Array.FindIndex(Labels.Languages, l => l.value == _draft.Language));
+        _sonar.Checked = _draft.CaretSonar;
+        _sonarHotkeyBox.Text = _draft.CaretSonarHotkey;
+        _sonarSwitch.Checked = _draft.CaretSonarOnSwitch;
+        _focusSteal.Checked = _draft.FocusStealWarning;
+        _selection.Checked = _draft.ShowSelection;
+        _password.Checked = _draft.PasswordWarning;
+        _keepMode.Checked = _draft.KeepImeMode;
+        SyncExperimentalEnabled();
         ReloadExcluded();
     }
 

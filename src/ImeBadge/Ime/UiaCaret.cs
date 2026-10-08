@@ -7,8 +7,11 @@ namespace ImeBadge;
 /// <summary>UI Automation으로 caret 위치 찾기 (Win32 caret이 없는 앱용: Chrome/Edge/Electron/UWP).</summary>
 static class UiaCaret
 {
-    /// <summary>caret 사각형(화면 좌표). 정확한 caret을 못 찾으면 입력창 왼쪽 아래 1x1(높이 0)로 근사.</summary>
-    public static Rectangle? Find(StringBuilder? dump)
+    /// <summary>
+    /// caret 사각형(화면 좌표)과, 실험 기능이 물은 입력칸 정보(<paramref name="query"/>). 정확한 caret을 못 찾으면 입력창 왼쪽 아래 1x1(높이 0)로 근사.
+    /// caret 을 못 찾으면 입력칸 정보도 묻지 않는다(배지를 띄우지 않으므로 쓸 일이 없다).
+    /// </summary>
+    public static A11yHit Find(FocusQuery query, StringBuilder? dump)
     {
         Uia.IUIAutomationElement? el = null;
         object? valuePat = null, textPat = null;
@@ -17,15 +20,17 @@ static class UiaCaret
         try
         {
             el = Uia.Client.GetFocusedElement();
-            if (el is null) return null;
+            if (el is null) return default;
 
             valuePat = el.GetCurrentPattern(Uia.UIA_ValuePatternId);
             if (valuePat is Uia.IUIAutomationValuePattern v && v.get_CurrentIsReadOnly())
             {
                 dump?.Append(" uia:readonly");
-                return null;
+                return default;
             }
 
+            Rectangle? caret = null;
+            bool selection = false;
             textPat = el.GetCurrentPattern(Uia.UIA_TextPatternId);
             if (textPat is Uia.IUIAutomationTextPattern tp)
             {
@@ -33,6 +38,9 @@ static class UiaCaret
                 if (sel is not null && sel.get_Length() > 0)
                 {
                     r = sel.GetElement(0);
+                    // 실험 기능 "선택 영역 덮어쓰기 표시": 커서 한 점으로 접기 전에 시작과 끝이 다른지 본다. 크롬 주소창처럼 선택이 없어도
+                    // "문서 처음~커서" 를 주는 컨트롤이 있어, 아래에서 커서 사각형을 믿을 수 있을 때(CaretRejected 가 아님)만 선택으로 본다.
+                    bool spans = (query & FocusQuery.Selection) != 0 && Spans(r, dump);
                     // 크롬 주소창 등은 "문서 처음~커서" 범위를 준다. 시작점을 끝점으로 옮겨 커서 한 점으로 접는다.
                     r.MoveEndpointByRange(Uia.TextPatternRangeEndpoint.Start, r, Uia.TextPatternRangeEndpoint.End);
                     // 후보 셋을 모아 TextCaret.Pick 이 고른다.
@@ -75,37 +83,63 @@ static class UiaCaret
                             _ => "text-next",
                         };
                         dump?.Append($" uia:{from}({c.Left:F0},{c.Bottom:F0})");
-                        return new Rectangle((int)c.Left, (int)c.Top, 1, (int)c.Height);
+                        caret = new Rectangle((int)c.Left, (int)c.Top, 1, (int)c.Height);
+                        selection = spans && !pick.CaretRejected;
                     }
                 }
             }
 
-            int ct = el.GetCurrentPropertyValue(Uia.UIA_ControlTypePropertyId) is int i ? i : 0;
-            if (ct == Uia.UIA_EditControlTypeId || ct == Uia.UIA_ComboBoxControlTypeId)
+            if (caret is null)
             {
-                // BoundingRectangle 속성은 (left, top, width, height) double 4개
-                if (el.GetCurrentPropertyValue(Uia.UIA_BoundingRectanglePropertyId) is double[] b && b.Length >= 4 && b[2] > 0)
+                int ct = el.GetCurrentPropertyValue(Uia.UIA_ControlTypePropertyId) is int i ? i : 0;
+                if ((ct == Uia.UIA_EditControlTypeId || ct == Uia.UIA_ComboBoxControlTypeId)
+                    // BoundingRectangle 속성은 (left, top, width, height) double 4개
+                    && el.GetCurrentPropertyValue(Uia.UIA_BoundingRectanglePropertyId) is double[] b && b.Length >= 4 && b[2] > 0)
                 {
                     double left = b[0], bottom = b[1] + b[3];
                     dump?.Append($" uia:elem({left:F0},{bottom:F0})");
-                    return new Rectangle((int)left, (int)bottom, 1, 0);   // 높이 0 = 근사 위치
+                    caret = new Rectangle((int)left, (int)bottom, 1, 0);   // 높이 0 = 근사 위치
+                }
+                else
+                {
+                    if (dump is not null)
+                    {
+                        // 어떤 컨트롤이라서 못 찾았는지 남긴다. (컨트롤 종류 ID, 클래스, UI 프레임워크, TextPattern 유무)
+                        string cls = el.GetCurrentPropertyValue(Uia.UIA_ClassNamePropertyId) as string ?? "";
+                        string fw = el.GetCurrentPropertyValue(Uia.UIA_FrameworkIdPropertyId) as string ?? "";
+                        bool focus = el.GetCurrentPropertyValue(Uia.UIA_HasKeyboardFocusPropertyId) is bool f && f;
+                        dump.Append($" uia:none(ct={ct} class='{cls}' fw={fw} text={(textPat is not null ? 1 : 0)} focus={(focus ? 1 : 0)})");
+                    }
+                    return default;
                 }
             }
-            if (dump is not null)
-            {
-                // 어떤 컨트롤이라서 못 찾았는지 남긴다. (컨트롤 종류 ID, 클래스, UI 프레임워크, TextPattern 유무)
-                string cls = el.GetCurrentPropertyValue(Uia.UIA_ClassNamePropertyId) as string ?? "";
-                string fw = el.GetCurrentPropertyValue(Uia.UIA_FrameworkIdPropertyId) as string ?? "";
-                bool focus = el.GetCurrentPropertyValue(Uia.UIA_HasKeyboardFocusPropertyId) is bool f && f;
-                dump.Append($" uia:none(ct={ct} class='{cls}' fw={fw} text={(textPat is not null ? 1 : 0)} focus={(focus ? 1 : 0)})");
-            }
+            return new A11yHit(caret, query == FocusQuery.None ? default : Facts(el, query, selection, dump));
         }
         catch (Exception ex) { dump?.Append($" uia:EXC {ex.GetType().Name} 0x{ex.HResult:X8}"); }
         finally
         {
             Uia.Release(prev); Uia.Release(r); Uia.Release(sel); Uia.Release(textPat); Uia.Release(valuePat); Uia.Release(el);
         }
-        return null;
+        return default;
+    }
+
+    /// <summary>범위의 시작과 끝이 다른가(글이 선택돼 있다). 지원하지 않는 앱이면 false.</summary>
+    static bool Spans(Uia.IUIAutomationTextRange range, StringBuilder? dump)
+    {
+        try { return range.CompareEndpoints(Uia.TextPatternRangeEndpoint.Start, range, Uia.TextPatternRangeEndpoint.End) != 0; }
+        catch (Exception ex) { dump?.Append($" uia:sel-EXC 0x{ex.HResult:X8}"); return false; }
+    }
+
+    /// <summary>실험 기능이 물은 입력칸 정보: 비밀번호 칸인지(물었을 때만)와 선택 영역(<see cref="Find"/> 이 알아낸 것).</summary>
+    static FocusFacts Facts(Uia.IUIAutomationElement el, FocusQuery query, bool selection, StringBuilder? dump)
+    {
+        bool password = false;
+        if ((query & FocusQuery.Password) != 0)
+        {
+            try { password = el.GetCurrentPropertyValue(Uia.UIA_IsPasswordPropertyId) is bool p && p; }
+            catch (Exception ex) { dump?.Append($" uia:facts-EXC 0x{ex.HResult:X8}"); }
+        }
+        return new FocusFacts(password, selection);
     }
 
     /// <summary>텍스트 범위의 첫 사각형(화면 좌표). 없거나 높이가 0이면 null.</summary>

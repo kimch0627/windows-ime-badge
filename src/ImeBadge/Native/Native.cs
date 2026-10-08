@@ -59,6 +59,13 @@ static class Native
     [DllImport("user32.dll")]
     public static extern IntPtr SendMessageTimeout(
         IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, uint flags, uint timeoutMs, out IntPtr result);
+    /// <summary>
+    /// 결과를 두 포인터로 받는 메시지(EM_GETSEL)용. 다른 프로세스(32·64비트 사이 포함)에 보내도 Windows 가 값을 옮겨 준다.
+    /// EM_GETSEL 을 포인터 없이 SendMessageTimeout 으로 보내면 반환값이 선택과 상관없이 엉뚱하게 온다(SendMessage 는 맞다).
+    /// </summary>
+    [DllImport("user32.dll")]
+    public static extern IntPtr SendMessageTimeout(
+        IntPtr hWnd, uint msg, out int wParam, out int lParam, uint flags, uint timeoutMs, out IntPtr result);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern int GetClassName(IntPtr hWnd, StringBuilder sb, int max);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
@@ -84,6 +91,7 @@ static class Native
     // ── z-order 확인·조정 ──
     [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr hWnd, uint cmd);
     [DllImport("user32.dll")] public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int index);
+    public const int GWL_STYLE = -16;
     [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool attach);
     [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
 
@@ -151,7 +159,9 @@ static class Native
     public const uint WM_IME_CONTROL = 0x0283;
     public const uint WM_HOTKEY = 0x0312;
     public const int IMC_GETCONVERSIONMODE = 0x0001;
+    public const int IMC_SETCONVERSIONMODE = 0x0002;
     public const int IMC_GETOPENSTATUS = 0x0005;
+    public const int IMC_SETOPENSTATUS = 0x0006;
     public const uint IME_CMODE_HANGUL = 0x0001;   // == IME_CMODE_NATIVE
     public const uint SMTO_ABORTIFHUNG = 0x0002;
     public const ushort LANG_KOREAN = 0x0412;
@@ -192,6 +202,62 @@ static class Native
     public static bool IsMouseButtonDown() =>
         (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 || (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0
         || (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
+
+    /// <summary>지금 Alt·Win·Ctrl 중 하나라도 눌려 있는가(실제 키 상태). 창을 바꾸는 단축키(Alt+Tab, Win+숫자 등)를 쓰는 중인지 가린다.</summary>
+    public static bool IsSwitchKeyDown() =>
+        IsKeyDown(VK_MENU) || IsKeyDown(VK_LWIN) || IsKeyDown(VK_RWIN) || IsKeyDown(VK_CONTROL);
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+
+    [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
+
+    /// <summary>
+    /// 이 세션의 마지막 입력(키보드·마우스) 시각을 Environment.TickCount64 기준 ms 로. 어떤 키인지는 알 수 없고 시각만 있다.
+    /// 못 읽으면 <see cref="long.MinValue"/>. (GetLastInputInfo 의 시각은 49.7일마다 돌아오는 32비트 GetTickCount 라 차이로 바꾼다.)
+    /// </summary>
+    public static long LastInputMs()
+    {
+        var info = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf<LASTINPUTINFO>() };
+        if (!GetLastInputInfo(ref info)) return long.MinValue;
+        uint idle = unchecked((uint)Environment.TickCount - info.dwTime);
+        return Environment.TickCount64 - idle;
+    }
+
+    // ── 키 입력 보내기(실험 기능 "모든 프로그램에서 한/영 유지" 의 마지막 방법) ──
+    public const int VK_HANGUL = 0x15;   // 한/영 키
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct MOUSEINPUT { public int dx, dy; public uint mouseData, dwFlags, time; public IntPtr dwExtraInfo; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct KEYBDINPUT { public ushort wVk, wScan; public uint dwFlags, time; public IntPtr dwExtraInfo; }
+
+    /// <summary>INPUT 의 공용체. 가장 큰 MOUSEINPUT 을 함께 두어야 Win32 가 기대하는 크기(cbSize)가 된다.</summary>
+    [StructLayout(LayoutKind.Explicit)]
+    struct InputUnion { [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public KEYBDINPUT ki; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct INPUT { public uint type; public InputUnion u; }
+
+    [DllImport("user32.dll")] static extern uint SendInput(uint count, INPUT[] inputs, int size);
+    [DllImport("user32.dll")] static extern uint MapVirtualKey(uint code, uint mapType);
+    const uint INPUT_KEYBOARD = 1, KEYEVENTF_KEYUP = 0x0002, MAPVK_VK_TO_VSC = 0;
+
+    /// <summary>
+    /// 키 하나를 눌렀다 뗀 것처럼 보낸다. 지금 활성 창(의 입력 큐)으로 간다. 관리자 권한으로 실행된 창에는 Windows(UIPI)가 막아 전달되지 않는다.
+    /// 둘 다 들어갔으면 true.
+    /// </summary>
+    public static bool TapKey(int vk)
+    {
+        ushort scan = (ushort)MapVirtualKey((uint)vk, MAPVK_VK_TO_VSC);
+        var inputs = new INPUT[2];
+        inputs[0].type = INPUT_KEYBOARD;
+        inputs[0].u.ki = new KEYBDINPUT { wVk = (ushort)vk, wScan = scan };
+        inputs[1].type = INPUT_KEYBOARD;
+        inputs[1].u.ki = new KEYBDINPUT { wVk = (ushort)vk, wScan = scan, dwFlags = KEYEVENTF_KEYUP };
+        return SendInput(2, inputs, Marshal.SizeOf<INPUT>()) == 2;
+    }
 
     public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
     public const uint EVENT_OBJECT_FOCUS = 0x8005;

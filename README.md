@@ -73,7 +73,7 @@ winget install kimch0627.ImeBadge
 
 ### 설정 창
 
-Windows 11 설정 앱처럼 왼쪽 메뉴에서 페이지(**모양 · 표시 · 일반 · 제외 앱 · 정보**)를 고르고, 항목마다 아이콘·이름·설명이 붙은 카드로 보여 줍니다.
+Windows 11 설정 앱처럼 왼쪽 메뉴에서 페이지(**모양 · 표시 · 일반 · 제외 앱 · 실험 기능 · 정보**)를 고르고, 항목마다 아이콘·이름·설명이 붙은 카드로 보여 줍니다.
 Ctrl+Tab / Ctrl+Shift+Tab 으로 다음·이전 페이지로 옮기고, 창 크기를 바꾸거나 최대화할 수 있습니다.
 
 | 페이지 | 항목 | 설명 |
@@ -101,6 +101,11 @@ Ctrl+Tab / Ctrl+Shift+Tab 으로 다음·이전 페이지로 옮기고, 창 크�
 | | 설정 백업 | **가져오기** / **내보내기**로 설정을 파일(`.json`)로 저장하거나 다른 PC 에서 불러옴. 가져온 설정은 설정 창에 채워지고, **확인**을 눌러야 저장됨 |
 | | 기본값 복원 | 고른 테마는 그대로 두고 나머지를 기본값으로. [취소]하면 원래대로 |
 | 제외 앱 | 배지를 띄우지 않을 앱 | 입력칸 오른쪽 단추(Alt+↓)로 실행 중인 앱 목록을 펼쳐 고르거나, 이름을 직접 입력하고 Enter. `.exe` 생략 가능, 끝에 `*` 는 앞부분 일치. 예: `mstsc`, `Unreal*`. 앱마다 카드 한 장이고 [삭제]로 뺌 |
+| 실험 기능 | 커서 소나 | 단축키(기본 Ctrl+Alt+J, 바꿀 수 있음)를 누르면 원 두 개가 커서 자리로 좁혀 들고 커서가 잠깐 빛남. 원의 색은 지금 한/영 배지 색이고 [보기]로 미리 볼 수 있음. 배지를 일시 중지한 동안에도 동작. 커서를 못 찾으면 마우스 포인터 옆 말풍선. 하위 옵션 **창을 바꾸면 저절로**(기본 켜짐): Alt+Tab 처럼 키보드로 창을 바꾸면 한 번 재생하고, 마우스로 고르면 재생하지 않음 (기본 꺼짐) |
+| | 모든 프로그램에서 한/영 유지 | 한/영 키로 고른 모드를 기억했다가, 다른 프로그램으로 가서 입력칸이 잡히면 같은 모드로 맞춤(배지가 한 번 커짐). Windows 는 한/영을 프로그램마다 따로 기억하는데("각 앱 창에 대해 다른 입력 방법" 을 꺼도 그렇다), 그 차이를 없앰. 그 프로그램에서 한/영 키를 누르면 새로 기억. Xshell 처럼 창이 앞으로 올 때 스스로 영문으로 바꾸는 프로그램은 들어온 뒤 1초 동안 바뀐 것을 기억하지 않고 되돌림(이 1초 안에 누른 한/영 키도 되돌려지니 다시 누르면 됨). 먼저 IME 에 요청하고, 그대로면 한/영 키를 한 번 보냄. 비밀번호 칸은 한글로 바꾸지 않고, 제외 앱·다른 언어·관리자 권한 앱은 그대로 (기본 꺼짐) |
+| | 선택 영역 덮어쓰기 표시 | 선택한 글이 있어 다음 글자가 그 글을 지우는 입력칸에서는 배지 테두리가 흰·검 점선(그림판의 선택 영역 모양). 밑줄 모양은 막대가 점선. 메모장·카카오톡 같은 기본 입력칸, Notepad++, 크롬·엣지·VS Code 에서 동작 (기본 꺼짐) |
+| | 비밀번호 칸 경고 | 비밀번호 칸에 들어갔을 때 한글 입력이거나 Caps Lock 이 켜져 있으면 커서 옆 주의 말풍선, 배지가 한 번 살짝 커짐. 머무는 동안 바뀌면 다시 알리고, 영문으로 바꾸고 Caps Lock 을 끄면 사라짐 (기본 꺼짐) |
+| | 포커스 뺏김 경고 | 글자를 치는 도중 다른 창이 스스로 앞으로 나와 입력이 그리로 가기 시작하면, 쓰던 자리에 "입력이 다른 창으로 가고 있어요" 말풍선(앞으로 나온 앱 이름과 함께). 마우스나 Alt·Win·Ctrl 로 바꾼 것은 알리지 않음. 키 내용은 읽지 않고 Windows 의 마지막 입력 시각만 봄 (기본 꺼짐) |
 | 정보 | | 버전, 새 버전 확인(마지막 확인 시각), 릴리스·저장소 링크, 설정·로그 폴더 열기, 진단 정보 복사 |
 
 Alt 를 누르면 항목마다 단축키 글자가 나타나고, Alt+글자로 지금 페이지의 그 항목으로 바로 갑니다(토글은 바로 켜고 끔).
@@ -130,7 +135,7 @@ dotnet build ImeBadge.sln                    # 전체 빌드 (경고 = 오류)
 dotnet test                                  # Core 단위 테스트 (Windows 없이도 돌아감)
 dotnet run --project src/ImeBadge            # 실행
 dotnet run --project src/ImeBadge -- --debug # 디버그 로그 켜고 실행
-dotnet run --project src/ImeBadge -- --render-sheet sheet.png   # 모든 테마·모양의 배지를 한 장의 PNG 로(창 없이)
+dotnet run --project src/ImeBadge -- --render-sheet sheet.png   # 모든 테마·모양의 배지와 실험 기능 그림(소나·말풍선·선택 영역)을 한 장의 PNG 로(창 없이)
 dotnet run --project src/ImeBadge -- --render-hero hero.png     # README 소개 그림(docs/images/hero.png)
 ```
 
@@ -153,6 +158,11 @@ src/ImeBadge.Core/      순수 로직. WinForms·Win32 의존 없음 → Linux �
   Hotkey.cs             "Ctrl+Alt+H" ↔ (보조키, 가상 키) 변환·검증
   ShiftHold.cs          Shift 를 떼지 않고 300 ms 이상 누르고 있는지 판정 (배지의 ▲ 표시)
   InsertToggle.cs       Insert 토글 비트가 바뀐 순간을 활성 창마다 세어 겹쳐 쓰기 상태를 추적 (배지의 ■ 표시)
+  Sonar.cs              실험 기능 커서 소나의 움직임(시각별 원의 반지름·짙기, 끝의 빛)
+  CalloutLayout.cs      커서 옆 말풍선 위치 계산(배지 반대쪽, 꼬리가 커서를 가리킴, 화면 끝에서 뒤집기)
+  FocusStealGuard.cs    실험 기능 포커스 뺏김 경고 판정(직전 타이핑, 사용자가 바꾸지 않음, 바뀐 뒤에도 입력이 이어짐)
+  PasswordGuard.cs      실험 기능 비밀번호 칸 경고 판정(들어올 때·위험이 바뀔 때만 알리고, 없어지면 내림)
+  ImeModeKeeper.cs      실험 기능 한/영 유지 판정(유지할 모드, 다른 창에서 바꿀 때, 사용자가 한/영 키로 고른 것 알아채기)
   DeadlineWorker.cs     오래 걸릴 수 있는 일을 전용 스레드에서 돌리고 정해진 시간까지만 기다리기 (caret 찾기가 UI 를 멈추지 않게)
   VersionInfo.cs        "v1.2.3" 비교 (업데이트 확인)
   UpdatePackage.cs      릴리스 첨부 파일 중 내 설치 형태에 맞는 것 고르기 + SHA256SUMS.txt 해석 (자동 업그레이드)
@@ -164,10 +174,14 @@ src/ImeBadge/           Windows 앱
   Native/Tsf.cs         TSF(msctf) 전역 compartment 로 한/영 상태 읽기 (IMM32 의 대체 경로)
   Ime/UiaCaret.cs       UIA 로 caret 찾기 (Chrome/Electron/UWP)
   Ime/A11yCaret.cs      UIA·MSAA caret 찾기를 UI 스레드 밖(DeadlineWorker)에서 하고 최대 0.4초만 기다리기
+  Ime/FocusFacts.cs     실험 기능이 쓰는 포커스된 입력칸 정보(비밀번호 칸·선택 영역)를 caret 을 찾은 경로마다 만들기
+  Ime/ImeWriter.cs      실험 기능 한/영 유지: 다른 프로그램의 한/영 바꾸기(IME 에 WM_IME_CONTROL 요청, 안 되면 한/영 키 한 번)
   Ime/ImeReader.cs      활성 창의 caret + 한/영 상태를 Snapshot 으로
   Render/BadgeRenderer.cs  GDI+ 로 투명 비트맵 그리기
+  Render/OverlayRenderer.cs  실험 기능 그림: 커서 소나의 한 장면, 커서 옆 말풍선(정보·주의)
   App/BadgeForm.cs      레이어드 창 + 타이머·이벤트 훅 + 트레이 메뉴 + 단축키 + 업데이트 알림
-  App/SettingsForm.cs   설정 창: 페이지(모양·표시·일반·제외 앱·정보) 구성, 편집·취소, 미리보기
+  App/CaretOverlays.cs  소나·말풍선을 띄우는 클릭 통과 레이어드 창과 재생기(SonarPlayer, CalloutPlayer)
+  App/SettingsForm.cs   설정 창: 페이지(모양·표시·일반·제외 앱·실험 기능·정보) 구성, 편집·취소, 미리보기
   App/SettingsControls.cs  설정 창 뼈대: 탐색 목록, 설정 카드, 카드를 쌓는 페이지, 페이지 제목, 버튼 줄, 고르기 상자, 입력칸 틀
   App/AboutInfo.cs      정보 페이지·트레이 메뉴·오류 대화상자가 함께 쓰는 웹 페이지·폴더 열기와 진단 정보
   App/Autostart.cs      HKCU Run 키
@@ -308,6 +322,22 @@ installer/ImeBadge.iss  Inno Setup 스크립트
 
 `ApplicationHighDpiMode=PerMonitorV2`(csproj)가 없으면 DPI 스케일링이 켜진 모니터에서
 caret 좌표와 배지 위치가 어긋납니다.
+
+### 실험 기능
+
+설정 창 → 실험 기능의 다섯 가지는 모두 기본 꺼짐이고, 꺼져 있으면 대상 앱에 더 묻는 것이 없습니다(`Focus.QueryFor` 가 빈 질문을 만들고,
+마우스·보조키도 읽지 않습니다). 켜면 caret 을 찾을 때 함께 묻습니다.
+
+| 기능 | 어떻게 아는가 | 어디에 보이나 |
+|---|---|---|
+| 커서 소나 | 단축키(`RegisterHotKey`, ID 2)를 누르면 `ImeReader.Read` 로 caret 을 새로 읽는다. "창을 바꾸면 저절로" 는 `EVENT_SYSTEM_FOREGROUND` 때 직전 0.7초 안에 마우스를 쓰지 않았으면 예약하고, 1.5초 안에 새 창에서 caret(근사 위치 제외)을 찾으면 재생 | `SonarPlayer`: 클릭 통과 레이어드 창에 16ms 마다 `OverlayRenderer.Sonar` 한 장(0.8초). 애니메이션 효과를 끄면 멈춘 한 장 |
+| 모든 프로그램에서 한/영 유지 | 폴링마다 읽은 한/영과 활성 창·포커스 창을 `ImeModeKeeper` 에 넘긴다. 처음 본 모드를 기억하고, 같은 칸(포커스 창)에서 기억과 같아진("맞춰진") 뒤에 바뀌면 사용자가 한/영 키를 누른 것으로 보고 새로 기억(비밀번호 칸에서 바꾼 것은 기억하지 않음). 포커스가 다른 칸으로 옮겨 가면 새 칸으로 보고(칸마다 IME 상태가 따로라 Xshell 처럼 입력칸 → 메인 창 → 입력칸으로 오가면 모드도 오간다), 창에 들어온 뒤 1초 안에 같은 칸에서 바뀐 것은 프로그램이 스스로 바꾼 것으로 보고 되돌린다. 읽지 못한 순간(모름)은 바뀐 것으로 세지 않는다. 입력칸이 잡혔는데 모드가 다르면 바꾼다: 1) 포커스 창의 기본 IME 창에 `WM_IME_CONTROL`(`IMC_SETOPENSTATUS`·`IMC_SETCONVERSIONMODE`), 2) 0.3초 뒤에도 그대로거나 TSF 앱(Windows Terminal·UWP)이면 `SendInput` 으로 한/영 키(VK_HANGUL) 한 번. IME 요청은 칸마다·프로그램이 되돌릴 때마다 다시 하지만, 한/영 키는 뒤집기라 창마다 한 번만, 보조키를 누르고 있으면 미룸. 관리자 권한 창은 Windows(UIPI)가 막는다 | 바뀐 모드가 다음 갱신에 읽혀 배지 펄스. `--debug` 로그에 `keep mode: … via IME request / via Korean/English key`, 새로 기억하면 `keep mode: remember …` |
+| 선택 영역 덮어쓰기 표시 | Win32 표준 입력칸 `EM_GETSEL` 로 시작·끝을 두 포인터에 받음(Windows 가 다른 프로세스·32/64비트 사이로 옮겨 줌. 반환값은 다른 프로세스에 `SendMessageTimeout` 으로 보내면 선택과 상관없이 엉뚱하게 와서 쓰지 않음), Scintilla `SCI_GETSELECTIONSTART/END`, UIA 는 선택 범위를 접기 전 `CompareEndpoints`. 크롬 주소창처럼 "문서 처음~커서" 를 주는 컨트롤 때문에 `TextCaret.Pick` 이 커서 사각형을 버린 경우(CaretRejected)는 선택으로 보지 않음 | 배지 테두리(`BadgeMark.Selection`): 흰 펜 위 짙은 점선 펜. 밑줄은 막대를 흰 칸으로 끊음. 그림 크기·자리는 그대로 |
+| 비밀번호 칸 경고 | UIA `IsPassword`, Win32 표준 입력칸의 `ES_PASSWORD` 스타일·`EM_GETPASSWORDCHAR`. 위험 = 한글 입력 또는 Caps Lock(표시 설정과 무관) | 주의 말풍선 + 펄스. `PasswordGuard` 가 들어올 때·위험이 바뀔 때만 알림 |
+| 포커스 뺏김 경고 | 활성 창이 바뀔 때 직전 1초 안에 타이핑했고 1초 안에 마우스·Alt·Win·Ctrl 을 쓰지 않았으면 지켜보기 시작, 0.04~0.7초 사이에 `GetLastInputInfo` 의 마지막 입력 시각이 갱신되고 마우스를 움직이지 않았으면 경고(`FocusStealGuard`). 작업 표시줄·시작·검색·Alt+Tab·바탕화면·이모지 패널은 제외 | 바뀌기 전 창의 caret 자리에 주의 말풍선(앞으로 나온 앱의 파일 설명 또는 실행 파일 이름) |
+
+말풍선은 배지의 반대쪽(배지가 커서 위면 아래, 아래쪽 위치·밑줄 모양이면 위)에 두고 꼬리가 커서 왼쪽 끝을 가리킵니다(`CalloutLayout`).
+색은 정보 = 테마의 카드색·강조색, 주의 = Windows 11 InfoBar 의 주의 색, 고대비면 시스템 색입니다.
 
 ### UI 언어
 

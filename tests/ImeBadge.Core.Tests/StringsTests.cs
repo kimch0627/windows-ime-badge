@@ -72,6 +72,9 @@ public sealed class StringsTests
             "settings.import", "settings.export", "settings.reset");
         // 제외 앱
         AssertUniqueMnemonics(t, "exclude.add");
+        // 실험 기능
+        AssertUniqueMnemonics(t, "exp.sonar", "exp.sonar.preview", "exp.sonarHotkey", "exp.sonarOnSwitch", "exp.keepMode",
+            "exp.focusSteal", "exp.selection", "exp.password");
     }
 
     static void AssertUniqueMnemonics(IReadOnlyDictionary<string, string> table, params string[] keys)

@@ -27,42 +27,43 @@ static class A11yCaret
     /// <summary>한 번 찾는 데 이보다 오래 걸리면 오류 로그에 남긴다(디버그 모드가 아니어도). 멈춤 신고를 추적하려고.</summary>
     const int SlowLogMs = 2000;
 
-    static readonly DeadlineWorker<Rectangle?> Worker = new("ImeBadge caret (UIA)", WaitMs, AbandonAfterMs, MaxAbandoned,
+    static readonly DeadlineWorker<A11yHit> Worker = new("ImeBadge caret (UIA)", WaitMs, AbandonAfterMs, MaxAbandoned,
         wait: (h, ms) => Native.WaitForSingleObject(h.SafeWaitHandle.DangerousGetHandle(), (uint)ms) == Native.WAIT_OBJECT_0,
         configure: t => t.SetApartmentState(ApartmentState.MTA));   // UI Automation 클라이언트는 MTA 에서 부르는 것이 권장
 
-    // 마지막으로 찾은 caret (UI 스레드에서만 읽고 쓴다)
+    // 마지막으로 찾은 caret 과 입력칸 정보 (UI 스레드에서만 읽고 쓴다)
     static IntPtr _lastFocus;
-    static Rectangle? _lastCaret;
+    static A11yHit _last;
     static long _lastMs;
 
     /// <param name="focus">포커스 창(없으면 활성 창). MSAA 가상 caret 을 물을 창이자, 시간을 넘겼을 때 같은 입력칸인지 보는 기준.</param>
     /// <param name="process">로그용 프로세스 이름.</param>
-    public static Rectangle? Find(IntPtr focus, string process, StringBuilder? dump)
+    /// <param name="query">실험 기능이 함께 물을 입력칸 정보.</param>
+    public static A11yHit Find(IntPtr focus, string process, FocusQuery query, StringBuilder? dump)
     {
         var local = dump is null ? null : new StringBuilder();   // 작업 스레드가 쓴다. 시간을 넘기면 계속 쓰고 있을 수 있어 읽지 않는다
-        var outcome = Worker.Run(() => Query(focus, process, local), out var caret);
+        var outcome = Worker.Run(() => Query(focus, process, query, local), out var hit);
         long now = Environment.TickCount64;
-        if (outcome == DeadlineWorker<Rectangle?>.Outcome.Done)
+        if (outcome == DeadlineWorker<A11yHit>.Outcome.Done)
         {
             dump?.Append(local);
-            _lastFocus = focus; _lastCaret = caret; _lastMs = now;
-            return caret;
+            _lastFocus = focus; _last = hit; _lastMs = now;
+            return hit;
         }
-        dump?.Append(outcome == DeadlineWorker<Rectangle?>.Outcome.TimedOut ? " a11y:timeout" : " a11y:busy");
-        if (focus == _lastFocus && now - _lastMs <= ReuseMs) { dump?.Append(" a11y:reuse"); return _lastCaret; }
-        return null;
+        dump?.Append(outcome == DeadlineWorker<A11yHit>.Outcome.TimedOut ? " a11y:timeout" : " a11y:busy");
+        if (focus == _lastFocus && now - _lastMs <= ReuseMs) { dump?.Append(" a11y:reuse"); return _last; }
+        return default;
     }
 
     /// <summary>작업 스레드에서 돈다. UI Automation 이 입력칸 사각형만 주면(높이 0 = 근사 위치) MSAA 가상 caret 으로 정확한 위치를 찾아본다.</summary>
-    static Rectangle? Query(IntPtr focus, string process, StringBuilder? dump)
+    static A11yHit Query(IntPtr focus, string process, FocusQuery query, StringBuilder? dump)
     {
         long t0 = Environment.TickCount64;
-        var caret = UiaCaret.Find(dump);
+        var hit = UiaCaret.Find(query, dump);
         // 입력칸이 아닐 때(null)는 묻지 않는다. 가상 caret 에는 다른 곳에 있던 옛 위치가 남아 있을 수 있다.
-        if (caret is { Height: 0 } && AccCaret.Find(focus, dump) is { } acc) caret = acc;
+        if (hit.Caret is { Height: 0 } && AccCaret.Find(focus, dump) is { } acc) hit = hit with { Caret = acc };
         long ms = Environment.TickCount64 - t0;
         if (ms >= SlowLogMs) Log.Warn($"slow caret query {ms} ms (UI Automation/MSAA): {process} '{Native.ClassName(focus)}'");
-        return caret;
+        return hit;
     }
 }

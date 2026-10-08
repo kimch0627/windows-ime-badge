@@ -12,9 +12,10 @@ namespace ImeBadge;
 /// 100ms 타이머와 OS 이벤트 훅(IME 변경·활성 창 변경·포커스 변경)이 <see cref="Poll"/> 을 부르고,
 /// Poll 은 상태를 읽어 배지를 그리거나 옮기거나 숨긴다.
 /// </summary>
-sealed class BadgeForm : Form
+sealed class BadgeForm : Form, IExperimentHost
 {
     const int HotkeyId = 1;
+    const int SonarHotkeyId = 2;       // 실험 기능: 커서 소나
     const int IdleAfterMs = 2000;      // 배지가 이만큼 숨겨져 있으면 폴링을 느리게
     internal const int FlashMs = 1500; // DotFlash: 변경 직후 글자를 보여 주는 시간 (설정 창 미리보기도 같은 시간을 쓴다)
     const int FadeMs = 150;            // 나타날 때 페이드인
@@ -48,7 +49,7 @@ sealed class BadgeForm : Form
     const int EventPollMinGapMs = 15;           // 이보다 촘촘한 이벤트는 건너뛴다(타이머가 곧 따라잡는다)
 
     ImeState _lastState = ImeState.Unknown;
-    bool _lastCaps, _lastInsert;
+    bool _lastCaps, _lastInsert, _lastSelection;
     readonly ShiftHold _shiftHold = new();   // Shift 를 누른 지 얼마나 됐나. 매 폴링마다 갱신해야 하므로 여기서 잰다
     readonly InsertToggle _insertToggle = new();   // 창마다 Insert 로 켠 겹쳐 쓰기. 매 폴링마다 토글 비트를 봐야 하므로 여기서 잰다
     IntPtr _insertFg;                               // InsertToggle 에 마지막으로 넘긴 활성 창. 바뀌면 닫힌 창을 정리한다
@@ -57,14 +58,15 @@ sealed class BadgeForm : Form
     // 바뀜 = 한/영·Caps Lock·겹쳐 쓰기 변경, 배지가 새로 나타남, 활성 창이 바뀜.
     long _lastTypingMs = long.MinValue, _lastChangeMs = long.MinValue;
     Rectangle? _lastCaret;
-    (ImeState state, bool caps, bool shift, bool insert, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character) _renderKey;
+    (ImeState state, bool caps, bool shift, bool insert, bool selection, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character) _renderKey;
     Size _bitmapSize;
-    (ImeState state, bool caps, bool shift, bool insert, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character) _pulseBaseKey;
+    (ImeState state, bool caps, bool shift, bool insert, bool selection, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character) _pulseBaseKey;
     Point _lastPos = new(int.MinValue, int.MinValue);
     IntPtr _lastFg;
     bool _allowShow;
 
     bool _paused, _sessionLocked, _polling, _hotkeyRegistered, _startupScheduled;
+    bool _sonarHotkeyRegistered;
     long _hiddenSince = Environment.TickCount64;
     int _pollErrors;
     IntPtr _raiseFailFg; int _raiseFailCount;
@@ -72,6 +74,27 @@ sealed class BadgeForm : Form
     CancellationTokenSource? _updateCts;
     SettingsForm? _settingsForm;
     UpdateProgressForm? _updateProgress;
+
+    // ── 실험 기능 ──
+    SonarPlayer? _sonar;       // 커서 소나. 처음 쓸 때 만든다
+    CalloutPlayer? _callout;   // 커서 옆 말풍선. 처음 쓸 때 만든다
+    // "창을 바꾸면 저절로": 키보드로 창을 바꾼 직후, 그 창에서 caret 을 찾으면 소나를 한 번 보여 준다(Apply).
+    IntPtr _sonarPendingFg;
+    long _sonarPendingUntil;
+    const int SonarPendingMs = 1500;   // 창이 바뀐 뒤 caret 을 이만큼 안에 찾아야 보여 준다
+    // 마우스를 마지막으로 움직였거나 버튼을 누르고 있던 때. 이 안에 창이 바뀌었으면 마우스로 고른 것으로 본다.
+    Point _lastPointer = Cursor.Position;
+    long _lastPointerMs;
+    const int PointerSwitchMs = 700;
+    // 포커스 뺏김 경고: 창이 바뀐 순간을 기억해 두고, 바뀐 직후에도 입력이 이어지는지 폴링마다 본다(CheckFocusSteal).
+    readonly FocusStealGuard _stealGuard = new();
+    Rectangle? _stealCaret;      // 글자를 치던 자리(바뀌기 전 창의 caret). 경고를 여기에 띄운다
+    Point _stealPointer;         // 지켜보기 시작할 때의 마우스 위치. 움직였으면 사용자가 알아챘다고 본다
+    long _lastSwitchKeyMs = long.MinValue;   // Alt·Win·Ctrl 을 마지막으로 누르고 있던 때
+    const int StealWarningMs = 5000;
+    readonly PasswordGuard _passwordGuard = new();   // 비밀번호 칸 경고: 들어올 때·위험이 바뀔 때만 알린다
+    const int PasswordWarningMs = 6000;
+    readonly ImeModeKeeper _modeKeeper = new();      // 모든 프로그램에서 한/영 유지: 마지막으로 고른 모드를 다른 프로그램에 맞춘다
 
     ToolStripMenuItem _pauseItem = null!, _autostartItem = null!;
     ToolStripLabel _statusItem = null!;   // 누를 수 없는 상태 줄. 비활성 메뉴 항목과 달리 아이콘이 회색으로 바래지 않는다
@@ -153,6 +176,7 @@ sealed class BadgeForm : Form
             if (now - _lastEventPoll < EventPollMinGapMs) return;
             _lastEventPoll = now;
         }
+        else if (evt == Native.EVENT_SYSTEM_FOREGROUND) OnForegroundChanged();
         Poll();
     }
 
@@ -183,22 +207,34 @@ sealed class BadgeForm : Form
     protected override void OnHandleDestroyed(EventArgs e)
     {
         if (_hotkeyRegistered) { Native.UnregisterHotKey(Handle, HotkeyId); _hotkeyRegistered = false; }
+        if (_sonarHotkeyRegistered) { Native.UnregisterHotKey(Handle, SonarHotkeyId); _sonarHotkeyRegistered = false; }
         base.OnHandleDestroyed(e);
     }
 
-    /// <summary>설정의 단축키를 전역으로 등록한다. <paramref name="warnOnFailure"/> 면 실패를 사용자에게도 알린다(설정 저장 시).</summary>
+    /// <summary>
+    /// 설정의 단축키(일시 중지, 실험 기능의 커서 소나)를 전역으로 등록한다. <paramref name="warnOnFailure"/> 면 실패를 사용자에게도 알린다(설정 저장 시).
+    /// 두 단축키가 같으면 일시 중지가 먼저 등록되고 소나 쪽이 실패로 알려진다.
+    /// </summary>
     void ApplyHotkey(bool warnOnFailure = false)
     {
         if (!IsHandleCreated) return;
-        if (_hotkeyRegistered) { Native.UnregisterHotKey(Handle, HotkeyId); _hotkeyRegistered = false; }
         _pauseItem.ShortcutKeyDisplayString = _settings.HotkeyEnabled ? _settings.Hotkey : null;
-        if (!_settings.HotkeyEnabled) return;
-        if (!HotkeySpec.TryParse(_settings.Hotkey, out var hk)) hk = HotkeySpec.Default;
-        _hotkeyRegistered = Native.RegisterHotKey(Handle, HotkeyId, (uint)hk.Modifiers | Native.MOD_NOREPEAT, (uint)hk.Key);
-        if (_hotkeyRegistered) return;
+        _hotkeyRegistered = RegisterHotkey(HotkeyId, _hotkeyRegistered, _settings.HotkeyEnabled, _settings.Hotkey, HotkeySpec.Default, warnOnFailure);
+        _sonarHotkeyRegistered = RegisterHotkey(SonarHotkeyId, _sonarHotkeyRegistered, _settings.CaretSonar, _settings.CaretSonarHotkey,
+            HotkeySpec.SonarDefault, warnOnFailure);
+    }
+
+    /// <summary>단축키 하나를 (다시) 등록한다. 등록됐으면 true.</summary>
+    bool RegisterHotkey(int id, bool registered, bool enabled, string text, HotkeySpec fallback, bool warnOnFailure)
+    {
+        if (registered) Native.UnregisterHotKey(Handle, id);
+        if (!enabled) return false;
+        if (!HotkeySpec.TryParse(text, out var hk)) hk = fallback;
+        if (Native.RegisterHotKey(Handle, id, (uint)hk.Modifiers | Native.MOD_NOREPEAT, (uint)hk.Key)) return true;
         Log.Error($"hotkey {hk} registration failed (already used by another app?)");
         if (warnOnFailure)
             Dialogs.Warning(Strings.Format("hotkey.failed", hk), Strings.Get("hotkey.failed.text"));
+        return false;
     }
 
     // ── 트레이 메뉴 ──
@@ -469,11 +505,12 @@ sealed class BadgeForm : Form
     /// </summary>
     Bitmap PulseFrame(in Snapshot s, BadgeStyle style, float baseScale, float pulse)
     {
-        var baseKey = (s.State, s.CapsLock, s.Shift, s.Insert, style, baseScale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor, _settings.Theme, _settings.Character);
+        var baseKey = (s.State, s.CapsLock, s.Shift, s.Insert, s.Facts.Selection, style, baseScale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor, _settings.Theme, _settings.Character);
         if (_pulseBase is null || baseKey != _pulseBaseKey)
         {
             _pulseBase?.Dispose();
-            _pulseBase = BadgeRenderer.Render(s.State, style, baseScale, BadgeTheme.From(_settings), _settings.OpacityPercent, s.CapsLock, s.Shift, s.Insert);
+            _pulseBase = BadgeRenderer.Render(s.State, style, baseScale, BadgeTheme.From(_settings), _settings.OpacityPercent, s.CapsLock, s.Shift, s.Insert,
+                                              s.Facts.Selection);
             _pulseBaseKey = baseKey;
         }
         return BadgeRenderer.ScaleFrame(_pulseBase, pulse);
@@ -569,7 +606,7 @@ sealed class BadgeForm : Form
     }
 
     // 마지막으로 반영한 단축키·트레이·언어 설정. 설정 창에서 슬라이더를 끌 때마다 불리므로, 실제로 바뀐 것만 다시 적용한다.
-    (bool enabled, string hotkey) _appliedHotkey;
+    (bool enabled, string hotkey, bool sonar, string sonarHotkey) _appliedHotkey;
     (string hangul, string english, bool showState, string theme) _appliedTray;
     bool _appliedKorean = Strings.IsKorean;
     DesignTheme _appliedDesign = DesignThemes.Classic;   // 생성자에서 실제 값으로 맞춘다
@@ -594,8 +631,12 @@ sealed class BadgeForm : Form
         Strings.Setting = _settings.Language;
         if (Strings.IsKorean != _appliedKorean) { _appliedKorean = Strings.IsKorean; ApplyLanguage(); }
 
-        var hk = (_settings.HotkeyEnabled, _settings.Hotkey);
+        var hk = (_settings.HotkeyEnabled, _settings.Hotkey, _settings.CaretSonar, _settings.CaretSonarHotkey);
         if (hk != _appliedHotkey || save) { _appliedHotkey = hk; ApplyHotkey(warnOnFailure: save); }
+        if (!_settings.CaretSonar) _sonarPendingFg = IntPtr.Zero;
+        if (!_settings.FocusStealWarning) { _stealGuard.Disarm(); _callout?.Hide("steal"); }
+        if (!_settings.PasswordWarning) { _passwordGuard.Reset(); _callout?.Hide("password"); }
+        if (!_settings.KeepImeMode) _modeKeeper.Reset();
 
         var tray = (_settings.HangulColor, _settings.EnglishColor, _settings.TrayShowsState, _settings.Theme);
         if (tray != _appliedTray) { _appliedTray = tray; RefreshTray(); }
@@ -613,13 +654,16 @@ sealed class BadgeForm : Form
         UpdateTray(_trayState, _trayCaps, _trayInsert, force: true);
     }
 
-    void ResetRenderKey() => _renderKey = (ImeState.Unknown, false, false, false, (BadgeStyle)(-1), 0, -1, "", "", "", "");
+    void ResetRenderKey() => _renderKey = (ImeState.Unknown, false, false, false, false, (BadgeStyle)(-1), 0, -1, "", "", "", "");
 
     // ── 일시 중지 / 설정 / 정보 ──
     void TogglePause()
     {
         _paused = !_paused;
         Log.Write(_paused ? "paused" : "resumed");
+        _callout?.Hide();
+        _stealGuard.Disarm();
+        _passwordGuard.Reset();
         UpdateTray(ImeState.Unknown, force: true);
         Poll();
     }
@@ -634,7 +678,7 @@ sealed class BadgeForm : Form
             open.Activate();
             return;
         }
-        ShowSettings(new SettingsForm(_settings, _paths, () => CheckForUpdates(manual: true), page ?? SettingsPage.Appearance));
+        ShowSettings(new SettingsForm(_settings, _paths, () => CheckForUpdates(manual: true), this, page ?? SettingsPage.Appearance));
     }
 
     void ShowSettings(SettingsForm form)
@@ -826,6 +870,7 @@ sealed class BadgeForm : Form
             case SessionSwitchReason.ConsoleDisconnect:
             case SessionSwitchReason.RemoteDisconnect:
                 _sessionLocked = true; _timer.Stop(); HideBadge();
+                _callout?.Hide(); _sonar?.Stop();
                 Log.Write($"session {e.Reason}: paused polling");
                 break;
             case SessionSwitchReason.SessionUnlock:
@@ -864,6 +909,7 @@ sealed class BadgeForm : Form
     protected override void WndProc(ref Message m)
     {
         if (m.Msg == (int)Native.WM_HOTKEY && (int)m.WParam == HotkeyId) { TogglePause(); return; }
+        if (m.Msg == (int)Native.WM_HOTKEY && (int)m.WParam == SonarHotkeyId) { OnSonarHotkey(); return; }
         if (m.Msg == (int)SingleInstance.ShowSettingsMessage && m.Msg != 0) { OpenSettings(); return; }
         base.WndProc(ref m);
     }
@@ -876,13 +922,17 @@ sealed class BadgeForm : Form
         long t0 = Environment.TickCount64;
         try
         {
+            if (TracksUserInput) TrackUserInput();
+            CheckFocusSteal();
             // 일시 중지 중에도 재야 다시 켰을 때 "예전에 누르기 시작한 Shift" 로 잘못 세지 않는다.
             // "누르는 즉시 표시" 면 0.3초를 기다리지 않는다(누른 것이 보이는 첫 폴링, 기본 0.1초 안).
             bool shift = _shiftHold.Update(Native.IsShiftAloneDown(), Environment.TickCount64,
                                            _settings.ShowShiftImmediately ? 0 : ShiftHold.ThresholdMs);
             bool overtype = TrackInsert();
             if (_paused || _sessionLocked) { HideBadge(); return; }
-            Apply(ImeReader.Read(Handle, _settings, shift, overtype));
+            var snapshot = ImeReader.Read(Handle, _settings, shift, overtype);
+            if (_settings.KeepImeMode) KeepImeMode(snapshot);
+            Apply(snapshot);
         }
         catch (Exception ex)
         {
@@ -927,7 +977,8 @@ sealed class BadgeForm : Form
     void AdjustIdleInterval()
     {
         int want = _settings.PollIntervalMs;
-        if (!Visible && Environment.TickCount64 - _hiddenSince > IdleAfterMs)
+        // 포커스 뺏김을 지켜보는 동안(1초 미만)은 느리게 하지 않는다.
+        if (!Visible && Environment.TickCount64 - _hiddenSince > IdleAfterMs && !_stealGuard.Armed)
             want = Math.Max(want * 3, 300);
         if (_timer.Interval != want) _timer.Interval = want;
     }
@@ -957,6 +1008,10 @@ sealed class BadgeForm : Form
         if (appearing || changed || s.Foreground != _lastFg) _lastChangeMs = now;
         else if (s.Caret is { } cr && _lastCaret is { } prev && cr != prev) _lastTypingMs = now;
         _lastCaret = s.Caret;
+        if (_settings.PasswordWarning) WarnPassword(s, caret);
+        // 선택한 글이 생기면(다음 글자가 그 글을 지운다) "바뀔 때만" 표시 방식에서도 잠깐 보이고, "타이핑 중 옅게" 에서도 잠깐 또렷하다.
+        if (s.Facts.Selection && !_lastSelection) _lastChangeMs = now;
+        _lastSelection = s.Facts.Selection;
 
         // 나타날 때는 페이드인, 보이는 중에 한/영이 바뀌면 펄스. 둘 다 "지금 바뀌었다"를 눈에 띄게 한다.
         if (AnimationsOn)
@@ -979,7 +1034,7 @@ sealed class BadgeForm : Form
         float baseScale = Native.DpiScaleAt(caret.Location) * _settings.SizePercent / 100f;
         float scale = baseScale * pulse;
 
-        var key = (s.State, s.CapsLock, s.Shift, s.Insert, style, scale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor, _settings.Theme, _settings.Character);
+        var key = (s.State, s.CapsLock, s.Shift, s.Insert, s.Facts.Selection, style, scale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor, _settings.Theme, _settings.Character);
         bool needRender = key != _renderKey || _lastBmp is null;
 
         Size bs = needRender ? Size.Empty : _bitmapSize;
@@ -987,7 +1042,8 @@ sealed class BadgeForm : Form
         if (needRender)
         {
             bmp = pulse == 1f
-                ? BadgeRenderer.Render(s.State, style, scale, BadgeTheme.From(_settings), _settings.OpacityPercent, s.CapsLock, s.Shift, s.Insert)
+                ? BadgeRenderer.Render(s.State, style, scale, BadgeTheme.From(_settings), _settings.OpacityPercent, s.CapsLock, s.Shift, s.Insert,
+                                       s.Facts.Selection)
                 : PulseFrame(s, style, baseScale, pulse);
             bs = bmp.Size;
         }
@@ -1034,6 +1090,237 @@ sealed class BadgeForm : Form
 
         _lastPos = pos;
         _lastFg = s.Foreground;
+
+        // 실험 기능 "창을 바꾸면 저절로": 키보드로 바꾼 창에서 caret 을 찾았으면 소나를 한 번. 근사 위치(높이 0)는 정확하지 않아 건너뛴다.
+        if (_sonarPendingFg != IntPtr.Zero)
+        {
+            if (now > _sonarPendingUntil) _sonarPendingFg = IntPtr.Zero;
+            else if (s.Foreground == _sonarPendingFg && caret.Height > 0) { _sonarPendingFg = IntPtr.Zero; PlaySonar(caret, s.State); }
+        }
+    }
+
+    // ── 실험 기능: 커서 소나·말풍선 ──
+    /// <summary>마우스·Alt·Win·Ctrl 을 지켜볼 필요가 있는 실험 기능("창을 바꾸면 저절로", 포커스 뺏김 경고)이 켜져 있다. 꺼져 있으면 읽지 않는다.</summary>
+    bool TracksUserInput => (_settings.CaretSonar && _settings.CaretSonarOnSwitch) || _settings.FocusStealWarning;
+
+    /// <summary>
+    /// 마우스를 움직였거나 버튼을 누르고 있으면, 또는 Alt·Win·Ctrl 을 누르고 있으면 그 시각을 적는다. 창을 사용자가 바꿨는지(마우스·단축키)
+    /// 가리는 데 쓴다. 폴링(기본 0.1초)마다 보므로 아주 짧게 누른 키는 놓칠 수 있다.
+    /// </summary>
+    void TrackUserInput()
+    {
+        try
+        {
+            long now = Environment.TickCount64;
+            var p = Cursor.Position;
+            if (p != _lastPointer || Native.IsMouseButtonDown()) _lastPointerMs = now;
+            _lastPointer = p;
+            if (Native.IsSwitchKeyDown()) _lastSwitchKeyMs = now;
+        }
+        catch { }   // 보안 데스크톱(UAC 창) 등에서 포인터를 못 읽어도 다른 일은 계속한다
+    }
+
+    /// <summary>
+    /// 활성 창이 바뀌었다(OS 이벤트). "창을 바꾸면 저절로" 가 켜져 있으면, 마우스를 쓰지 않고(Alt+Tab 처럼 키보드로) 바꾼 경우에만
+    /// 새 창에서 caret 을 찾는 대로 소나를 보여 주도록 예약한다(<see cref="Apply"/>). 마우스로 창을 골랐으면 이미 그곳을 보고 있다.
+    /// </summary>
+    void OnForegroundChanged()
+    {
+        if (TracksUserInput) TrackUserInput();
+        if (_settings.PasswordWarning) { _passwordGuard.Reset(); _callout?.Hide("password"); }
+        WatchForFocusSteal();
+        _sonarPendingFg = IntPtr.Zero;
+        if (!_settings.CaretSonar || !_settings.CaretSonarOnSwitch || _paused || _sessionLocked) return;
+        long now = Environment.TickCount64;
+        if (now - _lastPointerMs < PointerSwitchMs) return;
+        _sonarPendingFg = Native.GetForegroundWindow();
+        _sonarPendingUntil = now + SonarPendingMs;
+    }
+
+    /// <summary>
+    /// 커서 소나 단축키. 지금 활성 창의 caret 을 새로 읽어 그 자리에 소나를 보여 준다. 사용자가 직접 누른 것이라 배지를 일시 중지한 동안에도
+    /// 동작한다. caret 을 못 찾으면(입력칸이 아님, 제외 앱 등) 마우스 포인터 옆에 알려 준다.
+    /// </summary>
+    void OnSonarHotkey()
+    {
+        Snapshot s;
+        try { s = ImeReader.Read(Handle, _settings); }
+        catch (Exception ex) { Log.Error("sonar read failed", ex); return; }
+        if (s.Caret is { } caret && s.State != ImeState.Unknown)
+        {
+            if (caret.Height == 0)
+            {
+                // 입력칸 왼쪽 아래로 근사한 위치: 그 입력칸의 첫 줄쯤을 커서로 본다.
+                float k = Native.DpiScaleAt(caret.Location);
+                int h = (int)Math.Round(16 * k);
+                caret = new Rectangle(caret.X + (int)Math.Round(6 * k), caret.Y - h - (int)Math.Round(4 * k), 1, h);
+            }
+            PlaySonar(caret, s.State);
+            return;
+        }
+        Log.Write($"sonar: caret not found ({s.Suppressed ?? "none"})");
+        var p = Cursor.Position;
+        int pointer = (int)Math.Round(22 * Native.DpiScaleAt(p));   // 포인터 그림을 가리지 않게 포인터 높이만큼 아래에
+        ShowCallout("sonar", new CalloutContent(CalloutKind.Info, Strings.Get("sonar.notFound"), Strings.Get("sonar.notFound.detail"), Glyphs.Sonar),
+            new Rectangle(p.X, p.Y, 1, pointer), holdMs: 2500, preferBelow: true);
+    }
+
+    /// <summary>설정 창의 [보기]: 그 단추 가운데에 커서가 있는 것처럼 소나를 한 번 보여 준다(한글 배지 색).</summary>
+    public void PreviewSonar(Rectangle screen)
+    {
+        int h = Math.Max(1, screen.Height - 8);
+        PlaySonar(new Rectangle(screen.Left + screen.Width / 2, screen.Top + (screen.Height - h) / 2, 1, h), ImeState.Hangul);
+    }
+
+    /// <summary>소나 재생. 원의 색은 그 상태의 배지 색, 고대비 모드면 강조색(영문 배지는 창 바탕색이라 원이 보이지 않는다).</summary>
+    void PlaySonar(Rectangle caret, ImeState state)
+    {
+        var theme = BadgeTheme.From(_settings);
+        bool hc = SystemInformation.HighContrast;
+        var color = hc ? SystemColors.Highlight : state switch { ImeState.Hangul => theme.Hangul, ImeState.English => theme.English, _ => theme.Other };
+        var halo = hc ? SystemColors.HighlightText : Color.White;
+        try { (_sonar ??= new SonarPlayer()).Play(caret, color, halo, AnimationsOn); }
+        catch (Exception ex) { Log.Error("sonar failed", ex); }
+    }
+
+    /// <summary>
+    /// 커서 옆 말풍선. 배지와 겹치지 않게 배지의 반대쪽에 띄운다(<see cref="CalloutBelow"/>). <paramref name="holdMs"/> 가 0 이하면
+    /// <see cref="CalloutPlayer.Hide"/> 할 때까지 보인다.
+    /// </summary>
+    void ShowCallout(string tag, CalloutContent content, Rectangle anchor, int holdMs, bool? preferBelow = null)
+    {
+        try { (_callout ??= new CalloutPlayer()).Show(tag, content, anchor, preferBelow ?? CalloutBelow, holdMs, AnimationsOn); }
+        catch (Exception ex) { Log.Error("callout failed", ex); }
+    }
+
+    /// <summary>말풍선을 커서 아래에 둘까. 배지가 커서 위(오른쪽 위·왼쪽 위·위)면 아래, 아래쪽 위치이거나 밑줄 모양(커서 바로 아래)이면 위.</summary>
+    bool CalloutBelow => _settings.Style != BadgeStyle.Underline
+        && _settings.Placement is BadgePlacement.AboveRight or BadgePlacement.AboveLeft or BadgePlacement.Above;
+
+    // ── 실험 기능: 포커스 뺏김 경고 ──
+    /// <summary>
+    /// 활성 창이 바뀐 순간: 직전까지 글자를 치고 있었고 사용자가 바꾼 것 같지 않으면(<see cref="FocusStealGuard"/>) 지켜보기 시작한다.
+    /// 작업 표시줄·시작 메뉴·Alt+Tab 화면·바탕화면처럼 사용자가 여는 셸 화면과 이 프로그램의 창은 보지 않는다.
+    /// </summary>
+    void WatchForFocusSteal()
+    {
+        _stealGuard.Disarm();
+        if (!_settings.FocusStealWarning || _paused || _sessionLocked) return;
+        var fg = Native.GetForegroundWindow();
+        if (fg == IntPtr.Zero || IsShellOrSelf(fg)) return;
+        long now = Environment.TickCount64;
+        if (!_stealGuard.OnForegroundChanged(now, (long)fg, (long)_lastFg, _lastTypingMs, Math.Max(_lastPointerMs, _lastSwitchKeyMs))) return;
+        _stealCaret = _lastCaret;
+        _stealPointer = _lastPointer;
+        if (_timer.Interval != _settings.PollIntervalMs) _timer.Interval = _settings.PollIntervalMs;   // 지켜보는 동안은 빠르게
+        Log.Write($"focus steal: watching fg='{Native.ClassName(fg)}'");
+    }
+
+    /// <summary>지켜보는 중이면, 창이 바뀐 직후에도 입력이 이어졌는지 본다. 이어졌으면 글자를 치던 자리에 경고를 띄운다.</summary>
+    void CheckFocusSteal()
+    {
+        if (!_stealGuard.Armed) return;
+        var fg = Native.GetForegroundWindow();
+        bool pointerUsed = _lastPointer != _stealPointer || Native.IsMouseButtonDown();
+        if (!_stealGuard.Check(Environment.TickCount64, (long)fg, Native.LastInputMs(), pointerUsed)) return;
+        if (_stealCaret is not { } anchor) return;
+        string app = AppTitle(fg);
+        Log.Write($"focus steal: warned fg='{Native.ClassName(fg)}'");
+        ShowCallout("steal", new CalloutContent(CalloutKind.Warning, Strings.Get("steal.title"), Strings.Format("steal.detail", app), Glyphs.Shield),
+            anchor, holdMs: StealWarningMs);
+    }
+
+    static readonly string[] ShellClasses =
+    {
+        "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "NotifyIconOverflowWindow", "TopLevelWindowForOverflowXamlIsland",
+        "XamlExplorerHostIslandWindow", "MultitaskingViewFrame", "TaskSwitcherWnd", "ForegroundStaging", "Progman", "WorkerW",
+    };
+
+    static readonly string[] ShellProcesses =
+    {
+        "SearchHost", "SearchApp", "StartMenuExperienceHost", "ShellExperienceHost", "TextInputHost", "LockApp",
+    };
+
+    /// <summary>작업 표시줄·시작 메뉴·검색·Alt+Tab·바탕화면·이모지 패널처럼 사용자가 여는 셸 화면이거나 이 프로그램의 창인가.</summary>
+    static bool IsShellOrSelf(IntPtr window)
+    {
+        if (Array.IndexOf(ShellClasses, Native.ClassName(window)) >= 0) return true;
+        Native.GetWindowThreadProcessId(window, out uint pid);
+        if (pid == (uint)Environment.ProcessId) return true;
+        return Array.IndexOf(ShellProcesses, ImeReader.ProcessName(pid)) >= 0;
+    }
+
+    /// <summary>경고에 쓸 앱 이름: 실행 파일의 설명(예: "Google Chrome"), 없으면 실행 파일 이름. UWP 앱은 안쪽 앱 프로세스의 것.</summary>
+    static string AppTitle(IntPtr window)
+    {
+        var core = Native.UwpCoreWindow(window);
+        Native.GetWindowThreadProcessId(core != IntPtr.Zero ? core : window, out uint pid);
+        try
+        {
+            if (Native.ProcessImagePath(pid) is { } path
+                && System.Diagnostics.FileVersionInfo.GetVersionInfo(path).FileDescription?.Trim() is { Length: > 0 } description)
+                return description.Length > 40 ? description[..40] + "…" : description;
+        }
+        catch { }
+        string name = ImeReader.ProcessName(pid);
+        return name.Length > 0 ? name : Strings.Get("diag.unknown");
+    }
+
+    // ── 실험 기능: 비밀번호 칸 경고 ──
+    /// <summary>
+    /// 비밀번호 칸에서 한글 입력이거나 Caps Lock 이 켜져 있으면 커서 옆에 경고하고 배지를 한 번 살짝 키운다. 들어올 때와 위험이 바뀔 때만
+    /// 알리고(<see cref="PasswordGuard"/>), 영문으로 바꾸고 Caps Lock 을 끄면 바로 내린다. Caps Lock 은 "Caps Lock 표시" 설정과 상관없이 본다.
+    /// </summary>
+    void WarnPassword(in Snapshot s, Rectangle caret)
+    {
+        var risk = (s.State == ImeState.Hangul ? PasswordRisk.Hangul : PasswordRisk.None) | (Native.IsCapsLockOn() ? PasswordRisk.CapsLock : PasswordRisk.None);
+        if (_passwordGuard.Update(s.Facts.Password, (long)s.Foreground, risk) is not { } todo) return;
+        if (todo == PasswordRisk.None) { _callout?.Hide("password"); return; }
+        string detail = todo switch
+        {
+            PasswordRisk.Hangul | PasswordRisk.CapsLock => "password.both",
+            PasswordRisk.Hangul => "password.hangul",
+            _ => "password.caps",
+        };
+        ShowCallout("password", new CalloutContent(CalloutKind.Warning, Strings.Get("password.title"), Strings.Get(detail), Glyphs.Lock),
+            caret, PasswordWarningMs);
+        if (AnimationsOn && _anim == Anim.None) StartAnim(Anim.Pulse);
+    }
+
+    // ── 실험 기능: 모든 프로그램에서 한/영 유지 ──
+    /// <summary>
+    /// 마지막으로 고른 한/영을 다른 프로그램에도 맞춘다(<see cref="ImeModeKeeper"/> 가 언제·무엇으로 바꿀지 정한다). 입력칸이 잡힌 뒤에만 바꾸고,
+    /// 먼저 IME 에 요청한 뒤 그대로면 한/영 키를 한 번 보낸다(<see cref="ImeWriter"/>). 바뀐 결과는 다음 갱신에 읽혀 배지가 펄스로 보여 준다.
+    /// 비밀번호 칸은 한글로 바꾸지 않고, 거기서 바꾼 모드는 기억하지 않는다. 제외 앱·전체 화면·이 프로그램 창(Suppressed)과 다른 언어는 건드리지 않는다.
+    /// 포커스를 가진 칸도 넘겨, 프로그램이 활성화되며 포커스를 이리저리 옮길 때(Xshell) 바뀐 모드를 한/영 키로 착각하지 않게 한다.
+    /// </summary>
+    void KeepImeMode(in Snapshot s)
+    {
+        bool? hangul = s.Suppressed is not null ? null : s.State switch { ImeState.Hangul => true, ImeState.English => false, _ => null };
+        bool password = s.Facts.Password;
+        bool canSwitch = s.Caret is not null && !(password && _modeKeeper.Desired == true);
+        bool? before = _modeKeeper.Desired;
+        bool? want = _modeKeeper.Observe((long)s.Foreground, (long)s.Focus, hangul, canSwitch, learn: !password, Environment.TickCount64);
+        if (before is not null && _modeKeeper.Desired is bool chosen && chosen != before)
+            Log.Write($"keep mode: remember {(chosen ? "Hangul" : "English")} (Korean/English key in fg='{Native.ClassName(s.Foreground)}')");
+        if (want is not bool target) return;
+
+        string mode = target ? "Hangul" : "English", window = Native.ClassName(s.Foreground);
+        if (_modeKeeper.Attempts == 1 && !s.PreferTsf && ImeWriter.RequestImm(s.Focus, target))
+        {
+            Log.Write($"keep mode: {mode} via IME request fg='{window}'");
+            return;   // 다음 갱신에 바뀌었는지 본다. 그대로면 한/영 키로 한 번 더(ImeModeKeeper.RetryMs 뒤)
+        }
+        if (!_modeKeeper.KeyAllowed)
+        {
+            Log.Write($"keep mode: {mode} not applied, Korean/English key already sent fg='{window}'");
+            _modeKeeper.GiveUp();   // 한/영 키는 뒤집기라 한 창에 두 번 보내면 반대가 될 수 있다
+            return;
+        }
+        if (ImeWriter.TapHangulKey()) Log.Write($"keep mode: {mode} via Korean/English key fg='{window}'");
+        else if (Native.IsModifierDown()) { _modeKeeper.NotSent(); return; }   // Alt+Tab 의 Alt 등을 아직 누르고 있다: 다음 갱신에
+        else Log.Write($"keep mode: could not send key fg='{window}'");
+        _modeKeeper.GiveUp();   // 한/영 키는 누를 때마다 뒤집으므로 이 창에서는 다시 보내지 않는다
     }
 
     /// <summary>위치·크기는 그대로 두고 z-order만 최상위 창들 중 맨 위로 올린다. 포커스는 건드리지 않는다.</summary>
@@ -1120,6 +1407,8 @@ sealed class BadgeForm : Form
             _animTimer.Dispose();
             _lastBmp?.Dispose();
             _pulseBase?.Dispose();
+            _sonar?.Dispose();
+            _callout?.Dispose();
             _settingsForm?.Dispose();
             _updateProgress?.Dispose();
             _tray.Visible = false;

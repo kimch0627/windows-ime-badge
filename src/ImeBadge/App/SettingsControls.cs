@@ -57,6 +57,14 @@ static class Glyphs
     public const string Copy = "\uE8C8";         // Copy
     public const string Add = "\uE710";          // Add
     public const string OpenExternal = "\uE8A7"; // OpenInNewWindow
+    // 실험 기능
+    public const string Experimental = "\uF196"; // TestBeaker (플라스크)
+    public const string Sonar = "\uF272";        // 과녁(소나)
+    public const string Switch = "\uE8AB";       // Switch (⇄, 창 바꾸기)
+    public const string Shield = "\uE730";       // 느낌표 방패(경고)
+    public const string Selection = "\uE8B3";    // SelectAll (점선 상자)
+    public const string Lock = "\uE72E";         // Lock
+    public const string InputMode = "\uE8C1";    // Characters (A字, 입력 방식)
 }
 
 /// <summary>

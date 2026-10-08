@@ -20,6 +20,7 @@ static class Uia
     public const int UIA_ControlTypePropertyId = 30003;
     public const int UIA_ClassNamePropertyId = 30012;
     public const int UIA_HasKeyboardFocusPropertyId = 30008;
+    public const int UIA_IsPasswordPropertyId = 30019;
     public const int UIA_FrameworkIdPropertyId = 30024;
     public const int UIA_ValuePatternId = 10002;
     public const int UIA_TextPatternId = 10014;
@@ -94,7 +95,8 @@ static class Uia
     {
         void _Slot_Clone();
         void _Slot_Compare();
-        void _Slot_CompareEndpoints();
+        /// <summary>이 범위의 한 끝점과 다른 범위의 한 끝점을 비교한다. 같으면 0, 앞이면 음수, 뒤면 양수.</summary>
+        int CompareEndpoints(TextPatternRangeEndpoint srcEndPoint, IUIAutomationTextRange range, TextPatternRangeEndpoint targetEndPoint);
         void ExpandToEnclosingUnit(TextUnit unit);
         void _Slot_FindAttribute();
         void _Slot_FindText();

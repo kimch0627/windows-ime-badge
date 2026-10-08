@@ -14,8 +14,12 @@ enum ImeState { Unknown, Hangul, English, OtherLang }
 /// <param name="CaretWindow">커서를 자식 창으로 그리는 앱(Xshell)에서 찾은 그 커서 창(<see cref="CursorWindow"/>). 없으면 0.
 /// BadgeForm 이 이 창의 위치 변경 이벤트를 받아 타이머를 기다리지 않고 배지를 옮긴다.</param>
 /// <param name="Insert">활성 창이 Insert 로 겹쳐 쓰기를 켠 상태인가(<see cref="InsertToggle"/>). 언어와 상관없다. 설정에서 표시를 껐으면 항상 false.</param>
+/// <param name="Facts">실험 기능이 물은 입력칸 정보(<see cref="FocusFacts"/>). 실험 기능을 모두 껐으면 비어 있다.</param>
+/// <param name="Focus">한/영을 읽은 창(포커스 창, 없으면 활성 창. UWP 는 안쪽 CoreWindow). 한/영 유지가 같은 창에 바꾸라고 보낸다.</param>
+/// <param name="PreferTsf">IMM 대신 TSF 로 읽는 앱(UWP, Windows Terminal). IMM 으로 바꾸라는 요청도 통하지 않는다.</param>
 readonly record struct Snapshot(ImeState State, Rectangle? Caret, IntPtr Foreground = default, string? Suppressed = null, bool CapsLock = false,
-                                bool Shift = false, IntPtr CaretWindow = default, bool Insert = false);
+                                bool Shift = false, IntPtr CaretWindow = default, bool Insert = false, FocusFacts Facts = default,
+                                IntPtr Focus = default, bool PreferTsf = false);
 
 /// <summary>활성 창의 caret 위치와 한/영 상태를 한 번 읽어 <see cref="Snapshot"/> 으로 돌려준다.</summary>
 static class ImeReader
@@ -61,6 +65,8 @@ static class ImeReader
 
         Rectangle? caret = null;
         IntPtr caretWindow = IntPtr.Zero;
+        FocusFacts facts = default;
+        var query = Focus.QueryFor(settings);
         if (gti.hwndCaret != IntPtr.Zero && gti.rcCaret.Bottom > gti.rcCaret.Top)
         {
             var tl = new Native.POINT(gti.rcCaret.Left, gti.rcCaret.Top);
@@ -69,6 +75,7 @@ static class ImeReader
             Native.ClientToScreen(gti.hwndCaret, ref br);
             caret = Rectangle.FromLTRB(tl.X, tl.Y, Math.Max(br.X, tl.X + 1), br.Y);
             dump?.Append($" caret:win32('{Native.ClassName(gti.hwndCaret)}')");
+            facts = Focus.FromWin32(gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : gti.hwndCaret, query);
         }
         else
         {
@@ -83,9 +90,12 @@ static class ImeReader
             else
             {
                 // UI Automation(→ 필요하면 MSAA). 대상 앱이 바쁘면 오래 걸릴 수 있어 UI 스레드 밖에서 묻고 잠깐만 기다린다.
-                caret = A11yCaret.Find(gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target, process, dump);
+                var hit = A11yCaret.Find(gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target, process, query, dump);
+                caret = hit.Caret;
+                facts = hit.Facts;
             }
         }
+        Focus.Describe(facts, dump);
         // 셋 다 못 찾으면(caret == null) 배지를 띄우지 않는다. 작업 표시줄·버튼처럼 글자를 입력하지 않는 곳에 뜨지 않게 하기 위해서다.
         // 한/영 상태는 트레이 아이콘이 계속 보여 준다.
 
@@ -109,7 +119,8 @@ static class ImeReader
             Log.WriteIfChanged($"fg='{Native.ClassName(fg)}' focus='{Native.ClassName(gti.hwndFocus)}' tid={tid} pid={pid} => {state}{dump}");
         }
 
-        return new(state, caret, fg, CapsLock: caps, Shift: shift, CaretWindow: caretWindow, Insert: insert);
+        return new(state, caret, fg, CapsLock: caps, Shift: shift, CaretWindow: caretWindow, Insert: insert, Facts: facts,
+                   Focus: gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target, PreferTsf: preferTsf);
     }
 
     /// <summary>
