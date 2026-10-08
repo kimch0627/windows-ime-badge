@@ -30,7 +30,7 @@ static class UiaCaret
             }
 
             Rectangle? caret = null;
-            bool selection = false;
+            bool selection = false, unverified = false;
             textPat = el.GetCurrentPattern(Uia.UIA_TextPatternId);
             if (textPat is Uia.IUIAutomationTextPattern tp)
             {
@@ -82,9 +82,11 @@ static class UiaCaret
                             TextCaretSource.Prev => "text-prev",
                             _ => "text-next",
                         };
-                        dump?.Append($" uia:{from}({c.Left:F0},{c.Bottom:F0})");
+                        // "uia:text?(300,38)" 이면 글자 사각형이 망가져 대조하지 못한 값이다(A11yCaret 이 MSAA 로 바꿔 본다).
+                        dump?.Append($" uia:{from}{(pick.Unverified ? "?" : "")}({c.Left:F0},{c.Bottom:F0})");
                         caret = new Rectangle((int)c.Left, (int)c.Top, 1, (int)c.Height);
-                        selection = spans && !pick.CaretRejected;
+                        unverified = pick.Unverified;
+                        selection = spans && !pick.CaretRejected && !pick.Unverified;
                     }
                 }
             }
@@ -113,7 +115,7 @@ static class UiaCaret
                     return default;
                 }
             }
-            return new A11yHit(caret, query == FocusQuery.None ? default : Facts(el, query, selection, dump));
+            return new A11yHit(caret, query == FocusQuery.None ? default : Facts(el, query, selection, dump), unverified);
         }
         catch (Exception ex) { dump?.Append($" uia:EXC {ex.GetType().Name} 0x{ex.HResult:X8}"); }
         finally

@@ -55,13 +55,17 @@ static class A11yCaret
         return default;
     }
 
-    /// <summary>작업 스레드에서 돈다. UI Automation 이 입력칸 사각형만 주면(높이 0 = 근사 위치) MSAA 가상 caret 으로 정확한 위치를 찾아본다.</summary>
+    /// <summary>
+    /// 작업 스레드에서 돈다. UI Automation 이 입력칸 사각형만 주거나(높이 0 = 근사 위치), 준 커서 사각형을 앞뒤 글자와 대조할 수 없으면
+    /// (글자 사각형이 망가짐 = Unverified, 일부 Chrome 주소창) MSAA 가상 caret 으로 정확한 위치를 찾아본다. 못 찾으면 UI Automation 의 값을 쓴다.
+    /// </summary>
     static A11yHit Query(IntPtr focus, string process, FocusQuery query, StringBuilder? dump)
     {
         long t0 = Environment.TickCount64;
         var hit = UiaCaret.Find(query, dump);
         // 입력칸이 아닐 때(null)는 묻지 않는다. 가상 caret 에는 다른 곳에 있던 옛 위치가 남아 있을 수 있다.
-        if (hit.Caret is { Height: 0 } && AccCaret.Find(focus, dump) is { } acc) hit = hit with { Caret = acc };
+        if (hit.Caret is { } c && (c.Height == 0 || hit.Unverified) && AccCaret.Find(focus, dump) is { } acc)
+            hit = hit with { Caret = acc, Unverified = false };
         long ms = Environment.TickCount64 - t0;
         if (ms >= SlowLogMs) Log.Warn($"slow caret query {ms} ms (UI Automation/MSAA): {process} '{Native.ClassName(focus)}'");
         return hit;

@@ -243,6 +243,8 @@ installer/ImeBadge.iss  Inno Setup 스크립트
      그 사각형을 바로 앞 글자의 오른쪽 끝·바로 뒤 글자의 왼쪽 끝과 대조해 어느 한쪽과 맞닿아 있을 때만 씁니다(`Core/TextCaret.cs`).
      크롬 주소창(Chrome 154)은 커서가 어디에 있든 입력칸 맨 앞을 주기 때문입니다. 맞지 않거나 비었으면 앞 글자의 오른쪽 끝,
      그것도 없으면 뒤 글자의 왼쪽을 씁니다. 로그에는 `uia:text(...)`, 버린 값이 있으면 `uia:caret-off(...) uia:text-prev(...)` 가 남습니다.
+     어떤 Chrome 프로필은 글자 사각형까지 입력칸 맨 앞의 1px 막대로 줘서 대조가 의미 없습니다. 넓이 1px 이하인 글자 사각형은 믿지 않고,
+     대조하지 못했으면(로그 `uia:text?(...)`) 아래의 MSAA 가상 caret 으로 바꿉니다(`caret:acc(...)`). 없으면 UI Automation 의 값을 씁니다.
      Chrome/Edge/Electron(VS Code) 같은 앱용. TextPattern이 없으면 Edit/ComboBox 컨트롤의 왼쪽 아래 모서리를 근사 위치로 잡고
      (높이 0), 포커스 창의 MSAA 가상 caret(`OBJID_CARET`)이 있으면 그 위치로 바꿉니다(`caret:acc(...)`).
      읽기 전용이라고 밝힌 요소에는 배지를 띄우지 않습니다.

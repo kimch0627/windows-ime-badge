@@ -12,7 +12,7 @@ caret 탐색·IME 판정·창 z-order 는 실제 앱에서만 확인할 수 있�
 | 메모장 (Win11) | 본문 | Win32 | ⬜ | ⬜ | |
 | Word | 본문 | Win32 | ⬜ | ⬜ | |
 | Excel | 셀 편집 | Win32 | ⬜ | ⬜ | 셀 선택 상태에서는 caret 없음 |
-| Chrome | 주소창 | UIA text | ⬜ | ⬜ | "문서 처음~커서" 범위 접기. 커서가 끝·중간·맨 앞·한글 조합 중일 때 배지가 따라가는지. Chrome 154 는 커서 범위로 입력칸 맨 앞을 줘 로그에 `uia:caret-off(...) uia:text-prev(...)` |
+| Chrome | 주소창 | UIA text | ⬜ | ⬜ | "문서 처음~커서" 범위 접기. 커서가 끝·중간·맨 앞·한글 조합 중일 때 배지가 따라가는지. Chrome 154 는 커서 범위로 입력칸 맨 앞을 줘 로그에 `uia:caret-off(...) uia:text-prev(...)`. 글자 사각형까지 망가진 프로필(평소 쓰던 프로필에서 확인)은 `uia:text?(...) caret:acc(...)` 이고 Home 에서도 배지 높이가 같음 |
 | Chrome | 웹 페이지 textarea | UIA text | ⬜ | ⬜ | |
 | Edge | 주소창 / 본문 | UIA text | ⬜ | ⬜ | |
 | VS Code | 편집기 | UIA text | ⬜ | ⬜ | Electron |
