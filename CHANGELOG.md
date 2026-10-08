@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [1.15.1] - 2026-10-08
+
+일부 Chrome 에서 **주소창의 배지가 커서를 따라가지 않던 문제**를 고친 릴리스입니다. 설정 항목과 설정 파일은 그대로입니다.
+
 ### 수정
 - **일부 Chrome 에서 주소창에 입력해도 배지가 주소 맨 앞에 멈춰 따라오지 않던 문제.** 어떤 Chrome 프로필(창)에서는 주소창이
   화면 읽기 프로그램용 정보(UI Automation)로 글자 위치를 물으면, 어느 글자든 입력칸 맨 앞의 1px 막대를 줍니다(글자 내용은 맞음).
@@ -554,7 +558,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.15.0...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.15.1...HEAD
+[1.15.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.15.0...v1.15.1
 [1.15.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.12.0...v1.13.0
