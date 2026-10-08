@@ -103,6 +103,15 @@ SmartScreen 평판은 서명 후에도 다운로드 횟수가 쌓여야 경고�
 
 토큰이 없으면 워크플로는 매니페스트만 만들고 `winget submit: false` 를 남기고 끝납니다.
 
+제출이 `The forked repository could not be synced with the upstream commits` 로 실패하면, 원본 winget-pkgs 가 GitHub Actions 워크플로
+파일을 바꾼 뒤라 `public_repo` 토큰으로는 내 포크(`kimch0627/winget-pkgs`)를 동기화할 수 없는 것입니다(`gh repo sync` 도 `workflow` 권한을 요구).
+둘 중 하나로 다시 제출합니다.
+
+- GitHub 웹에서 포크의 **Sync fork → Update branch** 를 누른 뒤 Actions 탭 → **winget** → Run workflow(version 에 그 릴리스 버전).
+- 동기화 없이 제출: 포크의 지금 `master` 에서 브랜치를 만들어 `winget/manifests/k/kimch0627/ImeBadge/<버전>/` 의 파일만 커밋하고
+  `microsoft/winget-pkgs` 의 `master` 로 PR 을 엽니다(제목 `New version: kimch0627.ImeBadge version <버전>`). PR 의 변경은 매니페스트 파일뿐이라
+  포크가 뒤처져 있어도 됩니다. 1.15.0 은 이렇게 제출했습니다.
+
 ### 수동 제출
 
 ```powershell
