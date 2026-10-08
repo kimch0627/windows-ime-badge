@@ -95,6 +95,7 @@ sealed class BadgeForm : Form, IExperimentHost
     readonly PasswordGuard _passwordGuard = new();   // 비밀번호 칸 경고: 들어올 때·위험이 바뀔 때만 알린다
     const int PasswordWarningMs = 6000;
     readonly ImeModeKeeper _modeKeeper = new();      // 모든 프로그램에서 한/영 유지: 마지막으로 고른 모드를 다른 프로그램에 맞춘다
+    IntPtr _keepSkipLogged;                          // 한/영 유지가 믿을 수 없는 읽기를 건너뛴다고 로그에 남긴 창
 
     ToolStripMenuItem _pauseItem = null!, _autostartItem = null!;
     ToolStripLabel _statusItem = null!;   // 누를 수 없는 상태 줄. 비활성 메뉴 항목과 달리 아이콘이 회색으로 바래지 않는다
@@ -1293,10 +1294,19 @@ sealed class BadgeForm : Form, IExperimentHost
     /// 먼저 IME 에 요청한 뒤 그대로면 한/영 키를 한 번 보낸다(<see cref="ImeWriter"/>). 바뀐 결과는 다음 갱신에 읽혀 배지가 펄스로 보여 준다.
     /// 비밀번호 칸은 한글로 바꾸지 않고, 거기서 바꾼 모드는 기억하지 않는다. 제외 앱·전체 화면·이 프로그램 창(Suppressed)과 다른 언어는 건드리지 않는다.
     /// 포커스를 가진 칸도 넘겨, 프로그램이 활성화되며 포커스를 이리저리 옮길 때(Xshell) 바뀐 모드를 한/영 키로 착각하지 않게 한다.
+    /// IMM 이 한국어 IME 의 값이 아닌 변환 모드(0xFFFF 등)를 돌려준 순간은 모름으로 넘긴다: 그 값은 실제 입력과 다를 수 있고, 그 값을
+    /// 바꿔도 실제 입력은 그대로라 배지만 바뀐 모드를 보여 주게 된다(Windows Terminal 에서 배지는 영문인데 한글이 입력되던 문제).
     /// </summary>
     void KeepImeMode(in Snapshot s)
     {
-        bool? hangul = s.Suppressed is not null ? null : s.State switch { ImeState.Hangul => true, ImeState.English => false, _ => null };
+        bool? hangul = s.Suppressed is not null || s.ModeUncertain ? null
+                     : s.State switch { ImeState.Hangul => true, ImeState.English => false, _ => null };
+        if (!s.ModeUncertain) _keepSkipLogged = IntPtr.Zero;
+        else if (s.Caret is not null && s.Foreground != _keepSkipLogged)
+        {
+            _keepSkipLogged = s.Foreground;   // 창마다 한 번만 남긴다(폴링마다 쌓이지 않게)
+            Log.Write($"keep mode: wait, conversion mode is not a Korean IME value fg='{Native.ClassName(s.Foreground)}'");
+        }
         bool password = s.Facts.Password;
         bool canSwitch = s.Caret is not null && !(password && _modeKeeper.Desired == true);
         bool? before = _modeKeeper.Desired;

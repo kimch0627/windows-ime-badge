@@ -17,21 +17,17 @@ enum ImeState { Unknown, Hangul, English, OtherLang }
 /// <param name="Facts">실험 기능이 물은 입력칸 정보(<see cref="FocusFacts"/>). 실험 기능을 모두 껐으면 비어 있다.</param>
 /// <param name="Focus">한/영을 읽은 창(포커스 창, 없으면 활성 창. UWP 는 안쪽 CoreWindow). 한/영 유지가 같은 창에 바꾸라고 보낸다.</param>
 /// <param name="PreferTsf">IMM 대신 TSF 로 읽는 앱(UWP, Windows Terminal). IMM 으로 바꾸라는 요청도 통하지 않는다.</param>
+/// <param name="ModeUncertain">IMM 의 변환 모드가 한국어 IME 의 값이 아니었다(<see cref="KoreanIme.IsPlausibleMode"/>). 배지는 그대로 그리지만
+/// 한/영 유지는 이 값으로 기억하거나 바꾸지 않는다.</param>
 readonly record struct Snapshot(ImeState State, Rectangle? Caret, IntPtr Foreground = default, string? Suppressed = null, bool CapsLock = false,
                                 bool Shift = false, IntPtr CaretWindow = default, bool Insert = false, FocusFacts Facts = default,
-                                IntPtr Focus = default, bool PreferTsf = false);
+                                IntPtr Focus = default, bool PreferTsf = false, bool ModeUncertain = false);
 
 /// <summary>활성 창의 caret 위치와 한/영 상태를 한 번 읽어 <see cref="Snapshot"/> 으로 돌려준다.</summary>
 static class ImeReader
 {
     // pid → 프로세스 이름. 활성 창이 바뀔 때마다 OpenProcess 를 다시 하지 않도록 캐시한다.
     static readonly Dictionary<uint, string> ProcessNames = new();
-
-    /// <summary>
-    /// IMM32 가 한/영 상태를 틀리게 보고하는 것으로 알려진 앱. 이 앱들은 TSF 전역 compartment 를 먼저 읽고 IMM 은 대체 경로로 쓴다.
-    /// (Windows Terminal 은 TSF 로만 IME 를 쓰고, IMM 쪽 상태는 마지막으로 IMM 을 쓴 창의 값이 남아 있는 경우가 있다.)
-    /// </summary>
-    static readonly string[] TsfPreferredProcesses = { "WindowsTerminal", "OpenConsole" };
 
     /// <param name="shiftHeld">Shift 를 계속 누르고 있는가. 누른 시간은 폴링마다 재야 하므로 부르는 쪽(<see cref="ShiftHold"/>)이 잰다.</param>
     /// <param name="overtype">활성 창이 겹쳐 쓰기 상태인가. 창마다 Insert 를 누른 것을 세야 하므로 부르는 쪽(<see cref="InsertToggle"/>)이 잰다.</param>
@@ -99,8 +95,10 @@ static class ImeReader
         // 셋 다 못 찾으면(caret == null) 배지를 띄우지 않는다. 작업 표시줄·버튼처럼 글자를 입력하지 않는 곳에 뜨지 않게 하기 위해서다.
         // 한/영 상태는 트레이 아이콘이 계속 보여 준다.
 
-        bool preferTsf = core != IntPtr.Zero || Array.IndexOf(TsfPreferredProcesses, process) >= 0;
-        var state = ReadImeState(target, gti.hwndFocus, tid, preferTsf, dump);
+        // IMM32 가 한/영을 틀리게 보고하는 앱(UWP, Windows Terminal)은 TSF 전역 compartment 를 먼저 읽는다. process 는 소문자라
+        // 대소문자를 가리지 않고 견준다(예전에는 "WindowsTerminal" 과 견주어 한 번도 맞지 않았다).
+        bool preferTsf = core != IntPtr.Zero || KoreanIme.PrefersTsf(process);
+        var state = ReadImeState(target, gti.hwndFocus, tid, preferTsf, dump, out bool uncertain);
         // Caps Lock 은 배지 글자로 보여 준다(한 → 꺆, a → A). 한글 모드에서도 켜져 있으면 영문 대문자가 입력되므로 함께 본다.
         bool caps = settings.ShowCapsLock && state is (ImeState.English or ImeState.Hangul) && Native.IsCapsLockOn();
         if (caps) dump?.Append(" caps");
@@ -120,7 +118,7 @@ static class ImeReader
         }
 
         return new(state, caret, fg, CapsLock: caps, Shift: shift, CaretWindow: caretWindow, Insert: insert, Facts: facts,
-                   Focus: gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target, PreferTsf: preferTsf);
+                   Focus: gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target, PreferTsf: preferTsf, ModeUncertain: uncertain);
     }
 
     /// <summary>
@@ -132,21 +130,26 @@ static class ImeReader
     /// </list>
     /// 보통은 IMM → TSF 순서, preferTsf 면 TSF → IMM 순서로 시도한다.
     /// </summary>
-    static ImeState ReadImeState(IntPtr fg, IntPtr hwndFocus, uint tid, bool preferTsf, StringBuilder? dump)
+    static ImeState ReadImeState(IntPtr fg, IntPtr hwndFocus, uint tid, bool preferTsf, StringBuilder? dump, out bool uncertain)
     {
+        uncertain = false;
         ushort lang = (ushort)((long)Native.GetKeyboardLayout(tid) & 0xFFFF);
         if (lang != Native.LANG_KOREAN) { dump?.Append($" lang=0x{lang:X4}"); return ImeState.OtherLang; }
 
         var state = ImeState.Unknown;
         if (preferTsf) state = Tsf.ReadState(dump) ?? ImeState.Unknown;
-        if (state == ImeState.Unknown) state = ReadImm(fg, hwndFocus, dump);
+        if (state == ImeState.Unknown) state = ReadImm(fg, hwndFocus, dump, out uncertain);
         if (state == ImeState.Unknown && !preferTsf) state = Tsf.ReadState(dump) ?? ImeState.Unknown;
         return state;
     }
 
-    /// <summary>IMM32 경로. 한/영 키는 "열림(open)"이 아니라 "변환 모드"의 한글 비트를 바꾼다.</summary>
-    static ImeState ReadImm(IntPtr fg, IntPtr hwndFocus, StringBuilder? dump)
+    /// <summary>
+    /// IMM32 경로. 한/영 키는 "열림(open)"이 아니라 "변환 모드"의 한글 비트를 바꾼다. 변환 모드가 한국어 IME 의 값이 아니면
+    /// (<see cref="KoreanIme.IsPlausibleMode"/>) <paramref name="uncertain"/> 을 켠다.
+    /// </summary>
+    static ImeState ReadImm(IntPtr fg, IntPtr hwndFocus, StringBuilder? dump, out bool uncertain)
     {
+        uncertain = false;
         var target = hwndFocus != IntPtr.Zero ? hwndFocus : fg;
         var imeWnd = Native.ImmGetDefaultIMEWnd(target);
         if (imeWnd == IntPtr.Zero) { dump?.Append(" imeWnd=0"); return ImeState.Unknown; }
@@ -161,6 +164,7 @@ static class ImeReader
         if (ok == IntPtr.Zero) { dump?.Append(" mode:timeout"); return ImeState.Unknown; }
 
         dump?.Append($" open=1 mode=0x{(long)mode:X}");
+        if (!KoreanIme.IsPlausibleMode((long)mode)) { uncertain = true; dump?.Append(" mode?"); }
         return (((uint)(long)mode) & Native.IME_CMODE_HANGUL) != 0 ? ImeState.Hangul : ImeState.English;
     }
 
