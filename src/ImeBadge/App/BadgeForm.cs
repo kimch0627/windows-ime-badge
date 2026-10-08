@@ -1276,15 +1276,22 @@ sealed class BadgeForm : Form, IExperimentHost
         var risk = (s.State == ImeState.Hangul ? PasswordRisk.Hangul : PasswordRisk.None) | (Native.IsCapsLockOn() ? PasswordRisk.CapsLock : PasswordRisk.None);
         if (_passwordGuard.Update(s.Facts.Password, (long)s.Foreground, risk) is not { } todo) return;
         if (todo == PasswordRisk.None) { _callout?.Hide("password"); return; }
-        string detail = todo switch
-        {
-            PasswordRisk.Hangul | PasswordRisk.CapsLock => "password.both",
-            PasswordRisk.Hangul => "password.hangul",
-            _ => "password.caps",
-        };
-        ShowCallout("password", new CalloutContent(CalloutKind.Warning, Strings.Get("password.title"), Strings.Get(detail), Glyphs.Lock),
-            caret, PasswordWarningMs);
+        ShowCallout("password", PasswordCallout(todo), caret, PasswordWarningMs);
         if (AnimationsOn && _anim == Anim.None) StartAnim(Anim.Pulse);
+    }
+
+    /// <summary>
+    /// 비밀번호 칸 경고의 내용: 제목 옆 알약으로 무엇이 문제인지("한글 입력", "Caps Lock") 한눈에 보이고, 아래 한 줄은 고치는 방법.
+    /// 확인용 그림(<see cref="RenderSheet"/>)도 같은 내용을 그린다.
+    /// </summary>
+    internal static CalloutContent PasswordCallout(PasswordRisk risk)
+    {
+        bool hangul = (risk & PasswordRisk.Hangul) != 0, caps = (risk & PasswordRisk.CapsLock) != 0;
+        var tags = new List<string>(2);
+        if (hangul) tags.Add(Strings.Get("password.tag.hangul"));
+        if (caps) tags.Add(Strings.Get("password.tag.caps"));
+        string detail = hangul && caps ? "password.both" : hangul ? "password.hangul" : "password.caps";
+        return new CalloutContent(CalloutKind.Warning, Strings.Get("password.title"), Strings.Get(detail), Glyphs.Lock, tags.ToArray());
     }
 
     // ── 실험 기능: 모든 프로그램에서 한/영 유지 ──

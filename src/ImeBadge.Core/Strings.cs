@@ -286,9 +286,11 @@ public static class Strings
         ["exp.password.desc"] = "비밀번호 칸에 들어갔는데 한글 입력이거나 Caps Lock 이 켜져 있으면 커서 옆에 경고를 띄우고 배지를 한 번 살짝 키웁니다.",
         ["exp.password.tip"] = "한글 모드나 Caps Lock 때문에 비밀번호가 틀리는 일을 막습니다. 웹 페이지와 앱이 비밀번호 칸이라고 알려 주는 칸(UI Automation)과 Windows 기본 비밀번호 칸에서 동작합니다. 브라우저 중에는 비밀번호 칸에서 한글 입력을 저절로 끄는 것도 있어, 그때는 영문으로 보고 경고하지 않습니다. 입력한 글자는 읽지 않습니다.",
         ["password.title"] = "비밀번호 칸이에요",
-        ["password.hangul"] = "지금 한글 입력이에요. 한/영 키로 영문으로 바꾸세요.",
-        ["password.caps"] = "Caps Lock 이 켜져 있어요.",
-        ["password.both"] = "지금 한글 입력이고 Caps Lock 도 켜져 있어요.",
+        ["password.tag.hangul"] = "한글 입력",
+        ["password.tag.caps"] = "Caps Lock",
+        ["password.hangul"] = "한/영 키를 눌러 영문으로 바꾸세요.",
+        ["password.caps"] = "Caps Lock 키를 눌러 끄세요.",
+        ["password.both"] = "한/영 키로 영문으로 바꾸고 Caps Lock 을 끄세요.",
 
         // ── 정보 페이지 ──
         ["about.update"] = "업데이트",
@@ -609,9 +611,11 @@ public static class Strings
         ["exp.password.desc"] = "When you enter a password field while input is Korean or Caps Lock is on, a warning appears next to the caret and the badge grows briefly.",
         ["exp.password.tip"] = "Helps you avoid wrong passwords caused by Korean input or Caps Lock. Works in fields that web pages and apps report as password fields (UI Automation) and in standard Windows password fields. Some browsers turn Korean input off in password fields by themselves; then the input counts as English and no warning appears. What you type is never read.",
         ["password.title"] = "This is a password field",
-        ["password.hangul"] = "Input is Korean now. Press the Korean/English key to switch to English.",
-        ["password.caps"] = "Caps Lock is on.",
-        ["password.both"] = "Input is Korean and Caps Lock is on.",
+        ["password.tag.hangul"] = "Korean input",
+        ["password.tag.caps"] = "Caps Lock",
+        ["password.hangul"] = "Press the Korean/English key to switch to English.",
+        ["password.caps"] = "Press Caps Lock to turn it off.",
+        ["password.both"] = "Switch to English and turn off Caps Lock.",
 
         // ── About page ──
         ["about.update"] = "Updates",

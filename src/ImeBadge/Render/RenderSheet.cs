@@ -263,22 +263,30 @@ static class RenderSheet
         }
 
         s.Section("11. 실험 기능 — 커서 옆 말풍선",
-            "배율 150%. caret(선) 아래(꼬리가 위)와 위(꼬리가 아래). 정보는 테마 카드색, 주의는 Windows 11 InfoBar 의 주의 색.");
+            "배율 150%. caret(선) 아래(꼬리가 위)와 위(꼬리가 아래). 흰색(어둡게: 짙은 회색) 카드 + 왼쪽 띠·아이콘 원·알약에만 강조색(정보 = 테마 강조색, 주의 = 노랑).");
         var calloutCases = new (string Name, CalloutContent Content)[]
         {
             ("소나: 커서 못 찾음", new(CalloutKind.Info, Strings.Get("sonar.notFound"), Strings.Get("sonar.notFound.detail"), Glyphs.Sonar)),
             ("포커스 뺏김 경고", new(CalloutKind.Warning, Strings.Get("steal.title"), Strings.Format("steal.detail", "KakaoTalk"), Glyphs.Shield)),
-            ("비밀번호 칸: 한글", new(CalloutKind.Warning, Strings.Get("password.title"), Strings.Get("password.hangul"), Glyphs.Lock)),
-            ("비밀번호 칸: 둘 다", new(CalloutKind.Warning, Strings.Get("password.title"), Strings.Get("password.both"), Glyphs.Lock)),
+            ("비밀번호 칸: 한글", BadgeForm.PasswordCallout(PasswordRisk.Hangul)),
+            ("비밀번호 칸: Caps Lock", BadgeForm.PasswordCallout(PasswordRisk.CapsLock)),
+            ("비밀번호 칸: 둘 다", BadgeForm.PasswordCallout(PasswordRisk.Hangul | PasswordRisk.CapsLock)),
         };
-        foreach (var (name, content) in calloutCases)
+        void CalloutRow(string name, CalloutContent content, float scale)
         {
             var cells = new[] { (false, true), (false, false), (true, true), (true, false) }
-                .Select(c => CalloutCell(content, Main, c.Item1, c.Item2)).ToList();
+                .Select(c => CalloutCell(content, scale, c.Item1, c.Item2)).ToList();
             float w = cells.Max(c => c.Width) + 4;
             s.Headers(new[] { ("밝게 · 아래", new[] { "" }, w), ("밝게 · 위", new[] { "" }, w), ("어둡게 · 아래", new[] { "" }, w), ("어둡게 · 위", new[] { "" }, w) });
             s.Row(name, cells.Select((c, i) => new SheetPanel(i < 2 ? Light : Dark, w, new List<Bitmap> { c })).ToList());
         }
+        foreach (var (name, content) in calloutCases) CalloutRow(name, content, Main);
+        // 실제 크기(100%)에서 글자가 또렷한지, 영어 UI 에서 알약이 제목 옆에 다 들어가지 않을 때 다음 줄로 내려가는지.
+        CalloutRow("비밀번호 칸: 둘 다 · 100%", BadgeForm.PasswordCallout(PasswordRisk.Hangul | PasswordRisk.CapsLock), 1f);
+        var language = Strings.Setting;
+        Strings.Setting = UiLanguage.English;
+        try { CalloutRow("비밀번호 칸: 둘 다 · 영어", BadgeForm.PasswordCallout(PasswordRisk.Hangul | PasswordRisk.CapsLock), Main); }
+        finally { Strings.Setting = language; }
 
         s.Section("12. 실험 기능 — 선택 영역 덮어쓰기 표시",
             "선택한 글이 있으면 배지 테두리가 흰 칸·짙은 칸이 번갈아 끊긴 점선(선택 영역 모양)이 된다. 밑줄은 막대가 점선이 된다. 배율 150%, 마지막 판은 100% ×3.");
