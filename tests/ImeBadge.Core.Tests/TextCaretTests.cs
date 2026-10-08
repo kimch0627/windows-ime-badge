@@ -108,4 +108,70 @@ public sealed class TextCaretTests
     {
         Assert.Equal(TextCaretSource.None, TextCaret.Pick(null, null, None).From);
     }
+
+    // 같은 Chrome 154 라도 어떤 프로필에서는 글자 사각형까지 망가져 어느 글자를 물어도 입력칸 맨 앞의 1px 막대를 준다(2026-10, 배율 100%).
+    static readonly RectangleF BrokenGlyph = new(299, 11, 1, 26);
+
+    [Fact]
+    public void Omnibox_BrokenGlyphRects_CaretIsUnverified()
+    {
+        // "abcde" 끝에 커서. 커서·앞 글자 'e'·뒤 글자 모두 299 의 1px 막대. 막대끼리 "맞닿아" 보여도 믿지 않는다.
+        var pick = TextCaret.Pick(BrokenGlyph, BrokenGlyph, () => BrokenGlyph);
+        Assert.Equal(TextCaretSource.Caret, pick.From);
+        Assert.True(pick.Unverified);
+        Assert.False(pick.CaretRejected);
+    }
+
+    [Fact]
+    public void Omnibox_BrokenGlyphRects_AtStart_IsUnverified()
+    {
+        // 맨 앞(Home)에서는 앞 글자가 없고 커서 범위(299)도 실제로 맞다. 그래도 뒤 글자 사각형이 망가졌으면 알려,
+        // 다른 자리처럼 MSAA 가상 caret 을 쓰게 한다(같은 입력칸에서 출처가 바뀌면 높이가 달라 배지가 튄다).
+        var pick = TextCaret.Pick(BrokenGlyph, null, () => BrokenGlyph);
+        Assert.Equal(TextCaretSource.Caret, pick.From);
+        Assert.True(pick.Unverified);
+        Assert.Equal(299, pick.Rect.Left);
+    }
+
+    [Fact]
+    public void EmptyField_NoNeighbors_TrustsCaretRect()
+    {
+        var pick = TextCaret.Pick(BrokenGlyph, null, None);
+        Assert.Equal(TextCaretSource.Caret, pick.From);
+        Assert.False(pick.Unverified);
+    }
+
+    [Fact]
+    public void BrokenPrev_GoodNextTouching_IsTrusted()
+    {
+        var pick = TextCaret.Pick(new RectangleF(314, 11, 1, 26), BrokenGlyph, () => new RectangleF(314, 11, 7, 26));
+        Assert.Equal(TextCaretSource.Caret, pick.From);
+        Assert.False(pick.Unverified);
+    }
+
+    [Fact]
+    public void BrokenPrev_GoodNextElsewhere_UsesNextLeftEdge()
+    {
+        var pick = TextCaret.Pick(BrokenGlyph, BrokenGlyph, () => new RectangleF(314, 11, 7, 26));
+        Assert.Equal(TextCaretSource.Next, pick.From);
+        Assert.True(pick.CaretRejected);
+        Assert.Equal(314, pick.Rect.Left);
+    }
+
+    [Fact]
+    public void EmptyCaretRect_BrokenPrev_IsUnverified()
+    {
+        var pick = TextCaret.Pick(null, BrokenGlyph, None);
+        Assert.Equal(TextCaretSource.Prev, pick.From);
+        Assert.True(pick.Unverified);
+    }
+
+    [Fact]
+    public void NarrowGlyph_IsStillUsable()
+    {
+        // 'i' 처럼 좁은 글자(3px)는 망가진 값이 아니다. 앞 글자 'i' 300~303 의 오른쪽 끝에 붙은 커서는 그대로 믿는다.
+        var pick = TextCaret.Pick(new RectangleF(303, 11, 1, 27), new RectangleF(300, 11, 3, 27), None);
+        Assert.Equal(TextCaretSource.Caret, pick.From);
+        Assert.False(pick.Unverified);
+    }
 }

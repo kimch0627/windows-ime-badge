@@ -14,7 +14,9 @@ enum FocusQuery { None = 0, Password = 1, Selection = 2 }
 readonly record struct FocusFacts(bool Password = false, bool Selection = false);
 
 /// <summary>UI Automation 경로(<see cref="A11yCaret"/>)의 결과: caret 과 입력칸 정보.</summary>
-readonly record struct A11yHit(Rectangle? Caret, FocusFacts Facts = default);
+/// <param name="Unverified">caret 을 앞뒤 글자와 대조하지 못했다(UI Automation 이 준 글자 사각형이 망가짐, <see cref="TextCaretPick.Unverified"/>).
+/// <see cref="A11yCaret"/> 이 MSAA 가상 caret 을 찾아 바꾼다.</param>
+readonly record struct A11yHit(Rectangle? Caret, FocusFacts Facts = default, bool Unverified = false);
 
 /// <summary>caret 을 찾은 경로마다 입력칸 정보를 만든다. 입력한 글자는 읽지 않는다.</summary>
 static class Focus
