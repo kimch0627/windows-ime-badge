@@ -4,8 +4,11 @@
 
 ## [Unreleased]
 
-처음 쓰는 사람의 눈으로 설정 창과 배지를 다듬는 중입니다. 작업 목록과 진행 상황은 [docs/ux-improvement-prd.md](docs/ux-improvement-prd.md) 에 있습니다.
-눈에 보이는 모습(커서 옆 말풍선·소나, 배지 윤곽, 트레이, 대화상자)을 또렷하게 다듬는 작업은 [docs/view-improvement-prd.md](docs/view-improvement-prd.md) 에 있습니다.
+## [1.16.0] - 2026-10-12
+
+처음 쓰는 사람의 눈으로 **설정 창·트레이·첫 실행**을 다듬고, 커서 옆 말풍선·소나·배지 윤곽·대화상자를 **또렷하게** 고친 릴리스입니다.
+설정 창은 이제 바꾸는 즉시 저장하고([되돌리기]/[닫기]), 처음 실행하면 "시작하기" 안내가 보입니다. 설정 파일은 그대로 쓰고, 새 항목은 예전과 같은 동작이 기본값입니다.
+작업 목록과 결정 기록은 [UX 개선](docs/ux-improvement-prd.md) · [View 개선](docs/view-improvement-prd.md) 에 있습니다.
 
 ### 추가
 - **트레이 메뉴에서 일정 시간만 일시 중지**할 수 있습니다(30분 / 1시간). 시간이 지나면 저절로 다시 켜지고, 그동안 메뉴와 툴팁에 언제까지인지 보입니다.
@@ -623,7 +626,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.15.1...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.16.0...HEAD
+[1.16.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.15.1...v1.16.0
 [1.15.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.15.0...v1.15.1
 [1.15.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.13.0...v1.14.0
