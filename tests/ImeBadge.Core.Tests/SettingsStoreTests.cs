@@ -280,6 +280,7 @@ public sealed class SettingsStoreTests : IDisposable
         b.ShowSelection = true;
         b.PasswordWarning = true;
         b.KeepImeMode = true;
+        b.ShowOnboarding = true;
         a.CopyFrom(b);
         Assert.Equal(BadgeVisibility.OnChange, a.Visibility);
         Assert.False(a.ShowInsert);
@@ -291,6 +292,22 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.True(a.ShowSelection);
         Assert.True(a.PasswordWarning);
         Assert.True(a.KeepImeMode);
+        Assert.True(a.ShowOnboarding);
+    }
+
+    /// <summary>
+    /// "시작하기" 안내는 첫 실행에만 켠다. 이 항목이 없는 예전 설정 파일로 업그레이드한 사용자에게는 뜨지 않고(기본 꺼짐),
+    /// 켜 둔 값은 저장·읽기를 거쳐도 남는다.
+    /// </summary>
+    [Fact]
+    public void ShowOnboarding_OffForOldFiles_RoundTrips()
+    {
+        File.WriteAllText(P("old.json"), """{ "SizePercent": 130 }""");
+        Assert.False(new SettingsStore(P("old.json")).Load().ShowOnboarding);
+
+        var store = new SettingsStore(P("settings.json"));
+        store.Save(new Settings { ShowOnboarding = true });
+        Assert.True(store.Load().ShowOnboarding);
     }
 
     [Fact]
@@ -327,6 +344,7 @@ public sealed class SettingsStoreTests : IDisposable
             ExcludedProcesses = new List<string> { "mstsc" },
             LastUpdateCheckUtc = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
             SkippedUpdateTag = "v9.9.9",
+            ShowOnboarding = true,
         };
         SettingsStore.Export(s, P("export.json"));
         var back = SettingsStore.Import(P("export.json"));
@@ -336,6 +354,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(new[] { "mstsc" }, back.ExcludedProcesses);
         Assert.Null(back.LastUpdateCheckUtc);   // 이 PC 의 업데이트 기록은 옮기지 않는다
         Assert.Null(back.SkippedUpdateTag);
+        Assert.False(back.ShowOnboarding);      // 시작하기 안내도 이 PC 의 상태라 옮기지 않는다
         Assert.Equal("v9.9.9", s.SkippedUpdateTag);   // 원본은 그대로
     }
 

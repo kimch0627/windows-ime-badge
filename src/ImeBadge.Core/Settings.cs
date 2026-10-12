@@ -135,6 +135,14 @@ public sealed class Settings
     /// <summary>"이 버전 건너뛰기"를 누른 릴리스 태그("v1.2.3"). 이 버전은 자동 알림을 띄우지 않는다.</summary>
     public string? SkippedUpdateTag { get; set; }
 
+    // ── 안내 ──
+    /// <summary>
+    /// 설정 창 모양 페이지 맨 위의 "시작하기" 안내 카드를 보여 준다. 처음 실행(설정 파일이 없던 실행)에 켜지고 카드의 [안내 닫기]로 꺼진다.
+    /// 기본값이 false 라 이 항목이 없는 예전 설정 파일로 업그레이드한 사용자에게는 보이지 않는다(정보 페이지에서 다시 볼 수 있다).
+    /// 업데이트 확인 기록처럼 이 PC 의 상태라 내보내지 않고, 설정 창의 [되돌리기]도 건드리지 않는다. 구버전은 모르는 항목으로 무시한다.
+    /// </summary>
+    public bool ShowOnboarding { get; set; }
+
     /// <summary>Windows 11 기본 강조색. 흰 글자와의 대비가 5.7:1 로 WCAG AA(4.5:1)를 여유 있게 넘는다.</summary>
     public const string DefaultHangulColor = "#0067C0";
     /// <summary>
@@ -191,6 +199,7 @@ public sealed class Settings
         Language = other.Language;
         CheckForUpdates = other.CheckForUpdates; LastUpdateCheckUtc = other.LastUpdateCheckUtc;
         SkippedUpdateTag = other.SkippedUpdateTag;
+        ShowOnboarding = other.ShowOnboarding;
     }
 }
 
@@ -288,6 +297,7 @@ public sealed class SettingsStore
         var copy = settings.Clone();
         copy.LastUpdateCheckUtc = null;
         copy.SkippedUpdateTag = null;
+        copy.ShowOnboarding = false;
         File.WriteAllText(path, JsonSerializer.Serialize(copy, SettingsJsonContext.Default.Settings));
     }
 

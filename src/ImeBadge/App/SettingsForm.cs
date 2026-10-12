@@ -61,6 +61,7 @@ sealed class SettingsForm : Form
     /// <summary>미리보기를 접었는가. 앱이 도는 동안 기억해 설정 창을 다시 열어도(언어를 바꿔 새로 열 때 포함) 그대로다.</summary>
     static bool _previewCollapsed;
     SettingsCard _updateCard = null!, _diagCard = null!;
+    SettingsCard _startCard = null!;   // 모양 페이지 맨 위의 "시작하기" 안내(Settings.ShowOnboarding)
     SectionHeader _excludeHeader = null!;
     CardStack _excludePage = null!;
     readonly List<Control> _excludeRows = new();
@@ -365,6 +366,10 @@ sealed class SettingsForm : Form
         _previewHost = new PinnedCardHost { Dock = DockStyle.Top };
         _previewHost.Controls.Add(_previewCard);
 
+        // 처음 쓰는 사람을 위한 안내(UX-03). 첫 실행에 켜지고 [안내 닫기]로 꺼진다. 정보 페이지에서 다시 볼 수 있다.
+        _startCard = BuildStartCard();
+        page.Controls.Add(_startCard);
+
         page.Controls.Add(Section("section.themeShape"));
         // 테마: 배지 색·질감과 이 창의 색을 한 벌로 바꾼다. 타일에는 그 테마의 한/영 배지를 실제 렌더러로 그린다.
         // 다른 타일보다 크게: 테마마다 다른 질감(젤리 광택·파스텔)이 배지 크기에서 보여야 고를 수 있다.
@@ -556,9 +561,49 @@ sealed class SettingsForm : Form
         // 진단 정보: 이슈에 붙여 넣으면 재현 환경을 바로 알 수 있다.
         _diagCard = Link(Glyphs.Copy, "about.copyDiag", CopyDiagnostics, trailing: "");
         page.Controls.Add(_diagCard);
+        page.Controls.Add(Link(Glyphs.Start, "about.startAgain", ShowStartAgain, trailing: ""));
 
         page.Controls.Add(Note(Strings.Get("about.license")));
         return page;
+    }
+
+    /// <summary>"시작하기" 카드: 한/영 키로 확인해 보기, 숨은 트레이 아이콘 꺼내기, 잠깐 끄는 단축키, 저장 방식.</summary>
+    SettingsCard BuildStartCard()
+    {
+        var taskbar = Button("start.taskbar", () => AboutInfo.Open(AppInfo.TaskbarSettingsUri));
+        taskbar.Margin = new Padding(0, 0, 8, 0);
+        _tips.SetToolTip(taskbar, Strings.Get("start.taskbar.tip"));
+        var dismiss = Button("start.dismiss", DismissStart);
+        dismiss.Margin = Padding.Empty;
+        return new SettingsCard
+        {
+            Glyph = Glyphs.Start, Title = Strings.Get("start.title"), Description = StartText(), Body = Row(taskbar, dismiss),
+            Visible = _live.ShowOnboarding,
+        };
+    }
+
+    string StartText() => Strings.Format("start.desc", _draft.HotkeyEnabled ? _draft.Hotkey : Strings.Get("start.noHotkey"));
+
+    /// <summary>[안내 닫기]: 카드를 숨기고 다시 띄우지 않게 저장한다. 포커스는 다음 항목(테마)으로.</summary>
+    void DismissStart()
+    {
+        _live.ShowOnboarding = _draft.ShowOnboarding = false;
+        _startCard.Visible = false;
+        _theme.Focus();
+        _saveTimer.Stop();
+        _saveTimer.Start();
+    }
+
+    /// <summary>정보 페이지의 "시작 안내 다시 보기": 카드를 다시 켜고 모양 페이지 맨 위로 간다.</summary>
+    void ShowStartAgain()
+    {
+        _live.ShowOnboarding = _draft.ShowOnboarding = true;
+        _startCard.Description = StartText();
+        _startCard.Visible = true;
+        ShowPage(SettingsPage.Appearance);
+        _pages[(int)SettingsPage.Appearance].ScrollToTop();
+        _saveTimer.Stop();
+        _saveTimer.Start();
     }
 
     /// <summary>
@@ -1015,14 +1060,17 @@ sealed class SettingsForm : Form
     /// <summary>
     /// 편집 값을 실제 설정에 넣는다. 업데이트 확인 기록(마지막 확인 시각·건너뛴 버전)은 이 창이 편집하는 값이 아니므로 실제 설정의 것을 지킨다:
     /// 창이 열린 동안 [새 버전 확인]이나 하루 한 번 자동 확인이 그 값을 바꿨을 수 있다.
+    /// "시작하기" 안내를 보일지도 이 PC 의 상태라 실제 설정의 것을 지킨다([되돌리기]로 닫은 안내가 다시 나타나지 않게).
     /// </summary>
     void Store(Settings from)
     {
         var lastCheck = _live.LastUpdateCheckUtc;
         var skipped = _live.SkippedUpdateTag;
+        var onboarding = _live.ShowOnboarding;
         _live.CopyFrom(from);
         _live.LastUpdateCheckUtc = lastCheck;
         _live.SkippedUpdateTag = skipped;
+        _live.ShowOnboarding = onboarding;
     }
 
     /// <summary>초안을 컨트롤에 싣는다. 컨트롤마다 변경 이벤트가 오지만 끝에 한 번만 반영한다.</summary>
@@ -1101,6 +1149,7 @@ sealed class SettingsForm : Form
         _style?.Invalidate();       // 타일은 배지 색을 쓴다
         _character?.Invalidate();
         _placement?.Invalidate();
+        if (_startCard is { Visible: true }) _startCard.Description = StartText();   // 단축키가 바뀌었을 수 있다
         RefreshPreview();
         if (Strings.IsKorean != _builtKorean) LanguageChanged?.Invoke();
     }

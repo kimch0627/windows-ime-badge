@@ -54,7 +54,7 @@ public static class Strings
         // ── 앱 ──
         ["app.name"] = "ImeBadge (한/영 배지)",
         ["app.tagline"] = "글자를 입력하기 전에 지금 한글인지 영문인지 알 수 있도록\n텍스트 커서 옆에 작은 배지를 띄워 줍니다.",
-        ["app.firstRun"] = "커서 옆에 한/영 배지가 표시됩니다. 트레이 아이콘을 우클릭하면 모양과 동작을 바꿀 수 있습니다.",
+        ["app.firstRun"] = "커서 옆에 한/영 배지가 표시됩니다. 트레이 아이콘이 보이지 않으면 작업 표시줄 오른쪽 끝의 ^ 를 눌러 보세요.",
 
         // ── 상태 ──
         ["state.paused"] = "일시 중지",
@@ -192,7 +192,7 @@ public static class Strings
         ["look.animate.desc"] = "나타날 때 서서히, 바뀔 때 살짝 커집니다. Windows 설정의 애니메이션 효과가 꺼져 있으면 생략합니다.",
         ["section.keys"] = "특수 키",
         ["look.capsLock"] = "Caps Lock 표시(&C)",
-        ["look.capsLock.desc"] = "Caps Lock 이 켜지면 영문 배지는 a → A, 한글 배지는 한 → 꺆 으로 바뀌고 글자 아래에 밑줄(▁)이 생깁니다. 점·밑줄 모양은 그 아래 가운데에 밑줄이 붙습니다.",
+        ["look.capsLock.desc"] = "Caps Lock 이 켜지면 영문 배지는 a → A, 한글 배지는 한 → 꺆 으로 바뀌고 글자 아래에 밑줄(▁)이 생깁니다. 꺆 은 한글 배지의 '대문자' 모양입니다(쌍자음처럼 Shift 로 치는 글자). 점·밑줄 모양은 그 아래 가운데에 밑줄이 붙습니다.",
         ["look.capsLock.tip"] = "켜면 영문 배지가 평소 a, Caps Lock 이 켜지면 A 로 바뀌고, 한글 배지는 한 → 꺆 으로 바뀝니다. Caps Lock 이 켜져 있으면 글자 아래에 밑줄도 긋습니다. 글자가 없는 점·밑줄 모양은 점(밑줄) 아래 가운데에 같은 밑줄을 붙입니다. 트레이 아이콘은 그대로입니다. 끄면 항상 한 / A.",
         ["look.shiftHold"] = "Shift 를 누르고 있을 때도 표시(&S)",
         ["look.shiftHold.desc"] = "Shift 를 0.3초 이상 누르고 있으면 지금 입력될 글자를 보여 주고 배지 왼쪽 아래에 ▲ 를 붙입니다(a → A). Caps Lock 표시가 켜져 있어야 합니다.",
@@ -243,6 +243,14 @@ public static class Strings
         ["settings.resetTitle"] = "기본값 복원",
         ["settings.resetTitle.desc"] = "고른 테마는 그대로 두고 나머지 설정을 기본값으로 되돌립니다. [되돌리기]를 누르면 원래대로 돌아갑니다.",
         ["settings.reset"] = "복원(&R)",
+
+        // ── 시작하기 안내 (모양 페이지 맨 위, 첫 실행) ──
+        ["start.title"] = "시작하기",
+        ["start.desc"] = "① 메모장을 열고 한/영 키를 눌러 보세요. 커서 옆 배지가 한 ↔ a 로 바뀝니다.\n② 트레이 아이콘은 작업 표시줄 오른쪽 끝의 ^ 안에 숨어 있을 수 있습니다. 작업 표시줄로 끌어다 놓으면 한/영 상태가 늘 보입니다.\n③ 화면 공유처럼 잠깐 끄려면 {0} 를 누르세요.\n설정은 바꾸는 즉시 저장됩니다.",
+        ["start.noHotkey"] = "트레이 메뉴의 [일시 중지]",
+        ["start.taskbar"] = "작업 표시줄 설정 열기",
+        ["start.taskbar.tip"] = "Windows 설정의 작업 표시줄 페이지를 엽니다. \"기타 시스템 트레이 아이콘\" 에서 ImeBadge 를 켜면 아이콘이 늘 보입니다.",
+        ["start.dismiss"] = "안내 닫기",
 
         // ── 제외 앱 페이지 (니모닉: D) ──
         ["exclude.addTitle"] = "앱 추가",
@@ -309,6 +317,8 @@ public static class Strings
         ["about.logDir.desc"] = "문제가 생기면 errors.log 에 원인이 기록됩니다.",
         ["about.copyDiag"] = "진단 정보 복사",
         ["about.copyDiag.desc"] = "버전·Windows·화면 배율 같은 환경 정보를 클립보드에 복사합니다. 이슈를 올릴 때 붙여 넣어 주세요.",
+        ["about.startAgain"] = "시작 안내 다시 보기",
+        ["about.startAgain.desc"] = "처음 쓰는 분을 위한 안내를 모양 페이지 맨 위에 다시 보여 줍니다.",
         ["about.copied"] = "클립보드에 복사했습니다.",
         ["about.license"] = "Apache License 2.0 · 개인정보를 수집하지 않습니다",
         ["diag.dpi"] = "DPI: {0} ({1}%), 모니터 {2}대",
@@ -379,7 +389,7 @@ public static class Strings
         // ── App ──
         ["app.name"] = "ImeBadge (Korean/English badge)",
         ["app.tagline"] = "Shows a small badge next to the text caret so you know\nwhether you're typing Korean or English before you type.",
-        ["app.firstRun"] = "A Korean/English badge now appears next to the caret. Right-click the tray icon to change its look and behavior.",
+        ["app.firstRun"] = "A Korean/English badge now appears next to the caret. If you can't see the tray icon, click the ^ at the right end of the taskbar.",
 
         // ── State ──
         ["state.paused"] = "Paused",
@@ -517,7 +527,7 @@ public static class Strings
         ["look.animate.desc"] = "Fades in when shown and pulses when the mode changes. Skipped when Windows animation effects are off.",
         ["section.keys"] = "Special keys",
         ["look.capsLock"] = "Show &Caps Lock",
-        ["look.capsLock.desc"] = "With Caps Lock on, the English badge changes from a to A and the Korean badge from 한 to 꺆, with a bar (▁) under the letter. The dot and underline shapes get the bar below them, in the middle.",
+        ["look.capsLock.desc"] = "With Caps Lock on, the English badge changes from a to A and the Korean badge from 한 to 꺆, with a bar (▁) under the letter. 꺆 is the 'capital' form of the Korean badge (double consonants are typed with Shift). The dot and underline shapes get the bar below them, in the middle.",
         ["look.capsLock.tip"] = "When on, the English badge reads a normally and A with Caps Lock on; the Korean badge changes from 한 to 꺆. With Caps Lock on, a bar is drawn under the letter as well. The dot and underline shapes have no letter, so the same bar appears below them, in the middle. The tray icon stays the same. When off, always 한 / A.",
         ["look.shiftHold"] = "&Also show Shift while it is held",
         ["look.shiftHold.desc"] = "While Shift is held for 0.3 s or longer, the badge shows the letter you would type now with a ▲ at its lower left (a → A). Requires Show Caps Lock.",
@@ -568,6 +578,14 @@ public static class Strings
         ["settings.resetTitle"] = "Reset to defaults",
         ["settings.resetTitle.desc"] = "Keeps the chosen theme and resets everything else. Revert undoes it.",
         ["settings.reset"] = "&Reset",
+
+        // ── Getting started (top of the Appearance page, first run) ──
+        ["start.title"] = "Getting started",
+        ["start.desc"] = "① Open Notepad and press the Korean/English key. The badge next to the caret switches between 한 and a.\n② The tray icon may be hidden under the ^ at the right end of the taskbar. Drag it onto the taskbar to always see the mode.\n③ To turn the badge off for a while, such as during screen sharing, press {0}.\nSettings are saved as soon as you change them.",
+        ["start.noHotkey"] = "Pause in the tray menu",
+        ["start.taskbar"] = "Open taskbar settings",
+        ["start.taskbar.tip"] = "Opens the Taskbar page in Windows Settings. Turn ImeBadge on under \"Other system tray icons\" to always see the icon.",
+        ["start.dismiss"] = "Dismiss",
 
         // ── Excluded apps page (mnemonics: D) ──
         ["exclude.addTitle"] = "Add an app",
@@ -634,6 +652,8 @@ public static class Strings
         ["about.logDir.desc"] = "When something goes wrong, the cause is recorded in errors.log.",
         ["about.copyDiag"] = "Copy diagnostics",
         ["about.copyDiag.desc"] = "Copies your version, Windows and display scaling details to the clipboard. Paste them into an issue.",
+        ["about.startAgain"] = "Show getting started again",
+        ["about.startAgain.desc"] = "Shows the tips for new users at the top of the Appearance page again.",
         ["about.copied"] = "Copied to the clipboard.",
         ["about.license"] = "Apache License 2.0 · No personal data is collected",
         ["diag.dpi"] = "DPI: {0} ({1}%), {2} monitor(s)",

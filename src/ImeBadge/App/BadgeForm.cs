@@ -105,6 +105,12 @@ sealed class BadgeForm : Form, IExperimentHost
         _store = store;
         _paths = paths;
         _firstRun = firstRun;
+        if (firstRun)
+        {
+            // 처음 실행: 설정 창 모양 페이지 맨 위에 "시작하기" 안내를 띄운다(UX-03). 설정 파일도 이때 만든다.
+            _settings.ShowOnboarding = true;
+            _store.Save(_settings);
+        }
 
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
@@ -198,7 +204,11 @@ sealed class BadgeForm : Form, IExperimentHost
         {
             once.Dispose();
             if (_firstRun)
+            {
+                // 트레이 아이콘은 Windows 11 에서 처음에 ^ 안에 숨으므로 풍선만으로는 어디를 눌러야 할지 모른다. 설정 창을 직접 연다.
                 _tray.ShowBalloonTip(8000, AppInfo.DisplayName, Strings.Get("app.firstRun"), ToolTipIcon.Info);
+                OpenSettings(SettingsPage.Appearance);
+            }
             if (UpdateChecker.IsDue(_settings)) CheckForUpdates(manual: false);
         };
         once.Start();

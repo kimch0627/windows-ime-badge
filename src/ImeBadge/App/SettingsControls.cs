@@ -65,6 +65,7 @@ static class Glyphs
     public const string Selection = "\uE8B3";    // SelectAll (점선 상자)
     public const string Lock = "\uE72E";         // Lock
     public const string InputMode = "\uE8C1";    // Characters (A字, 입력 방식)
+    public const string Start = "\uE82F";        // Lightbulb (시작하기 안내)
 }
 
 /// <summary>
