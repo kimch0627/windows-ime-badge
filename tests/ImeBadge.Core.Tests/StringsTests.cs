@@ -48,13 +48,13 @@ public sealed class StringsTests
     [InlineData(UiLanguage.English)]
     public void TrayMenu_MnemonicsAreUnique(UiLanguage lang)
     {
-        AssertUniqueMnemonics(Strings.Table(lang), "menu.pause", "menu.settings", "menu.theme", "menu.style", "menu.placement", "menu.size",
-            "menu.opacity", "menu.autostart", "menu.checkUpdates", "menu.about", "menu.exit");
+        AssertUniqueMnemonics(Strings.Table(lang), "menu.pause", "menu.snooze", "menu.settings", "menu.theme", "menu.style", "menu.placement", "menu.size",
+            "menu.opacity", "menu.visibility", "menu.autostart", "menu.checkUpdates", "menu.about", "menu.exit");
     }
 
     /// <summary>
     /// 설정 창은 페이지마다 보이는 항목이 다르고, Alt+글자는 지금 보이는 페이지의 항목만 움직인다(숨은 페이지는 니모닉을 받지 않는다).
-    /// 그래서 한 페이지 안에서만 겹치지 않으면 된다. 아래 [확인]/[취소] 는 니모닉 없이 Enter/Esc 로 누른다.
+    /// 그래서 한 페이지 안에서만 겹치지 않으면 된다. 아래 [되돌리기]/[닫기] 는 니모닉이 없다(닫기는 Esc).
     /// </summary>
     [Theory]
     [InlineData(UiLanguage.Korean)]

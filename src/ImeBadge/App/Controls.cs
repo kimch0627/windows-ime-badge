@@ -77,7 +77,17 @@ abstract class ThemedControl : Control
     {
         if (!Focused || !ShowFocusCues) return;
         r.Inflate(Px(2), Px(2));
-        using var path = Rounded(r, radius + Px(2));
+        // 컨트롤 테두리에 붙은 사각형(단추·고르기 상자·쉐브론)은 부풀리면 밖으로 나가 잘리고 모서리 점만 남았다(실기 확인).
+        // 2px 선이 통째로 보이도록 컨트롤 안쪽으로 당긴다. 여유가 있는 곳(토글·슬라이더 손잡이)은 그대로다.
+        float half = Px(2) / 2f;
+        var inside = RectangleF.FromLTRB(half, half, Width - half, Height - half);
+        if (!inside.Contains(r))
+        {
+            r = RectangleF.Intersect(r, inside);
+            radius = Math.Max(0, radius - Px(2));
+        }
+        else radius += Px(2);
+        using var path = Rounded(r, radius);
         using var pen = new Pen(Palette.Text, Px(2));
         g.DrawPath(pen, path);
     }
@@ -97,6 +107,19 @@ abstract class ThemedControl : Control
     }
 
     protected static Color Alpha(Color c, int alpha) => Color.FromArgb(alpha, c);
+
+    /// <summary>
+    /// 글자색. 꺼져 있으면 바탕색 쪽으로 섞어 흐리게 한다. TextRenderer(GDI)는 색의 알파를 무시해서, Alpha(색, 90) 으로 그린 글자가
+    /// 켜진 것과 똑같이 또렷했다(꺼진 [되돌리기]·토글 상태 글자·고르기 상자).
+    /// </summary>
+    protected Color TextColor(Color c)
+    {
+        if (Enabled) return c;
+        var bg = BackColor;
+        const float keep = 0.4f;   // 글자색을 40% 만 남긴다(나머지는 바탕색)
+        int Ch(int text, int back) => (int)Math.Round(back + (text - back) * keep);
+        return Color.FromArgb(Ch(c.R, bg.R), Ch(c.G, bg.G), Ch(c.B, bg.B));
+    }
     protected static float Ease(float t) => 1f - (1f - t) * (1f - t);
 }
 
@@ -211,12 +234,12 @@ sealed class ToggleSwitch : ThemedControl
         if (state)
         {
             var stateRect = new Rectangle(0, 0, Math.Max(0, (int)track.Left - Px(StateGap)), Height);
-            TextRenderer.DrawText(g, _checked ? OnText : OffText, Font, stateRect, Alpha(p.Text, alpha), TextFlags(TextFormatFlags.Right | TextFormatFlags.NoPrefix));
+            TextRenderer.DrawText(g, _checked ? OnText : OffText, Font, stateRect, TextColor(p.Text), TextFlags(TextFormatFlags.Right | TextFormatFlags.NoPrefix));
         }
         else
         {
             var textRect = new Rectangle((int)track.Right + Px(Gap), 0, Width - (int)track.Right - Px(Gap), Height);
-            TextRenderer.DrawText(g, CueText(Text), Font, textRect, Alpha(p.Text, alpha), TextFlags(TextFormatFlags.Left));
+            TextRenderer.DrawText(g, CueText(Text), Font, textRect, TextColor(p.Text), TextFlags(TextFormatFlags.Left));
         }
         DrawFocusRing(g, track, track.Height / 2f);
     }
@@ -396,16 +419,27 @@ sealed class AccentButton : ThemedControl, IButtonControl
             using (var bottom = new Pen(Alpha(p.Dark ? Color.Black : Color.Black, p.Dark ? 60 : 24), Px(1)))
                 g.DrawLine(bottom, r.Left + Px(4), r.Bottom, r.Right - Px(4), r.Bottom);
 
-        TextRenderer.DrawText(g, CueText(Text), Font, new Rectangle(0, 0, Width, Height), Alpha(text, alpha), TextFlags(TextFormatFlags.HorizontalCenter));
+        TextRenderer.DrawText(g, CueText(Text), Font, new Rectangle(0, 0, Width, Height), TextColor(text), TextFlags(TextFormatFlags.HorizontalCenter));
         DrawFocusRing(g, r, Px(Palette.Radius / 2));
     }
 }
 
 /// <summary>
+/// 폭에 따라 크기가 바뀌는 카드 몸통(줄바꿈하는 타일 선택기, 그것을 쌓은 묶음). 카드(<see cref="SettingsCard"/>)가 쓸 수 있는 폭을 주고
+/// 크기를 묻는다. AutoSize 의 GetPreferredSize 는 폭을 모르고 한 줄 크기를 돌려주므로 따로 둔다.
+/// </summary>
+interface IWidthAware
+{
+    /// <summary>폭이 <paramref name="maxWidth"/>(물리 픽셀) 이하일 때의 크기.</summary>
+    Size SizeFor(int maxWidth);
+}
+
+/// <summary>
 /// 그림으로 고르는 타일 선택기. 각 타일은 값·이름·그리기 함수를 가지며, 배지 모양이나 위치처럼 "말보다 그림이 빠른" 선택에 쓴다.
 /// 선택된 타일은 강조색 테두리, 마우스를 올리면 살짝 밝아진다. 키보드 좌우로 옮길 수 있다.
+/// 카드 폭이 모자라면(좁은 창·큰 배율) 여러 줄로 놓는다(<see cref="SizeFor"/>). 줄이 여럿이면 위아래 화살표로 줄을 옮긴다.
 /// </summary>
-sealed class TilePicker : ThemedControl
+sealed class TilePicker : ThemedControl, IWidthAware
 {
     public sealed record Tile(object Value, string Label, Action<Graphics, RectangleF, Theme.Palette> Draw);
 
@@ -442,10 +476,26 @@ sealed class TilePicker : ThemedControl
         Invalidate();
     }
 
-    public override Size GetPreferredSize(Size proposed) =>
-        new(_tiles.Count * Px(TileSize.Width) + Math.Max(0, _tiles.Count - 1) * Px(Gap) + Px(4), Px(TileSize.Height) + Px(4));
+    /// <summary>폭 제한이 없을 때(한 줄)의 크기. 카드는 <see cref="SizeFor"/> 로 폭을 주고 다시 묻는다.</summary>
+    public override Size GetPreferredSize(Size proposed) => SizeFor(int.MaxValue / 2);
 
-    RectangleF TileRect(int i) => new(Px(2) + i * (Px(TileSize.Width) + Px(Gap)), Px(2), Px(TileSize.Width), Px(TileSize.Height));
+    public Size SizeFor(int maxWidth)
+    {
+        int cols = ColumnsFor(maxWidth), rows = Math.Max(1, (_tiles.Count + cols - 1) / cols);
+        return new(cols * Px(TileSize.Width) + (cols - 1) * Px(Gap) + Px(4), rows * Px(TileSize.Height) + (rows - 1) * Px(Gap) + Px(4));
+    }
+
+    /// <summary>폭 <paramref name="width"/> 에 한 줄로 들어가는 타일 수(1 이상, 타일 수 이하).</summary>
+    int ColumnsFor(int width) =>
+        _tiles.Count == 0 ? 1 : Math.Clamp((width - Px(4) + Px(Gap)) / (Px(TileSize.Width) + Px(Gap)), 1, _tiles.Count);
+
+    int Columns => ColumnsFor(Width);
+
+    RectangleF TileRect(int i)
+    {
+        int cols = Columns, col = i % cols, row = i / cols;
+        return new(Px(2) + col * (Px(TileSize.Width) + Px(Gap)), Px(2) + row * (Px(TileSize.Height) + Px(Gap)), Px(TileSize.Width), Px(TileSize.Height));
+    }
 
     int HitTest(Point pt)
     {
@@ -467,7 +517,9 @@ sealed class TilePicker : ThemedControl
         if (h >= 0) SelectedValue = _tiles[h].Value;
     }
     protected override bool IsInputKey(Keys keyData) =>
-        (keyData & Keys.KeyCode) is Keys.Left or Keys.Right or Keys.Home or Keys.End || base.IsInputKey(keyData);
+        (keyData & Keys.KeyCode) is Keys.Left or Keys.Right or Keys.Home or Keys.End
+        || ((keyData & Keys.KeyCode) is Keys.Up or Keys.Down && Columns < _tiles.Count)   // 여러 줄일 때만 위아래(한 줄이면 Tab 처럼 지나간다)
+        || base.IsInputKey(keyData);
     protected override void OnKeyDown(KeyEventArgs e)
     {
         if (_tiles.Count == 0) return;
@@ -476,11 +528,14 @@ sealed class TilePicker : ThemedControl
         {
             case Keys.Left: i = Math.Max(0, i - 1); break;
             case Keys.Right: i = Math.Min(_tiles.Count - 1, i + 1); break;
+            case Keys.Up when Columns < _tiles.Count: i = i - Columns >= 0 ? i - Columns : i; break;
+            case Keys.Down when Columns < _tiles.Count: i = i < 0 ? 0 : i + Columns < _tiles.Count ? i + Columns : i; break;
             case Keys.Home: i = 0; break;
             case Keys.End: i = _tiles.Count - 1; break;
             default: base.OnKeyDown(e); return;
         }
         e.Handled = true;
+        if (i < 0) return;
         SelectedValue = _tiles[i].Value;
     }
 

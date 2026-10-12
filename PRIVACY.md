@@ -30,6 +30,7 @@ ImeBadge 는 사용자의 개인정보를 **수집·전송하지 않습니다.**
 - **업데이트 확인** 한 가지뿐입니다. 하루 한 번 `https://api.github.com/repos/kimch0627/windows-ime-badge/releases/latest` 에 접속해 최신 버전 번호를 읽습니다. 보내는 것은 프로그램 이름과 버전이 든 User-Agent 헤더뿐입니다.
 - 설정 창 → "새 버전이 나오면 알림" 을 끄면 접속하지 않습니다.
 - 그 밖의 통계·원격 진단(telemetry)은 없습니다.
+- 설정 창의 "시작하기" 안내에 있는 [작업 표시줄 설정 열기] 는 Windows 설정 앱(`ms-settings:taskbar`)을 여는 것뿐이고 네트워크에 접속하지 않습니다.
 
 ## 문의
 

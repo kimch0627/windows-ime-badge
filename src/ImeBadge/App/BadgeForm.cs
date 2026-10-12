@@ -66,6 +66,9 @@ sealed class BadgeForm : Form, IExperimentHost
     bool _allowShow;
 
     bool _paused, _sessionLocked, _polling, _hotkeyRegistered, _startupScheduled;
+    /// <summary>"일정 시간 일시 중지"(UX-16)로 멈췄으면 다시 켤 시각. 그냥 일시 중지면 null(다시 켤 때까지). 저장하지 않는다(다시 시작하면 켜져 있다).</summary>
+    DateTime? _pausedUntil;
+    readonly System.Windows.Forms.Timer _snoozeTimer = new();
     bool _sonarHotkeyRegistered;
     long _hiddenSince = Environment.TickCount64;
     int _pollErrors;
@@ -105,6 +108,12 @@ sealed class BadgeForm : Form, IExperimentHost
         _store = store;
         _paths = paths;
         _firstRun = firstRun;
+        if (firstRun)
+        {
+            // 처음 실행: 설정 창 모양 페이지 맨 위에 "시작하기" 안내를 띄운다(UX-03). 설정 파일도 이때 만든다.
+            _settings.ShowOnboarding = true;
+            _store.Save(_settings);
+        }
 
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
@@ -137,6 +146,7 @@ sealed class BadgeForm : Form, IExperimentHost
         _timer.Tick += (_, _) => Poll();
         _timer.Start();
         _animTimer.Tick += (_, _) => AnimTick();
+        _snoozeTimer.Tick += (_, _) => { _snoozeTimer.Stop(); if (_paused) TogglePause(); };   // 정한 시간이 지나면 저절로 다시 켠다
 
         // OS 이벤트가 오면 타이머를 기다리지 않고 바로 다시 읽는다.
         _eventProc = OnWinEvent;
@@ -193,12 +203,15 @@ sealed class BadgeForm : Form, IExperimentHost
         // 첫 실행 안내와 업데이트 확인은 창이 준비된 뒤 잠깐 있다가. (핸들이 다시 만들어져도 한 번만)
         if (_startupScheduled) return;
         _startupScheduled = true;
+        // 처음 실행: 설정 창은 곧바로 연다. 실행해 준 쪽(탐색기·설치 프로그램)에게서 받은 "창을 앞으로 가져올 권리"는 실행 직후에만
+        // 통해서, 몇 초 뒤에 열면 창이 다른 창 뒤에 깔리고 작업 표시줄 단추만 깜빡였다(실기 확인).
+        if (_firstRun) BeginInvoke(() => OpenSettings(SettingsPage.Appearance));
         var once = new System.Windows.Forms.Timer { Interval = 3000 };
         once.Tick += (_, _) =>
         {
             once.Dispose();
-            if (_firstRun)
-                _tray.ShowBalloonTip(8000, AppInfo.DisplayName, Strings.Get("app.firstRun"), ToolTipIcon.Info);
+            // 트레이 아이콘은 Windows 11 에서 처음에 ^ 안에 숨으므로 풍선만으로는 어디를 눌러야 할지 모른다. 그래서 설정 창도 함께 연다(위).
+            if (_firstRun) _tray.ShowBalloonTip(8000, AppInfo.DisplayName, Strings.Get("app.firstRun"), ToolTipIcon.Info);
             if (UpdateChecker.IsDue(_settings)) CheckForUpdates(manual: false);
         };
         once.Start();
@@ -253,6 +266,12 @@ sealed class BadgeForm : Form, IExperimentHost
         _pauseItem = new ToolStripMenuItem(Strings.Get("menu.pause"), null, (_, _) => TogglePause()) { ShortcutKeyDisplayString = _settings.HotkeyEnabled ? _settings.Hotkey : null };
         _glyphs[_pauseItem] = MenuIcons.Pause;
         menu.Items.Add(_pauseItem);
+        // 일정 시간만 일시 중지(화면 공유·발표 중에 끄고 다시 켜는 것을 잊지 않게). 시간이 지나면 저절로 다시 켠다.
+        var snooze = new ToolStripMenuItem(Strings.Get("menu.snooze"));
+        foreach (var (key, minutes) in new[] { ("menu.snooze.30", 30), ("menu.snooze.60", 60) })
+            snooze.DropDownItems.Add(new ToolStripMenuItem(Strings.Get(key), null, (_, _) => PauseFor(TimeSpan.FromMinutes(minutes))));
+        _glyphs[snooze] = MenuIcons.Snooze;
+        menu.Items.Add(snooze);
         // 더블클릭과 같은 동작인 "설정"을 굵게: Windows 관행에서 굵은 항목이 기본 동작이다.
         var settingsItem = new ToolStripMenuItem(Strings.Get("menu.settings"), null, (_, _) => OpenSettings());
         settingsItem.Font = new Font(settingsItem.Font, FontStyle.Bold);
@@ -305,6 +324,12 @@ sealed class BadgeForm : Form, IExperimentHost
         var opacity = PresetMenu(Strings.Get("menu.opacity"), Labels.OpacityPresets, () => _settings.OpacityPercent, v => _settings.OpacityPercent = v);
         _glyphs[opacity] = MenuIcons.Opacity;
         menu.Items.Add(opacity);
+        // 표시 방식(UX-13): "배지가 글자를 가려요" 의 답이라 설정 창까지 가지 않고 바로 바꿀 수 있게.
+        var visibility = new ToolStripMenuItem(Strings.Get("menu.visibility"));
+        foreach (var (label, value) in Labels.Visibilities)
+            AddRadio(visibility, label, () => _settings.Visibility == value, () => _settings.Visibility = value);
+        _glyphs[visibility] = MenuIcons.Visibility;
+        menu.Items.Add(visibility);
 
         menu.Items.Add(new ToolStripSeparator());
         _autostartItem = new ToolStripMenuItem(Strings.Get("menu.autostart"), null, (_, _) =>
@@ -312,6 +337,7 @@ sealed class BadgeForm : Form, IExperimentHost
             bool on = !Autostart.IsEnabled();
             if (!Autostart.Set(on))
                 Dialogs.Warning(Strings.Get("autostart.failed"), Strings.Get("autostart.failed.text"));
+            _settingsForm?.SyncFromLive();
         });
         menu.Items.Add(_autostartItem);
         var update = new ToolStripMenuItem(Strings.Get("menu.checkUpdates"), null, (_, _) => CheckForUpdates(manual: true));
@@ -529,6 +555,7 @@ sealed class BadgeForm : Form, IExperimentHost
     // ── 트레이 아이콘·툴팁 ──
     string StateText(ImeState state, bool caps = false, bool insert = false)
     {
+        if (_paused && _pausedUntil is { } until) return Strings.Format("state.pausedUntil", until.ToString("t", System.Globalization.CultureInfo.CurrentCulture));
         string text = Strings.Get(_paused ? "state.paused" : state switch
         {
             ImeState.Hangul => caps ? "state.hangulCaps" : "state.hangul",
@@ -580,7 +607,7 @@ sealed class BadgeForm : Form, IExperimentHost
     ToolStripMenuItem AddRadio(ToolStripMenuItem parent, string text, Func<bool> isOn, Action apply)
     {
         var item = new ToolStripMenuItem(text) { Tag = isOn };
-        item.Click += (_, _) => { apply(); OnSettingsChanged(); };
+        item.Click += (_, _) => { apply(); OnSettingsChanged(); _settingsForm?.SyncFromLive(); };   // 열린 설정 창에도 보여 준다
         parent.DropDownItems.Add(item);
         return item;
     }
@@ -607,6 +634,11 @@ sealed class BadgeForm : Form, IExperimentHost
 
     // 마지막으로 반영한 단축키·트레이·언어 설정. 설정 창에서 슬라이더를 끌 때마다 불리므로, 실제로 바뀐 것만 다시 적용한다.
     (bool enabled, string hotkey, bool sonar, string sonarHotkey) _appliedHotkey;
+    /// <summary>
+    /// 등록 실패를 사용자에게 알린(또는 알릴 기회가 있었던) 단축키 설정. 설정 창은 바꿀 때마다 저장하므로, 같은 조합이 다른 프로그램과
+    /// 겹쳐 있으면 저장할 때마다 경고가 뜨지 않게 조합이 바뀌었을 때 한 번만 알린다. 처음(null)에는 첫 저장 때 한 번 알린다(1.15 까지 [확인] 때와 같음).
+    /// </summary>
+    (bool enabled, string hotkey, bool sonar, string sonarHotkey)? _confirmedHotkey;
     (string hangul, string english, bool showState, string theme) _appliedTray;
     bool _appliedKorean = Strings.IsKorean;
     DesignTheme _appliedDesign = DesignThemes.Classic;   // 생성자에서 실제 값으로 맞춘다
@@ -632,7 +664,8 @@ sealed class BadgeForm : Form, IExperimentHost
         if (Strings.IsKorean != _appliedKorean) { _appliedKorean = Strings.IsKorean; ApplyLanguage(); }
 
         var hk = (_settings.HotkeyEnabled, _settings.Hotkey, _settings.CaretSonar, _settings.CaretSonarHotkey);
-        if (hk != _appliedHotkey || save) { _appliedHotkey = hk; ApplyHotkey(warnOnFailure: save); }
+        if (hk != _appliedHotkey) { _appliedHotkey = hk; ApplyHotkey(warnOnFailure: false); }   // 편집 중: 조용히 다시 등록
+        if (save && hk != _confirmedHotkey) { _confirmedHotkey = hk; ApplyHotkey(warnOnFailure: true); }   // 저장할 때: 실패하면 한 번 알림
         if (!_settings.CaretSonar) _sonarPendingFg = IntPtr.Zero;
         if (!_settings.FocusStealWarning) { _stealGuard.Disarm(); _callout?.Hide("steal"); }
         if (!_settings.PasswordWarning) { _passwordGuard.Reset(); _callout?.Hide("password"); }
@@ -660,12 +693,26 @@ sealed class BadgeForm : Form, IExperimentHost
     void TogglePause()
     {
         _paused = !_paused;
+        // 손으로 켜고 끄면 정해 둔 시간은 잊는다(일정 시간 일시 중지 중에 단축키를 누르면 바로 다시 켜진다).
+        _snoozeTimer.Stop();
+        _pausedUntil = null;
         Log.Write(_paused ? "paused" : "resumed");
         _callout?.Hide();
         _stealGuard.Disarm();
         _passwordGuard.Reset();
         UpdateTray(ImeState.Unknown, force: true);
         Poll();
+    }
+
+    /// <summary>정한 시간 동안만 일시 중지한다. 이미 일시 중지 중이면 남은 시간을 새로 정한다.</summary>
+    void PauseFor(TimeSpan duration)
+    {
+        if (!_paused) TogglePause();
+        _pausedUntil = DateTime.Now + duration;
+        _snoozeTimer.Interval = (int)Math.Min(int.MaxValue, duration.TotalMilliseconds);
+        _snoozeTimer.Start();
+        Log.Write($"paused for {duration.TotalMinutes:0} min");
+        UpdateTray(ImeState.Unknown, force: true);
     }
 
     /// <summary>설정 창을 연다. 이미 열려 있으면 앞으로 가져오고, 페이지를 정했으면(트레이 메뉴의 "정보") 그 페이지로 옮긴다.</summary>
@@ -684,8 +731,8 @@ sealed class BadgeForm : Form, IExperimentHost
     void ShowSettings(SettingsForm form)
     {
         _settingsForm = form;
-        form.Changed += () => OnSettingsChanged(save: false);   // 편집 중: 배지에 바로 반영, 저장은 아직
-        form.Applied += () => OnSettingsChanged();               // 확인·취소: 저장
+        form.Changed += () => OnSettingsChanged(save: false);   // 바뀔 때마다: 배지에 바로 반영
+        form.Applied += () => OnSettingsChanged();               // 변경이 멎은 뒤·닫을 때: 저장
         form.FormClosed += (_, _) => { if (ReferenceEquals(_settingsForm, form)) _settingsForm = null; form.Dispose(); };
         // 언어를 바꾸면 창의 모든 문구를 새로 그려야 한다. 같은 편집 상태를 이어받는 새 창으로 갈아 끼운다(이벤트 처리가 끝난 뒤).
         form.LanguageChanged += () => BeginInvoke(() =>
@@ -1405,6 +1452,7 @@ sealed class BadgeForm : Form, IExperimentHost
                 if (_hooks[i] != IntPtr.Zero) { Native.UnhookWinEvent(_hooks[i]); _hooks[i] = IntPtr.Zero; }
             _timer.Dispose();
             _animTimer.Dispose();
+            _snoozeTimer.Dispose();
             _lastBmp?.Dispose();
             _pulseBase?.Dispose();
             _sonar?.Dispose();

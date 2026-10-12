@@ -65,6 +65,7 @@ static class Glyphs
     public const string Selection = "\uE8B3";    // SelectAll (점선 상자)
     public const string Lock = "\uE72E";         // Lock
     public const string InputMode = "\uE8C1";    // Characters (A字, 입력 방식)
+    public const string Start = "\uE82F";        // Lightbulb (시작하기 안내)
 }
 
 /// <summary>
@@ -195,17 +196,21 @@ sealed class NavList : ThemedControl
 /// 타일 선택기·색 견본·미리보기)을 둔다. 제목의 니모닉(&amp;)을 누르면 카드의 컨트롤로 간다(토글은 바로 켜고 끈다).
 /// <see cref="Clickable"/> 이면 카드 전체가 버튼처럼 동작한다(링크 카드: 폴더 열기, 웹 페이지 열기).
 /// 높이는 폭에 따라 정해지고(설명이 줄바꿈된다), 쌓는 쪽(<see cref="CardStack"/>)이 <see cref="GetPreferredSize"/> 로 묻는다.
+/// <see cref="Details"/> 가 있으면 오른쪽 끝에 쉐브론(⌄)이 생기고, 누르면 카드 아래에 긴 설명이 열린다(Windows 11 SettingsExpander).
+/// 설명은 한 줄로 두고 "언제·어디서·예외" 는 여기로 보낸다(UX-06). <see cref="Flat"/> 이면 다른 카드 안의 하위 행으로 그린다(UX-08).
 /// </summary>
-sealed class SettingsCard : Panel
+sealed class SettingsCard : Panel, IWidthAware
 {
-    string _glyph = "", _title = "", _description = "", _trailingGlyph = "";
+    string _glyph = "", _title = "", _description = "", _trailingGlyph = "", _details = "";
     Control? _action, _body;
     Image? _picture;
     Theme.Palette _palette = Theme.Current;
-    bool _clickable, _hot, _pressed;
+    bool _clickable, _hot, _pressed, _expanded, _flat;
+    ChevronButton? _expander;
 
     const int PadH = 16, PadV = 12, MinH = 68, IconBox = 20, IconGap = 16, ActionGap = 24, BodyGap = 12, DescGap = 2, TrailingBox = 16;
     const int CompactBodyGap = 8;
+    const int FlatMinH = 56, ExpanderSize = 32, ExpanderGap = 8, DetailsGap = 10;
 
     /// <summary><see cref="Theme"/> 가 칠할 때 넣어 준다.</summary>
     public Theme.Palette Palette { get => _palette; set { _palette = value; Invalidate(); } }
@@ -214,6 +219,49 @@ sealed class SettingsCard : Panel
     /// <summary>제목. 니모닉(&amp;)을 쓸 수 있다.</summary>
     public string Title { get => _title; set { _title = value; Changed(); } }
     public string Description { get => _description; set { _description = value; Changed(); } }
+
+    /// <summary>펼치면 보이는 긴 설명. 비어 있지 않으면 오른쪽 끝에 쉐브론 단추가 생긴다. 화면 읽기 프로그램은 펼치지 않아도 읽는다.</summary>
+    public string Details
+    {
+        get => _details;
+        set
+        {
+            _details = value ?? "";
+            if (_details.Length > 0 && _expander is null)
+            {
+                _expander = new ChevronButton();
+                _expander.Click += (_, _) => Expanded = !Expanded;
+                Controls.Add(_expander);
+            }
+            else if (_details.Length == 0 && _expander is not null)
+            {
+                Controls.Remove(_expander);
+                _expander.Dispose();
+                _expander = null;
+                _expanded = false;
+            }
+            Changed();
+        }
+    }
+
+    /// <summary><see cref="Details"/> 를 펼쳤는가. 기억하지 않는다(창을 다시 열면 접혀 있다).</summary>
+    public bool Expanded
+    {
+        get => _expanded;
+        set
+        {
+            if (_expanded == value || _expander is null) return;
+            _expanded = value;
+            _expander.Expanded = value;
+            Changed();
+        }
+    }
+
+    /// <summary>
+    /// 다른 카드 안의 하위 행(특수 키 카드의 Caps Lock·Shift·Insert): 둥근 바탕·테두리 대신 위쪽 구분선만 긋고, 좌우 여백 없이
+    /// 바깥 카드의 글자 줄에 맞춘다. 최소 높이도 낮다.
+    /// </summary>
+    public bool Flat { get => _flat; set { _flat = value; Changed(); } }
 
     /// <summary>아이콘 자리에 글리프 대신 그릴 그림(앱 아이콘). 카드가 Dispose 한다.</summary>
     public Image? Picture { get => _picture; set { _picture = value; Changed(); } }
@@ -263,6 +311,9 @@ sealed class SettingsCard : Panel
 
     float DpiScale => DeviceDpi / 96f;
     int Px(float logical) => (int)Math.Round(logical * DpiScale);
+    /// <summary>좌우 여백. 하위 행(<see cref="Flat"/>)은 바깥 카드가 여백을 주므로 0.</summary>
+    int Pad => _flat ? 0 : Px(PadH);
+    int MinHeight => Px(_flat ? FlatMinH : MinH);
 
     bool HasHeader => _title.Length > 0;
     bool HasIcon => _picture is not null || (_glyph.Length > 0 && Theme.HasIconFont);
@@ -290,7 +341,7 @@ sealed class SettingsCard : Panel
         if (HasHeader)
         {
             AccessibleName = PlainTitle;
-            AccessibleDescription = _description;
+            AccessibleDescription = _details.Length > 0 ? _description + "\n" + _details : _description;
             foreach (var c in new[] { _action, _body })
                 if (c is not null && string.IsNullOrEmpty(c.AccessibleName)) { c.AccessibleName = PlainTitle; c.AccessibleDescription = _description; }
         }
@@ -303,15 +354,27 @@ sealed class SettingsCard : Panel
 
     // 컨트롤·몸통이 있는지만 보고 Visible 은 보지 않는다. Visible 은 부모까지 보여야 true 라서, 숨은 페이지나 숨은 자리에 있는 카드의
     // 높이가 컨트롤·몸통 없이 계산된다(미리보기를 고정할지 정할 때 그 높이를 미리 잰다). 카드 안 컨트롤을 따로 숨겨 쓰는 곳은 없다.
-    Size ActionSize => _action is { } a ? Measure(a)
+    Size ActionOnly => _action is { } a ? Measure(a)
         : _trailingGlyph.Length > 0 && Theme.HasIconFont ? new Size(Px(TrailingBox), Px(TrailingBox)) : Size.Empty;
 
-    int TextLeft => Px(PadH) + (HasIcon ? IconWidth + Px(IconGap) : 0);
+    /// <summary>오른쪽 끝 자리: 컨트롤(또는 링크 표시) + 쉐브론.</summary>
+    Size ActionSize
+    {
+        get
+        {
+            var a = ActionOnly;
+            if (_expander is null) return a;
+            int e = Px(ExpanderSize);
+            return new Size(a.Width + (a.Width > 0 ? Px(ExpanderGap) : 0) + e, Math.Max(a.Height, e));
+        }
+    }
+
+    int TextLeft => Pad + (HasIcon ? IconWidth + Px(IconGap) : 0);
 
     int TextWidth(int width)
     {
         var a = ActionSize;
-        return Math.Max(Px(80), width - TextLeft - Px(PadH) - (a.Width > 0 ? a.Width + Px(ActionGap) : 0));
+        return Math.Max(Px(80), width - TextLeft - Pad - (a.Width > 0 ? a.Width + Px(ActionGap) : 0));
     }
 
     const TextFormatFlags TextFlags = TextFormatFlags.WordBreak | TextFormatFlags.NoPadding | TextFormatFlags.TextBoxControl;
@@ -335,28 +398,49 @@ sealed class SettingsCard : Panel
         var (t, d) = MeasureText(TextWidth(width));
         int textH = t.Height + (d.Height > 0 ? Px(DescGap) + d.Height : 0);
         int content = Math.Max(textH, Math.Max(ActionSize.Height, HasIcon ? IconWidth : 0));
-        int row = CompactHeader ? content : Math.Max(Px(MinH - 2 * PadV), content);
+        int row = CompactHeader ? content : Math.Max(MinHeight - 2 * Px(PadV), content);
         return (Px(PadV), row, t, d);
     }
 
     Size BodySize(int width)
     {
         if (_body is not { } b) return Size.Empty;
-        var s = Measure(b);
-        return StretchBody ? new Size(width - 2 * Px(PadH), s.Height) : s;
+        // 줄바꿈하는 몸통(타일 선택기)에는 카드 안에서 쓸 수 있는 폭을 알려 준다. 좁은 창에서 마지막 타일이 카드 밖으로 잘리지 않는다.
+        int room = Math.Max(1, (StretchBody || !HasHeader ? width - 2 * Pad : width - TextLeft - Pad));
+        var s = b is IWidthAware aware ? aware.SizeFor(room) : Measure(b);
+        return StretchBody ? new Size(width - 2 * Pad, s.Height) : s;
     }
 
-    int BodyLeft => StretchBody || !HasHeader ? Px(PadH) : TextLeft;
+    int BodyLeft => StretchBody || !HasHeader ? Pad : TextLeft;
 
     int BodyTop(int top, int row) => HasHeader ? top + row + Px(CompactHeader ? CompactBodyGap : BodyGap) : Px(PadH);
 
-    int HeightFor(int width)
+    /// <summary>제목 줄과 몸통까지의 높이. 펼친 설명은 그 아래에 이어진다(<see cref="HeightFor"/>).</summary>
+    int MainHeight(int width)
     {
         var (top, row, _, _) = HeaderRow(width);
         var body = BodySize(width);
-        if (body.IsEmpty) return Math.Max(CompactHeader ? 0 : Px(MinH), top + row + Px(PadV));
+        if (body.IsEmpty) return Math.Max(CompactHeader ? 0 : MinHeight, top + row + Px(PadV));
         return BodyTop(top, row) + body.Height + Px(CompactHeader ? PadV : PadH);
     }
+
+    int DetailsWidth(int width) => Math.Max(Px(80), width - TextLeft - Pad);
+
+    Size DetailsSize(int width)
+    {
+        if (!_expanded || _details.Length == 0) return Size.Empty;
+        using var hint = Theme.HintFont(Font);
+        return TextRenderer.MeasureText(_details, hint, new Size(DetailsWidth(width), int.MaxValue), TextFlags | TextFormatFlags.NoPrefix);
+    }
+
+    int HeightFor(int width)
+    {
+        int main = MainHeight(width);
+        var d = DetailsSize(width);
+        return d.IsEmpty ? main : main + Px(DetailsGap) + d.Height + Px(PadV);   // 구분선 · 틈 · 설명 · 아래 여백
+    }
+
+    public Size SizeFor(int maxWidth) => new(maxWidth, HeightFor(maxWidth));
 
     public override Size GetPreferredSize(Size proposed)
     {
@@ -370,12 +454,21 @@ sealed class SettingsCard : Panel
         int width = Width;
         var (top, row, _, _) = HeaderRow(width);
         var body = BodySize(width);
+        int main = MainHeight(width);
+        int right = width - Pad;
+        if (_expander is { } ex)
+        {
+            int e = Px(ExpanderSize);
+            int ey = body.IsEmpty ? (main - e) / 2 : top + (row - e) / 2;
+            ex.SetBounds(right - e, ey, e, e);
+            right -= e + Px(ExpanderGap);
+        }
         if (_action is { } a)
         {
-            var s = ActionSize;
+            var s = ActionOnly;
             // 몸통이 없으면 카드 전체의 세로 가운데, 있으면 제목 줄의 세로 가운데.
-            int y = body.IsEmpty ? (Height - s.Height) / 2 : top + (row - s.Height) / 2;
-            a.SetBounds(width - Px(PadH) - s.Width, y, s.Width, s.Height);
+            int y = body.IsEmpty ? (main - s.Height) / 2 : top + (row - s.Height) / 2;
+            a.SetBounds(right - s.Width, y, s.Width, s.Height);
         }
         if (_body is { } b) b.SetBounds(BodyLeft, BodyTop(top, row), body.Width, body.Height);
     }
@@ -397,6 +490,15 @@ sealed class SettingsCard : Panel
     }
     protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); if (_pressed) { _pressed = false; Invalidate(); } }
     protected override void OnClick(EventArgs e) { if (_clickable) base.OnClick(e); }
+    /// <summary>펼칠 설명이 있으면 제목 줄 아무 데나 눌러도 펼치고 접는다(쉐브론만 누르기엔 작다).</summary>
+    protected override void OnMouseClick(MouseEventArgs e)
+    {
+        base.OnMouseClick(e);
+        if (_clickable || _expander is null || e.Button != MouseButtons.Left) return;
+        var (top, row, _, _) = HeaderRow(Width);
+        int headerBottom = BodySize(Width).IsEmpty ? MainHeight(Width) : top + row + Px(PadV) / 2;
+        if (e.Y < headerBottom) Expanded = !Expanded;
+    }
     protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
     protected override void OnLostFocus(EventArgs e) { base.OnLostFocus(e); Invalidate(); }
     protected override bool IsInputKey(Keys keyData) =>
@@ -423,10 +525,18 @@ sealed class SettingsCard : Panel
         g.SmoothingMode = SmoothingMode.AntiAlias;
         float radius = Px(Math.Min(p.Radius, 8));
         var outline = new RectangleF(0.5f, 0.5f, Width - 1, Height - 1);
-        using (var path = Rounded(outline, radius))
-        using (var brush = new SolidBrush(fill))
-        using (var pen = new Pen(border))
+        if (_flat)
         {
+            using var pen = new Pen(border);   // 하위 행: 위쪽 구분선만
+            g.SmoothingMode = SmoothingMode.None;
+            g.DrawLine(pen, 0, 0, Width, 0);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+        }
+        else
+        {
+            using var path = Rounded(outline, radius);
+            using var brush = new SolidBrush(fill);
+            using var pen = new Pen(border);
             g.FillPath(brush, path);
             g.DrawPath(pen, path);
         }
@@ -440,18 +550,19 @@ sealed class SettingsCard : Panel
         if (!HasHeader) return;
 
         var (top, row, t, d) = HeaderRow(Width);
-        if (BodySize(Width).IsEmpty) { top = 0; row = Height; }   // 몸통이 없으면 카드 전체의 세로 가운데
+        int main = MainHeight(Width);
+        if (BodySize(Width).IsEmpty) { top = 0; row = main; }   // 몸통이 없으면 (펼친 설명을 뺀) 카드 전체의 세로 가운데
         if (_picture is not null)
         {
             int s = IconWidth;
             g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-            g.DrawImage(_picture, new Rectangle(Px(PadH), top + (row - s) / 2, s, s));
+            g.DrawImage(_picture, new Rectangle(Pad, top + (row - s) / 2, s, s));
         }
         else if (HasIcon)
         {
             using var icon = Theme.IconFont(Px(16));
             if (icon is not null)
-                TextRenderer.DrawText(g, _glyph, icon, new Rectangle(Px(PadH), top, Px(IconBox), row), text,
+                TextRenderer.DrawText(g, _glyph, icon, new Rectangle(Pad, top, Px(IconBox), row), text,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
         }
         int textW = TextWidth(Width);
@@ -469,8 +580,22 @@ sealed class SettingsCard : Panel
         {
             using var small = Theme.IconFont(Px(12));
             if (small is not null)
-                TextRenderer.DrawText(g, _trailingGlyph, small, new Rectangle(Width - Px(PadH) - Px(TrailingBox), top, Px(TrailingBox), row), subtle,
+                TextRenderer.DrawText(g, _trailingGlyph, small, new Rectangle(Width - Pad - Px(TrailingBox), top, Px(TrailingBox), row), subtle,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
+        }
+        var details = DetailsSize(Width);
+        if (!details.IsEmpty)
+        {
+            // 펼친 설명: 얇은 구분선 아래, 제목 글자 줄에 맞춰 오른쪽 끝까지.
+            using (var pen = new Pen(border))
+            {
+                g.SmoothingMode = SmoothingMode.None;
+                g.DrawLine(pen, Pad + Px(1), main, Width - Pad - Px(2), main);
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+            }
+            using var hint = Theme.HintFont(Font);
+            TextRenderer.DrawText(g, _details, hint, new Rectangle(TextLeft, main + Px(DetailsGap), DetailsWidth(Width), details.Height), subtle,
+                TextFlags | TextFormatFlags.Left | TextFormatFlags.NoPrefix);
         }
     }
 
@@ -528,6 +653,160 @@ sealed class SectionHeader : Label
     }
 }
 
+/// <summary>
+/// 카드 몸통에서 위에서 아래로 쌓는 묶음(배지 모양 카드의 "기본" 캡션 · 타일 · "캐릭터" 캡션 · 타일).
+/// 받은 폭을 줄바꿈하는 자식(<see cref="IWidthAware"/>)에 그대로 넘긴다. 항목 사이 간격은 96 DPI 논리 픽셀.
+/// 하위 행 카드(<see cref="SettingsCard.Indent"/> &gt; 0)는 한 단계마다 들여 쓴다(특수 키 카드의 "누르는 즉시 표시").
+/// </summary>
+sealed class VStack : Panel, IWidthAware
+{
+    readonly List<(Control control, int gapAfter)> _items = new();
+    const int IndentWidth = 28;
+
+    public VStack(params (Control control, int gapAfter)[] items)
+    {
+        foreach (var item in items) { _items.Add(item); Controls.Add(item.control); }
+        TabStop = false;
+    }
+
+    float DpiScale => DeviceDpi / 96f;
+    int Px(int logical) => (int)Math.Round(logical * DpiScale);
+
+    static Size ChildSize(Control c, int maxWidth) =>
+        c is IWidthAware aware ? aware.SizeFor(maxWidth) : c.AutoSize ? c.GetPreferredSize(Size.Empty) : c.Size;
+
+    int IndentOf(Control c) => c is SettingsCard { Indent: > 0 } card ? Px(IndentWidth * card.Indent) : 0;
+
+    public Size SizeFor(int maxWidth)
+    {
+        int w = 0, h = 0;
+        for (int i = 0; i < _items.Count; i++)
+        {
+            var c = _items[i].control;
+            int indent = IndentOf(c);
+            var s = ChildSize(c, maxWidth - indent);
+            w = Math.Max(w, indent + s.Width);
+            h += s.Height + (i < _items.Count - 1 ? Px(_items[i].gapAfter) : 0);
+        }
+        return new Size(Math.Min(w, Math.Max(1, maxWidth)), h);
+    }
+
+    protected override void OnLayout(LayoutEventArgs levent)
+    {
+        base.OnLayout(levent);
+        int y = 0;
+        foreach (var (c, gap) in _items)
+        {
+            int indent = IndentOf(c);
+            var s = ChildSize(c, Width - indent);
+            c.SetBounds(indent, y, s.Width, s.Height);
+            y += s.Height + Px(gap);
+        }
+    }
+}
+
+/// <summary>
+/// 카드의 "자세히" 펼침 단추(Windows 11 SettingsExpander 의 쉐브론 ⌄/⌃). Tab 으로 오고 Enter·Space 로 누른다.
+/// 화면 읽기 프로그램에는 "자세히"/"접기" 로 읽힌다.
+/// </summary>
+sealed class ChevronButton : ThemedControl
+{
+    bool _expanded;
+
+    public ChevronButton()
+    {
+        Cursor = Cursors.Hand;
+        AccessibleRole = AccessibleRole.PushButton;
+        AccessibleName = Strings.Get("card.more");
+    }
+
+    public bool Expanded
+    {
+        get => _expanded;
+        set
+        {
+            _expanded = value;
+            AccessibleName = Strings.Get(value ? "card.less" : "card.more");
+            if (IsHandleCreated) AccessibilityNotifyClients(AccessibleEvents.NameChange, -1);
+            Invalidate();
+        }
+    }
+
+    protected override bool IsInputKey(Keys keyData) => (keyData & Keys.KeyCode) is Keys.Enter or Keys.Space || base.IsInputKey(keyData);
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.KeyCode is Keys.Enter or Keys.Space) { e.Handled = true; OnClick(EventArgs.Empty); return; }
+        base.OnKeyDown(e);
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        Prepare(g);
+        g.Clear(BackColor);
+        var p = Palette;
+        var r = new RectangleF(0.5f, 0.5f, Width - 1, Height - 1);
+        if (Hot || Pressed)
+        {
+            using var path = Rounded(r, Px(4));
+            using var fill = new SolidBrush(Alpha(p.Text, Pressed ? 26 : 16));
+            g.FillPath(fill, path);
+        }
+        using var icon = Theme.IconFont(Px(12));
+        if (icon is not null)
+            TextRenderer.DrawText(g, _expanded ? "\uE70E" : "\uE70D", icon, ClientRectangle, p.Text,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
+        else
+        {
+            float cx = Width / 2f, cy = Height / 2f, d = _expanded ? -1 : 1;
+            using var pen = new Pen(p.Text, Px(1.5f));
+            g.DrawLines(pen, new[] { new PointF(cx - Px(5), cy - d * Px(2.5f)), new PointF(cx, cy + d * Px(2.5f)), new PointF(cx + Px(5), cy - d * Px(2.5f)) });
+        }
+        DrawFocusRing(g, r, Px(4));
+    }
+}
+
+/// <summary>
+/// 왼쪽에서 오른쪽으로 놓다가 폭이 모자라면 다음 줄로 넘기는 묶음(제외 앱 페이지의 추천 칩). 자식은 AutoSize 컨트롤이고 간격은 8px(96 DPI).
+/// FlowLayoutPanel 은 카드가 주는 폭을 모르고 한 줄 크기를 알려 줘서 따로 둔다(<see cref="IWidthAware"/>).
+/// </summary>
+sealed class WrapRow : Panel, IWidthAware
+{
+    const int Gap = 8;
+
+    public WrapRow() { TabStop = false; }
+
+    float DpiScale => DeviceDpi / 96f;
+    int Px(int logical) => (int)Math.Round(logical * DpiScale);
+
+    /// <summary>폭 <paramref name="maxWidth"/> 에서 각 자식의 자리. 높이는 마지막 줄 아래까지.</summary>
+    (List<Rectangle> places, Size size) Arrange(int maxWidth)
+    {
+        var places = new List<Rectangle>();
+        int x = 0, y = 0, rowH = 0, w = 0;
+        foreach (Control c in Controls)
+        {
+            var s = c.GetPreferredSize(Size.Empty);
+            if (x > 0 && x + s.Width > maxWidth) { x = 0; y += rowH + Px(Gap); rowH = 0; }
+            places.Add(new Rectangle(x, y, s.Width, s.Height));
+            x += s.Width + Px(Gap);
+            rowH = Math.Max(rowH, s.Height);
+            w = Math.Max(w, x - Px(Gap));
+        }
+        return (places, new Size(Math.Max(0, w), places.Count == 0 ? 0 : y + rowH));
+    }
+
+    public Size SizeFor(int maxWidth) => Arrange(Math.Max(1, maxWidth)).size;
+
+    protected override void OnLayout(LayoutEventArgs levent)
+    {
+        base.OnLayout(levent);
+        var (places, _) = Arrange(Math.Max(1, Width));
+        for (int i = 0; i < places.Count; i++) Controls[i].Bounds = places[i];
+    }
+}
+
 /// <summary>카드 사이의 짧은 안내문(보조색). 폭에 맞춰 줄바꿈한다.</summary>
 sealed class NoteLabel : Label
 {
@@ -559,11 +838,22 @@ sealed class CardStack : Panel
     public const int SideMargin = 32, MaxWidth = 1000;
     const int TopMargin = 4, BottomMargin = 32, CardGap = 4, SectionGap = 28, AfterSection = 8, IndentWidth = 40;
     bool _arranging, _darkScrollBars;
+    int _extraTop;
 
     public CardStack()
     {
         AutoScroll = true;
         DoubleBuffered = true;
+    }
+
+    /// <summary>
+    /// 맨 위에 더 비울 여백(96 DPI 논리 픽셀). 위에 고정한 카드(<see cref="PinnedCardHost"/>)의 경계선 바로 밑에
+    /// 첫 항목이 붙어 보이지 않게 모양 페이지가 미리보기를 고정한 동안만 쓴다.
+    /// </summary>
+    public int ExtraTop
+    {
+        get => _extraTop;
+        set { if (_extraTop == value) return; _extraTop = value; PerformLayout(); }
     }
 
     /// <summary>어두운 테마면 스크롤바도 어둡게(기본 스크롤바는 늘 밝은 회색이라 어두운 창에서 튄다). <see cref="Theme"/> 가 정한다.</summary>
@@ -600,7 +890,7 @@ sealed class CardStack : Panel
     void Arrange()
     {
         var (x, width) = Column(Width, DpiScale);
-        int y = Px(TopMargin);
+        int y = Px(TopMargin + _extraTop);
         Control? prev = null;
         foreach (Control c in Controls)
         {
@@ -620,14 +910,37 @@ sealed class CardStack : Panel
     public void ScrollToTop() => AutoScrollPosition = Point.Empty;
 
     /// <summary>
+    /// Tab 으로 들어온 컨트롤을 보이게 스크롤할 때 그 컨트롤만이 아니라 감싼 카드(제목·설명)까지 들어오게 한다.
+    /// 기본 동작은 토글·단추만 보이게 해서, 카드 제목이 위쪽 경계에 반쯤 잘린 채 포커스가 오기도 했다(실기 확인).
+    /// 카드가 보이는 영역보다 크면 기본 동작을 따른다. 마우스로 누른 경우는 아예 스크롤하지 않는다: 반쯤 가려진 카드의 슬라이더를
+    /// 끌기 시작하자마자 페이지가 움직여 손잡이가 포인터에서 달아났다(실기 확인). 누른 곳은 이미 보이는 곳이다.
+    /// </summary>
+    protected override Point ScrollToControl(Control activeControl)
+    {
+        if (MouseButtons != MouseButtons.None) return AutoScrollPosition;
+        var card = activeControl;
+        while (card.Parent is { } p && p != this) card = p;
+        if (card.Parent != this || card.Height + 2 * Px(CardGap) > ClientSize.Height) return base.ScrollToControl(activeControl);
+        var pos = AutoScrollPosition;   // 스크롤한 만큼 음수
+        int y = pos.Y;
+        if (card.Top < 0) y += Px(CardGap) - card.Top;
+        else if (card.Bottom > ClientSize.Height) y -= card.Bottom - ClientSize.Height + Px(CardGap);
+        return new Point(pos.X, Math.Min(0, y));
+    }
+
+    /// <summary>
     /// 카드 열의 왼쪽 위치와 폭(물리 픽셀). 스크롤바 자리는 늘 비워 둔다: 스크롤바가 있는 페이지와 없는 페이지를 오갈 때
     /// 카드 오른쪽 끝이 흔들리지 않는다. 고정한 카드(<see cref="PinnedCardHost"/>)도 이 열에 맞춰 아래 카드들과 줄이 맞는다.
+    /// 폭은 패널 안쪽을 넘지 않는다. 숨겨 둔 페이지는 처음 보일 때 잠깐 기본 크기(200px)로 배치되는데, 그때 카드가 패널 밖으로
+    /// 나가면 가로 스크롤바가 켜진 채 남는다(1.15.1 까지 모양·제외 앱을 뺀 모든 페이지). 최소 폭(240)은 패널이 넉넉할 때만 지킨다.
     /// </summary>
     public static (int x, int width) Column(int panelWidth, float dpiScale)
     {
         int Scaled(int logical) => (int)Math.Round(logical * dpiScale);
         int usable = panelWidth - SystemInformation.VerticalScrollBarWidth;
-        return (Scaled(SideMargin), Math.Max(Scaled(240), Math.Min(usable - 2 * Scaled(SideMargin), Scaled(MaxWidth))));
+        int room = usable - 2 * Scaled(SideMargin);
+        int width = Math.Max(Math.Min(Scaled(240), room), Math.Min(room, Scaled(MaxWidth)));
+        return (Scaled(SideMargin), Math.Max(1, width));
     }
 }
 
@@ -639,7 +952,7 @@ sealed class PinnedCardHost : Panel
 {
     const int TopGap = 4, BottomGap = 8;
 
-    public PinnedCardHost() { DoubleBuffered = true; TabStop = false; }
+    public PinnedCardHost() { DoubleBuffered = true; TabStop = false; SetStyle(ControlStyles.ResizeRedraw, true); }
 
     float DpiScale => DeviceDpi / 96f;
     int Px(int logical) => (int)Math.Round(logical * DpiScale);
@@ -658,6 +971,18 @@ sealed class PinnedCardHost : Panel
         card.SetBounds(x, Px(TopGap), width, h);
         int want = Px(TopGap) + h + Px(BottomGap);
         if (Height != want) Height = want;   // Dock=Top 이라 높이만 정하면 아래 페이지가 그만큼 줄어든다
+    }
+
+    /// <summary>
+    /// 아래 스크롤 영역과의 경계선. 스크롤하면 카드가 이 선 밑으로 들어가며 잘리는데, 선이 없으면 카드가 반쯤 깨진 것처럼 보였다.
+    /// 아래 버튼 줄(<see cref="CommandBar"/>)의 위쪽 선과 같은 색이라 스크롤되는 영역이 위아래 두 선 사이에 놓인다.
+    /// </summary>
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        var color = SystemInformation.HighContrast ? SystemColors.ControlDark : Theme.Current.Border;
+        using var pen = new Pen(color);
+        e.Graphics.DrawLine(pen, 0, Height - 1, Width, Height - 1);
     }
 }
 
@@ -953,7 +1278,7 @@ sealed class ThemedComboBox : ThemedControl
                 g.DrawLine(bottom, r.Left + Px(4), r.Bottom, r.Right - Px(4), r.Bottom);
 
         int chevron = Px(32);
-        TextRenderer.DrawText(g, SelectedText, Font, new Rectangle(Px(11), 0, Math.Max(0, Width - Px(11) - chevron), Height), Alpha(p.Text, alpha),
+        TextRenderer.DrawText(g, SelectedText, Font, new Rectangle(Px(11), 0, Math.Max(0, Width - Px(11) - chevron), Height), TextColor(p.Text),
             TextFlags(TextFormatFlags.Left | TextFormatFlags.NoPrefix));
         var box = new Rectangle(Width - chevron, 0, chevron - Px(4), Height);
         using var icon = Theme.IconFont(Px(10));

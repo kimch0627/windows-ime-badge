@@ -288,4 +288,55 @@ public sealed class BadgeTextTests
     [InlineData(false, true, "A")]
     public void ShiftHeld_IgnoredWhenCapsLockDisplayOff(bool korean, bool caps, string text) =>
         Assert.Equal((text, BadgeMark.None), BadgeText.For(korean, caps, showCapsLock: false, shift: true));
+
+    const int White = unchecked((int)0xFFFFFFFF);
+
+    /// <summary>윤곽이 어두운 편집기(#1E1E1E) 위에서 보이는 정도: 바깥 흰 림이 있으면 림, 없으면 배지색 자체의 대비.</summary>
+    static double OutlineOnDarkEditor(int fill)
+    {
+        int rim = ColorHex.OuterRimAlpha(fill);
+        int dark = ColorHex.DarkEditorBackground;
+        return rim == 0 ? ColorHex.ContrastRatio(fill, dark) : ColorHex.ContrastRatio(ColorHex.Over(White, rim, dark), dark);
+    }
+
+    /// <summary>UX-01: 모든 테마의 견본·기본색 배지가 어두운 편집기 위에서 윤곽 대비 3:1(WCAG 1.4.11) 이상.</summary>
+    [Theory]
+    [MemberData(nameof(DesignThemesTests.ThemeIds), MemberType = typeof(DesignThemesTests))]
+    public void Outline_IsVisibleOnDarkEditor_ForEveryColor(string id)
+    {
+        var t = DesignThemes.Get(id);
+        foreach (var hex in t.Swatches.Concat(new[] { t.HangulColor, t.EnglishColor, t.OtherColor }))
+        {
+            ColorHex.TryParse(hex, out int fill);
+            double ratio = OutlineOnDarkEditor(fill);
+            Assert.True(ratio >= ColorHex.OutlineContrast, $"{id} {hex}: {ratio:0.00}");
+        }
+    }
+
+    /// <summary>바깥 림은 어두운 배지에만 생기고, 밝은 배지(노랑·민트·파스텔)는 그대로다.</summary>
+    [Theory]
+    [InlineData("#3C3C3C", true)]    // 클래식 영문 기본색
+    [InlineData("#3A4E8C", true)]    // 미드나잇 네이비
+    [InlineData("#6B4A3A", true)]    // 민트초코 초콜릿
+    [InlineData("#1F2640", true)]
+    [InlineData("#0099BC", false)]
+    [InlineData("#FFB900", false)]
+    [InlineData("#F2C75C", false)]
+    [InlineData("#7FD8C4", false)]
+    [InlineData("#F29CBF", false)]
+    public void OuterRim_OnlyAroundDarkFills(string hex, bool rim)
+    {
+        ColorHex.TryParse(hex, out int fill);
+        Assert.Equal(rim, ColorHex.OuterRimAlpha(fill) > 0);
+    }
+
+    /// <summary>림은 옅다: 3:1 에 필요한 만큼만이라 반투명(절반 미만)이고, 흰 문서 위에서는 보이지 않는다.</summary>
+    [Fact]
+    public void OuterRim_IsFaint()
+    {
+        ColorHex.TryParse("#3C3C3C", out int gray);
+        int alpha = ColorHex.OuterRimAlpha(gray);
+        Assert.InRange(alpha, 1, 127);
+        Assert.Equal(White, ColorHex.Over(White, alpha, White));
+    }
 }

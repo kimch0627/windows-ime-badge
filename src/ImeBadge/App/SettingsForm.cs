@@ -21,7 +21,8 @@ interface IExperimentHost
 /// <summary>
 /// 설정 창. Windows 11 설정 앱처럼 왼쪽 탐색 목록에서 페이지를 고르고, 페이지마다 아이콘·제목·설명이 붙은 카드로 항목을 보여 준다.
 /// 바꾸는 즉시 실제 배지에 반영되어(WYSIWYG) 창 밖 배지로 결과를 바로 볼 수 있고,
-/// [확인]을 누르면 저장, [취소]나 닫기를 누르면 창을 열 때의 설정으로 되돌린다.
+/// 저장도 바로 한다(Windows 11 설정 앱과 같다. 슬라이더를 끄는 동안처럼 몰린 변경은 <see cref="SaveDelayMs"/> 뒤 한 번).
+/// 닫기·X·Esc 는 그대로 닫고, [되돌리기]를 누르면 창을 열었을 때의 설정으로 돌아간다. 1.15 까지는 X 로 닫으면 조용히 되돌아갔다(UX-02).
 /// 편집은 복사본(<see cref="_draft"/>)에 하고 매번 실제 설정(<see cref="_live"/>)으로 복사한다.
 /// 미리보기는 실제 렌더러(<see cref="BadgeRenderer"/>)로 그려 창 밖 배지와 똑같이 보인다.
 /// 뼈대 컨트롤(탐색 목록·카드·페이지)은 SettingsControls.cs 에 있다.
@@ -30,16 +31,26 @@ sealed class SettingsForm : Form
 {
     readonly Settings _live;
     readonly Settings _draft;
-    readonly Settings _original;   // 취소할 때 되돌릴 값
+    readonly Settings _original;   // [되돌리기]가 돌아갈 값(창을 열었을 때)
     readonly AppPaths _paths;
     readonly Action _checkUpdates;
     readonly IExperimentHost _experiments;
     readonly bool _builtKorean = Strings.IsKorean;   // 이 창을 만들 때의 언어. 바뀌면 새 창으로 갈아 끼운다
-    bool _autostart, _dirty, _loading, _detached;
+    bool _autostart, _originalAutostart, _dirty, _loading, _detached;
+    string? _originalAutostartCommand;   // 창을 열 때 Run 키에 적혀 있던 명령. [되돌리기]가 경로까지 그대로 되살린다
+    AccentButton _revert = null!;
+    /// <summary>값이 바뀐 뒤 저장할 때까지 기다리는 시간. 슬라이더를 끄는 동안 파일을 수십 번 쓰지 않게 마지막 변경 뒤 한 번 저장한다.</summary>
+    const int SaveDelayMs = 400;
+    readonly System.Windows.Forms.Timer _saveTimer = new() { Interval = SaveDelayMs };
 
     TilePicker _theme = null!, _style = null!, _character = null!, _placement = null!;
-    AccentSlider _size = null!, _opacity = null!, _poll = null!;
-    ThemedComboBox _language = null!, _visibility = null!;
+    AccentSlider _size = null!, _opacity = null!;
+    ThemedComboBox _language = null!, _poll = null!;
+    SettingsCard _suggestCard = null!;
+    readonly WrapRow _suggestRow = new();
+    readonly List<AccentButton> _suggestChips = new();
+    TilePicker _visibility = null!;
+    SettingsCard _keysCard = null!;
     InputTextBox _excludeInput = null!;
     InputFrame _excludeFrame = null!;
     ContextMenuStrip? _appsMenu;
@@ -56,6 +67,7 @@ sealed class SettingsForm : Form
     /// <summary>미리보기를 접었는가. 앱이 도는 동안 기억해 설정 창을 다시 열어도(언어를 바꿔 새로 열 때 포함) 그대로다.</summary>
     static bool _previewCollapsed;
     SettingsCard _updateCard = null!, _diagCard = null!;
+    SettingsCard _startCard = null!;   // 모양 페이지 맨 위의 "시작하기" 안내(Settings.ShowOnboarding)
     SectionHeader _excludeHeader = null!;
     CardStack _excludePage = null!;
     readonly List<Control> _excludeRows = new();
@@ -89,11 +101,13 @@ sealed class SettingsForm : Form
     // 창 크기(96 DPI 기준 논리 픽셀). 처음에는 DefaultClient 로 열되 작업 영역보다 크면 줄이고, MinClient 보다 작게는 줄일 수 없다.
     // 최소 폭은 타일 다섯 개(테마·모양)가 카드 안에 잘리지 않고 들어가는 폭이다.
     static readonly Size DefaultClient = new(1040, 760), MinClient = new(800, 540);
+    /// <summary>처음 열 때 작업 영역에서 차지할 수 있는 최대 비율(1366×768 노트북처럼 작은 화면에서 거의 전체 화면이 되지 않게).</summary>
+    const float MaxAreaShare = 0.85f;
     const int NavWidth = 264, CommandHeight = 64;
 
-    /// <summary>편집 중 값이 바뀔 때마다 발생. 실제 설정에는 이미 복사되어 있으니 다시 그리기만 하면 된다(저장은 하지 않는다).</summary>
+    /// <summary>편집 중 값이 바뀔 때마다 발생. 실제 설정에는 이미 복사되어 있으니 다시 그리기만 하면 된다(저장은 <see cref="Applied"/>).</summary>
     public event Action? Changed;
-    /// <summary>[확인]으로 확정되었거나 [취소]로 되돌려졌을 때 발생. 저장한다.</summary>
+    /// <summary>저장할 때 발생: 마지막 변경 뒤 <see cref="SaveDelayMs"/>, 또는 창을 닫을 때 저장하지 않은 변경이 남아 있으면.</summary>
     public event Action? Applied;
     /// <summary>UI 언어가 이 창을 만들 때와 달라졌다. 받는 쪽(BadgeForm)이 <see cref="Reopen"/> 으로 새 창을 만들고 이 창을 <see cref="Detach"/> 한다.</summary>
     public event Action? LanguageChanged;
@@ -103,7 +117,7 @@ sealed class SettingsForm : Form
     public SettingsForm(Settings live, AppPaths paths, Action checkUpdates, IExperimentHost experiments, SettingsPage page = SettingsPage.Appearance)
         : this(live, live.Clone(), dirty: false, paths, checkUpdates, experiments, page) { }
 
-    /// <param name="original">취소할 때 되돌릴 값. 새 창이 이전 창의 기준을 이어받을 때 넘긴다.</param>
+    /// <param name="original">[되돌리기]가 돌아갈 값. 새 창이 이전 창의 기준을 이어받을 때 넘긴다.</param>
     /// <param name="dirty">이미 편집이 있었는가(이어받은 창은 true).</param>
     SettingsForm(Settings live, Settings original, bool dirty, AppPaths paths, Action checkUpdates, IExperimentHost experiments, SettingsPage page)
     {
@@ -114,6 +128,8 @@ sealed class SettingsForm : Form
         _checkUpdates = checkUpdates;
         _experiments = experiments;
         _autostart = Autostart.IsEnabled();
+        _originalAutostart = _autostart;
+        _originalAutostartCommand = Autostart.ReadCommand();
 
         Text = Strings.Format("settings.title", AppInfo.ProductName);
         Icon = Icons.App;
@@ -130,10 +146,12 @@ sealed class SettingsForm : Form
 
         _flashTimer.Tick += (_, _) => { _flashTimer.Stop(); _flashing = false; _preview.Invalidate(); };
         _copiedTimer.Tick += (_, _) => { _copiedTimer.Stop(); if (!_diagCard.IsDisposed) _diagCard.Description = Strings.Get("about.copyDiag.desc"); };
+        _saveTimer.Tick += (_, _) => { _saveTimer.Stop(); Applied?.Invoke(); };
 
         Build(page);
         LoadDraftIntoControls();
         _dirty = dirty;   // 컨트롤 초기화로 생긴 변경 알림은 실제 변경이 아니다
+        if (!dirty) _saveTimer.Stop();   // 연 그대로면 저장할 것이 없다
         UpdateHint();
         _painted = Theme.Design = DesignThemes.Get(_draft.Theme);
         Theme.Apply(this);
@@ -150,11 +168,15 @@ sealed class SettingsForm : Form
         Invalidate(true);
     }
 
-    /// <summary>같은 편집 상태(기준값·자동 시작 체크)를 이어받는 새 창을 현재 언어로 만든다. 위치·크기·페이지·스크롤도 그대로.</summary>
+    /// <summary>같은 편집 상태(되돌리기 기준값·자동 시작)를 이어받는 새 창을 현재 언어로 만든다. 위치·크기·페이지·스크롤도 그대로.</summary>
     public SettingsForm Reopen()
     {
-        var next = new SettingsForm(_live, _original, dirty: true, _paths, _checkUpdates, _experiments, CurrentPage) { _autostart = _autostart };
+        var next = new SettingsForm(_live, _original, _dirty, _paths, _checkUpdates, _experiments, CurrentPage)
+        {
+            _autostart = _autostart, _originalAutostart = _originalAutostart, _originalAutostartCommand = _originalAutostartCommand,
+        };
         next._autostartBox.Checked = _autostart;
+        next.UpdateHint();
         if (IsHandleCreated)
         {
             next._restoreBounds = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
@@ -165,8 +187,20 @@ sealed class SettingsForm : Form
         return next;
     }
 
-    /// <summary>닫을 때 되돌리기·저장 알림을 하지 않게 한다(새 창에 편집을 넘긴 뒤).</summary>
+    /// <summary>새 창에 편집을 넘겼다는 표시(언어를 바꿔 갈아 끼울 때). 닫을 때 남은 저장만 마친다.</summary>
     public void Detach() => _detached = true;
+
+    /// <summary>
+    /// 트레이 메뉴에서 바꾼 값(실제 설정)을 열려 있는 이 창에도 보여 준다. [되돌리기] 기준(창을 열었을 때)은 그대로라
+    /// 트레이에서 바꾼 것도 되돌리기 대상이다. 이렇게 하지 않으면 창에서 다음 값을 바꿀 때 트레이에서 바꾼 값을 옛 값으로 덮어썼다.
+    /// </summary>
+    public void SyncFromLive()
+    {
+        if (IsDisposed || _detached) return;
+        _draft.CopyFrom(_live);
+        _autostart = Autostart.IsEnabled();
+        LoadDraftIntoControls();
+    }
 
     public SettingsPage CurrentPage => (SettingsPage)Math.Max(0, _nav.SelectedIndex);
     CardStack CurrentStack => _pages[(int)CurrentPage];
@@ -220,7 +254,10 @@ sealed class SettingsForm : Form
         else
         {
             int gap = LogicalToDeviceUnits(8);
+            // 작은 화면에서 창이 화면을 다 덮지 않게 작업 영역의 85% 까지만(UX-17). 그래도 최소 크기보다 작게는 하지 않는다.
             var want = new Size(LogicalToDeviceUnits(DefaultClient.Width), LogicalToDeviceUnits(DefaultClient.Height)) + frame;
+            var cap = new Size((int)(area.Width * MaxAreaShare), (int)(area.Height * MaxAreaShare));
+            want = new Size(Math.Max(MinimumSize.Width, Math.Min(want.Width, cap.Width)), Math.Max(MinimumSize.Height, Math.Min(want.Height, cap.Height)));
             var size = new Size(Math.Min(want.Width, area.Width - 2 * gap), Math.Min(want.Height, area.Height - 2 * gap));
             bounds = new Rectangle(area.Left + (area.Width - size.Width) / 2, area.Top + (area.Height - size.Height) / 2, size.Width, size.Height);
         }
@@ -270,13 +307,15 @@ sealed class SettingsForm : Form
             Dock = DockStyle.Left, Width = NavWidth, TabIndex = 0,
         };
 
-        var ok = new AccentButton { Text = Strings.Get("settings.ok"), Primary = true, AutoSize = true };
-        var cancel = new AccentButton { Text = Strings.Get("settings.cancel"), DialogResult = DialogResult.Cancel, AutoSize = true };
-        // 모드리스(Show) 창은 DialogResult 만으로는 닫히지 않는다. 명시적으로 닫는다.
-        ok.Click += (_, _) => { Apply(); DialogResult = DialogResult.OK; Close(); };
-        cancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
-        AcceptButton = ok; CancelButton = cancel;
-        _commands = new CommandBar(Strings.Get("settings.hint.clean"), cancel, ok) { Dock = DockStyle.Bottom, Height = CommandHeight, TabIndex = 2 };
+        // 저장은 바꿀 때마다 하므로 [확인]/[취소] 대신 [닫기]와 [되돌리기]. 닫기·X·Esc 는 모두 그대로 닫는다(되돌리지 않는다).
+        // Enter 로 창을 닫지 않는다(AcceptButton 없음): 입력칸·타일에서 Enter 를 누르다 창이 닫히지 않게.
+        var close = new AccentButton { Text = Strings.Get("settings.close"), Primary = true, AutoSize = true };
+        close.Click += (_, _) => Close();
+        _revert = new AccentButton { Text = Strings.Get("settings.revert"), AutoSize = true, Enabled = false };
+        _revert.Click += (_, _) => Revert();
+        _tips.SetToolTip(_revert, Strings.Get("settings.revert.tip"));
+        CancelButton = close;
+        _commands = new CommandBar(Strings.Get("settings.hint.clean"), close, _revert) { Dock = DockStyle.Bottom, Height = CommandHeight, TabIndex = 2 };
 
         _pages[(int)SettingsPage.Appearance] = BuildAppearancePage();
         _pages[(int)SettingsPage.Display] = BuildDisplayPage();
@@ -339,15 +378,21 @@ sealed class SettingsForm : Form
         _previewHost = new PinnedCardHost { Dock = DockStyle.Top };
         _previewHost.Controls.Add(_previewCard);
 
+        // 처음 쓰는 사람을 위한 안내(UX-03). 첫 실행에 켜지고 [안내 닫기]로 꺼진다. 정보 페이지에서 다시 볼 수 있다.
+        _startCard = BuildStartCard();
+        page.Controls.Add(_startCard);
+
         page.Controls.Add(Section("section.themeShape"));
         // 테마: 배지 색·질감과 이 창의 색을 한 벌로 바꾼다. 타일에는 그 테마의 한/영 배지를 실제 렌더러로 그린다.
-        _theme = new TilePicker { TileSize = new Size(68, 58) };
+        // 다른 타일보다 크게: 테마마다 다른 질감(젤리 광택·파스텔)이 배지 크기에서 보여야 고를 수 있다.
+        _theme = new TilePicker { TileSize = new Size(84, 64) };
         _theme.SetTiles(DesignThemes.All.Select(d => new TilePicker.Tile(d.Id, Strings.Get("theme." + d.Id), (gr, r, p) => DrawThemeTile(gr, r, d))));
         _theme.SelectedChanged += (_, _) => { if (_theme.SelectedValue is string id && id != _draft.Theme) ChooseTheme(DesignThemes.Get(id)); };
         page.Controls.Add(Card(Glyphs.Theme, "look.theme", body: _theme));
 
         // 배지 모양: 실제 렌더러로 그린 타일에서 고른다. 윗줄은 기본 모양, 아랫줄은 캐릭터. 둘 중 한 줄에서만 선택된다.
-        _style = new TilePicker { TileSize = new Size(68, 58), AccessibleName = Strings.Get("menu.style.basic"), Margin = new Padding(0, 0, 0, 8) };
+        // 두 줄이 왜 나뉘는지 보이도록 줄마다 작은 캡션("기본" / "캐릭터")을 단다.
+        _style = new TilePicker { TileSize = new Size(68, 58), AccessibleName = Strings.Get("menu.style.basic") };
         _style.SetTiles(Labels.Styles.Select(s => new TilePicker.Tile(s.value, ShortStyle(s.value), (gr, r, p) => DrawStyleTile(gr, r, p, s.value))));
         _style.SelectedChanged += (_, _) =>
         {
@@ -358,7 +403,7 @@ sealed class SettingsForm : Form
             SyncPlacementEnabled();
             Touch();
         };
-        _character = new TilePicker { TileSize = new Size(68, 58), AccessibleName = Strings.Get("menu.style.characters"), Margin = Padding.Empty };
+        _character = new TilePicker { TileSize = new Size(68, 58), AccessibleName = Strings.Get("menu.style.characters") };
         _character.SetTiles(Labels.Characters.Select(c => new TilePicker.Tile(c.id, c.label, (gr, r, p) => DrawCharacterTile(gr, r, p, c.id))));
         _character.SelectedChanged += (_, _) =>
         {
@@ -369,7 +414,8 @@ sealed class SettingsForm : Form
             SyncPlacementEnabled();
             Touch();
         };
-        page.Controls.Add(Card(Glyphs.Shape, "look.style", body: Stack(_style, _character)));
+        page.Controls.Add(Card(Glyphs.Shape, "look.style",
+            body: new VStack((Caption("menu.style.basic"), 4), (_style, 12), (Caption("menu.style.characters"), 4), (_character, 0))));
 
         _placement = new TilePicker { TileSize = new Size(68, 58) };
         _placement.SetTiles(Labels.Placements.Select(pl => new TilePicker.Tile(pl.value, ShortPlacement(pl.value), (gr, r, p) => DrawPlacementTile(gr, r, p, pl.value))));
@@ -393,33 +439,26 @@ sealed class SettingsForm : Form
     {
         var page = new CardStack();
 
-        _visibility = Combo(240, Labels.Visibilities.Select(v => v.label), i => { _draft.Visibility = Labels.Visibilities[i].value; Touch(); });
-        _tips.SetToolTip(_visibility, Strings.Get("look.visibility.tip"));
-        page.Controls.Add(Card(Glyphs.Visibility, "look.visibility", action: _visibility));
+        // 표시 방식: "배지가 글자를 가려요" 의 답이라 눈에 띄어야 한다. 고르기 상자 대신 그림과 한 줄 설명이 있는 타일(UX-07).
+        _visibility = new TilePicker { TileSize = new Size(160, 96), AccessibleName = Mnemonic.Plain(Strings.Get("look.visibility")) };
+        _visibility.SetTiles(Labels.Visibilities.Select(v => new TilePicker.Tile(v.value, v.label, (gr, r, p) => DrawVisibilityTile(gr, r, p, v.value))));
+        _visibility.SelectedChanged += (_, _) => { if (_visibility.SelectedValue is string v && v != _draft.Visibility) { _draft.Visibility = v; Touch(); } };
+        page.Controls.Add(Card(Glyphs.Visibility, "look.visibility", body: _visibility));
 
         _animate = Toggle(v => { _draft.Animate = v; Touch(); });
         page.Controls.Add(Card(Glyphs.Animation, "look.animate", action: _animate));
 
-        page.Controls.Add(Section("section.keys"));
+        // 특수 키 표시: 한 카드 안에 하위 행 넷(UX-08). 요약 줄은 지금 켜진 기호(▁ ▲ ■)를 보여 주어 범례를 겸한다(UX-11).
+        // Shift 는 Caps Lock 표시가, "누르는 즉시" 는 둘 다 켜져 있어야 의미가 있다(꺼져 있으면 흐리게, 값은 남는다). 들여쓰기는 "누르는 즉시" 한 단계뿐.
         _capsLock = Toggle(v => { _draft.ShowCapsLock = v; SyncShiftEnabled(); Touch(); });
-        _tips.SetToolTip(_capsLock, Strings.Get("look.capsLock.tip"));
-        page.Controls.Add(Card(Glyphs.CapsLock, "look.capsLock", action: _capsLock));
-        // Caps Lock 표시의 하위 옵션: 대소문자를 글자로 구별할 때만 의미가 있다. 들여 쓰고, Caps Lock 표시가 꺼져 있으면 흐리게.
         _shiftHold = Toggle(v => { _draft.ShowShiftHold = v; SyncShiftEnabled(); Touch(); });
-        _tips.SetToolTip(_shiftHold, Strings.Get("look.shiftHold.tip"));
-        var shift = Card(Glyphs.Shift, "look.shiftHold", action: _shiftHold);
-        shift.Indent = 1;
-        page.Controls.Add(shift);
-        // Shift 표시의 하위 옵션: 0.3초를 기다리지 않고 누르는 즉시. 한 단계 더 들여 쓰고, Shift 표시가 꺼져 있으면 흐리게.
         _shiftNow = Toggle(v => { _draft.ShowShiftImmediately = v; Touch(); });
-        _tips.SetToolTip(_shiftNow, Strings.Get("look.shiftNow.tip"));
-        var shiftNow = Card(Glyphs.ShiftNow, "look.shiftNow", action: _shiftNow);
-        shiftNow.Indent = 2;
-        page.Controls.Add(shiftNow);
-        // 겹쳐 쓰기는 대소문자와 상관없어 Caps Lock 표시와 따로 켜고 끈다.
         _insert = Toggle(v => { _draft.ShowInsert = v; Touch(); });
-        _tips.SetToolTip(_insert, Strings.Get("look.insert.tip"));
-        page.Controls.Add(Card(Glyphs.Insert, "look.insert", action: _insert));
+        var shiftNow = SubCard("look.shiftNow", _shiftNow);
+        shiftNow.Indent = 1;
+        _keysCard = Card(Glyphs.Keyboard, "look.keys",
+            body: new VStack((SubCard("look.capsLock", _capsLock), 0), (SubCard("look.shiftHold", _shiftHold), 0), (shiftNow, 0), (SubCard("look.insert", _insert), 0)));
+        page.Controls.Add(_keysCard);
 
         page.Controls.Add(Section("section.hideTray"));
         _fullscreen = Toggle(v => { _draft.HideOnFullscreen = v; Touch(); });
@@ -434,8 +473,8 @@ sealed class SettingsForm : Form
         var page = new CardStack();
 
         page.Controls.Add(Section("section.startup"));
-        // 자동 시작은 레지스트리를 만지므로 [확인] 때만 반영한다.
-        _autostartBox = Toggle(v => { _autostart = v; if (!_loading) { _dirty = true; UpdateHint(); } });
+        // 자동 시작도 바로 반영한다(레지스트리). 실패하면 토글을 되돌리고 알린다.
+        _autostartBox = Toggle(SetAutostart);
         page.Controls.Add(Card(Glyphs.Power, "behavior.autostart", action: _autostartBox));
 
         // 단축키: 키 조합을 받는 입력칸 + 켜기/끄기.
@@ -454,8 +493,9 @@ sealed class SettingsForm : Form
         page.Controls.Add(Card(Glyphs.Language, "behavior.language", action: _language));
 
         page.Controls.Add(Section("section.advanced"));
-        page.Controls.Add(Card(Glyphs.Clock, "behavior.poll", action: Slider(out _poll, 50, 1000, 50, 100, " ms", v => { _draft.PollIntervalMs = v; Touch(); })));
-        _tips.SetToolTip(_poll, Strings.Get("behavior.poll.tip"));
+        // 반응 속도(UX-14): ms 슬라이더 대신 세 단계. 설정 파일에 다른 값이 있으면 "사용자 지정 (N ms)" 로 보이고 그대로 둔다.
+        _poll = Combo(220, Array.Empty<string>(), i => { if (i < PollPresets.Length && _draft.PollIntervalMs != PollPresets[i]) { _draft.PollIntervalMs = PollPresets[i]; Touch(); } });
+        page.Controls.Add(Card(Glyphs.Clock, "behavior.poll", action: _poll));
 
         page.Controls.Add(Section("section.manage"));
         // 내보내기·가져오기: 다른 PC 로 설정을 옮긴다. 가져온 값은 초안에만 채우므로 [확인] 해야 저장되고 [취소] 하면 되돌아간다.
@@ -494,6 +534,18 @@ sealed class SettingsForm : Form
         add.Margin = Padding.Empty;
         page.Controls.Add(Card(Glyphs.Add, "exclude.addTitle", body: Row(_excludeFrame, add)));
 
+        // 자주 제외하는 앱(UX-15): 원격 데스크톱·가상 머신은 안쪽 Windows 가 따로 배지를 띄우므로 바깥 배지와 겹친다. 누르면 바로 넣는다.
+        foreach (var (name, key) in Suggestions)
+        {
+            string app = name;
+            var chip = new AccentButton { Text = app, AutoSize = true, AccessibleName = Strings.Format("exclude.suggest.name", app, Strings.Get(key)) };
+            chip.Click += (_, _) => { _excludeInput.Text = app; AddExcluded(); };
+            _tips.SetToolTip(chip, Strings.Get(key));
+            _suggestChips.Add(chip);
+        }
+        _suggestCard = Card(Glyphs.Apps, "exclude.suggest", body: _suggestRow);
+        page.Controls.Add(_suggestCard);
+
         // 제외한 앱: 하나에 카드 하나, 오른쪽에 [삭제]. 목록은 ReloadExcluded 가 다시 만든다.
         _excludeHeader = Section("exclude.listHeader");
         page.Controls.Add(_excludeHeader);
@@ -527,9 +579,49 @@ sealed class SettingsForm : Form
         // 진단 정보: 이슈에 붙여 넣으면 재현 환경을 바로 알 수 있다.
         _diagCard = Link(Glyphs.Copy, "about.copyDiag", CopyDiagnostics, trailing: "");
         page.Controls.Add(_diagCard);
+        page.Controls.Add(Link(Glyphs.Start, "about.startAgain", ShowStartAgain, trailing: ""));
 
         page.Controls.Add(Note(Strings.Get("about.license")));
         return page;
+    }
+
+    /// <summary>"시작하기" 카드: 한/영 키로 확인해 보기, 숨은 트레이 아이콘 꺼내기, 잠깐 끄는 단축키, 저장 방식.</summary>
+    SettingsCard BuildStartCard()
+    {
+        var taskbar = Button("start.taskbar", () => AboutInfo.Open(AppInfo.TaskbarSettingsUri));
+        taskbar.Margin = new Padding(0, 0, 8, 0);
+        _tips.SetToolTip(taskbar, Strings.Get("start.taskbar.tip"));
+        var dismiss = Button("start.dismiss", DismissStart);
+        dismiss.Margin = Padding.Empty;
+        return new SettingsCard
+        {
+            Glyph = Glyphs.Start, Title = Strings.Get("start.title"), Description = StartText(), Body = Row(taskbar, dismiss),
+            Visible = _live.ShowOnboarding,
+        };
+    }
+
+    string StartText() => Strings.Format("start.desc", _draft.HotkeyEnabled ? _draft.Hotkey : Strings.Get("start.noHotkey"));
+
+    /// <summary>[안내 닫기]: 카드를 숨기고 다시 띄우지 않게 저장한다. 포커스는 다음 항목(테마)으로.</summary>
+    void DismissStart()
+    {
+        _live.ShowOnboarding = _draft.ShowOnboarding = false;
+        _startCard.Visible = false;
+        _theme.Focus();
+        _saveTimer.Stop();
+        _saveTimer.Start();
+    }
+
+    /// <summary>정보 페이지의 "시작 안내 다시 보기": 카드를 다시 켜고 모양 페이지 맨 위로 간다.</summary>
+    void ShowStartAgain()
+    {
+        _live.ShowOnboarding = _draft.ShowOnboarding = true;
+        _startCard.Description = StartText();
+        _startCard.Visible = true;
+        ShowPage(SettingsPage.Appearance);
+        _pages[(int)SettingsPage.Appearance].ScrollToTop();
+        _saveTimer.Stop();
+        _saveTimer.Start();
     }
 
     /// <summary>
@@ -546,7 +638,6 @@ sealed class SettingsForm : Form
         preview.Margin = new Padding(0, 0, 16, 0);
         _tips.SetToolTip(preview, Strings.Get("exp.sonar.preview.tip"));
         _sonar = Toggle(v => { _draft.CaretSonar = v; SyncExperimentalEnabled(); Touch(); });
-        _tips.SetToolTip(_sonar, Strings.Get("exp.sonar.tip"));
         page.Controls.Add(Card(Glyphs.Sonar, "exp.sonar", action: Row(preview, _sonar)));
 
         _sonarHotkeyBox = new HotkeyBox { AccessibleName = Mnemonic.Plain(Strings.Get("exp.sonarHotkey")) };
@@ -563,19 +654,15 @@ sealed class SettingsForm : Form
 
         page.Controls.Add(Section("section.exp.typing"));
         _keepMode = Toggle(v => { _draft.KeepImeMode = v; Touch(); });
-        _tips.SetToolTip(_keepMode, Strings.Get("exp.keepMode.tip"));
         page.Controls.Add(Card(Glyphs.InputMode, "exp.keepMode", action: _keepMode));
 
         _selection = Toggle(v => { _draft.ShowSelection = v; Touch(); });
-        _tips.SetToolTip(_selection, Strings.Get("exp.selection.tip"));
         page.Controls.Add(Card(Glyphs.Selection, "exp.selection", action: _selection));
 
         _password = Toggle(v => { _draft.PasswordWarning = v; Touch(); });
-        _tips.SetToolTip(_password, Strings.Get("exp.password.tip"));
         page.Controls.Add(Card(Glyphs.Lock, "exp.password", action: _password));
 
         _focusSteal = Toggle(v => { _draft.FocusStealWarning = v; Touch(); });
-        _tips.SetToolTip(_focusSteal, Strings.Get("exp.focusSteal.tip"));
         page.Controls.Add(Card(Glyphs.Shield, "exp.focusSteal", action: _focusSteal));
         return page;
     }
@@ -626,6 +713,12 @@ sealed class SettingsForm : Form
         _excludeRows.Clear();
         var items = _draft.ExcludedProcesses;
         _excludeHeader.Text = Strings.Format("exclude.listHeader", items.Count);
+        // 추천 칩: 이미 넣은 앱은 빼고, 다 넣었으면 카드째 숨긴다.
+        _suggestRow.Controls.Clear();
+        foreach (var chip in _suggestChips)
+            if (!items.Any(x => string.Equals(ProcessFilter.Normalize(x), ProcessFilter.Normalize(chip.Text), StringComparison.OrdinalIgnoreCase)))
+                _suggestRow.Controls.Add(chip);
+        _suggestCard.Visible = _suggestRow.Controls.Count > 0;
         if (items.Count == 0) _excludeRows.Add(Note(Strings.Get("exclude.empty")));
         foreach (var name in items)
         {
@@ -672,6 +765,30 @@ sealed class SettingsForm : Form
         // 키보드로 지우던 사람이 이어서 지울 수 있게 같은 자리의 다음 항목으로, 없으면 입력칸으로.
         var next = _excludeRows.OfType<SettingsCard>().ElementAtOrDefault(Math.Min(i, items.Count - 1))?.Action;
         (next ?? _excludeInput).Focus();
+    }
+
+    /// <summary>
+    /// 추천 칩: 안쪽에서 따로 배지가 뜨는 원격 데스크톱·가상 머신 창(프로세스 이름, 설명 문구 키).
+    /// </summary>
+    static readonly (string name, string key)[] Suggestions =
+    {
+        ("mstsc", "exclude.suggest.mstsc"), ("msrdc", "exclude.suggest.msrdc"), ("vmconnect", "exclude.suggest.vmconnect"),
+        ("vmware-vmx", "exclude.suggest.vmware"), ("VirtualBoxVM", "exclude.suggest.virtualbox"),
+    };
+
+    /// <summary>반응 속도 세 단계(ms)와 문구 키. 순서가 고르기 상자의 순서다.</summary>
+    static readonly int[] PollPresets = { 50, 100, 250 };
+    static readonly string[] PollKeys = { "poll.fast", "poll.normal", "poll.saver" };
+
+    /// <summary>반응 속도 고르기 상자를 채운다. 세 단계에 없는 값(설정 파일에서 고친 값)이면 맨 끝에 "사용자 지정 (N ms)" 을 더해 고른다.</summary>
+    void FillPoll()
+    {
+        var items = PollKeys.Select(Strings.Get).ToList();
+        int i = Array.IndexOf(PollPresets, _draft.PollIntervalMs);
+        if (i < 0) { items.Add(Strings.Format("poll.custom", _draft.PollIntervalMs)); i = items.Count - 1; }
+        _poll.SetItems(items);
+        _poll.SelectedIndex = i;
+        _poll.Invalidate();
     }
 
     /// <summary>실행 중인 앱 목록을 펼친다. 고르면 바로 제외 목록에 넣는다.</summary>
@@ -803,9 +920,14 @@ sealed class SettingsForm : Form
         using (var brush = new SolidBrush(bg))
             g.FillPath(brush, path);
         var theme = BadgeTheme.Of(design);
-        using var ko = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Pill, 0.72f * dpi, theme);
-        using var en = BadgeRenderer.Render(ImeState.English, BadgeStyle.Pill, 0.72f * dpi, theme);
-        float gap = 1 * dpi, total = ko.Width + gap + en.Width;
+        // 질감(광택·파스텔)이 보이도록 칸에 들어가는 가장 큰 배율(실제 배지 100% 까지)로 그린다.
+        float gap = 2 * dpi, scale;
+        using (var ko1 = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Pill, dpi, theme))
+        using (var en1 = BadgeRenderer.Render(ImeState.English, BadgeStyle.Pill, dpi, theme))
+            scale = dpi * Math.Min(1f, Math.Min((r.Width - gap) / (ko1.Width + en1.Width), r.Height / Math.Max(ko1.Height, en1.Height)));
+        using var ko = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Pill, scale, theme);
+        using var en = BadgeRenderer.Render(ImeState.English, BadgeStyle.Pill, scale, theme);
+        float total = ko.Width + gap + en.Width;
         float x = r.Left + (r.Width - total) / 2, y = r.Top + (r.Height - ko.Height) / 2;
         g.DrawImage(ko, new RectangleF(x, y, ko.Width, ko.Height), new Rectangle(Point.Empty, ko.Size), GraphicsUnit.Pixel);
         g.DrawImage(en, new RectangleF(x + ko.Width + gap, y, en.Width, en.Height), new Rectangle(Point.Empty, en.Size), GraphicsUnit.Pixel);
@@ -860,14 +982,68 @@ sealed class SettingsForm : Form
         g.DrawImage(bmp, new Rectangle(pos, bmp.Size), new Rectangle(Point.Empty, bmp.Size), GraphicsUnit.Pixel);
     }
 
+    /// <summary>
+    /// 표시 방식 타일(UX-07): 위에 짧은 글·caret·배지 그림, 아래에 한 줄 설명. 늘 보이기 = 또렷한 배지, 타이핑 중 옅게 = 옅은 배지와 치는 중인 글,
+    /// 바뀔 때만 = 배지와 초시계. 배지는 지금 테마·색의 한글 배지(실제 렌더러).
+    /// </summary>
+    void DrawVisibilityTile(Graphics g, RectangleF r, Theme.Palette p, string value)
+    {
+        float dpi = DeviceDpi / 96f;
+        float artH = 30 * dpi;
+        int opacity = value == BadgeVisibility.DimWhileTyping ? 35 : 100;
+        using var bmp = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Pill, 0.8f * dpi, BadgeTheme.From(_draft) with { Character = BadgeCharacters.None }, opacity);
+        using var sample = new Font(BadgeRenderer.FontFamily, 9f);
+        const TextFormatFlags flat = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.VerticalCenter;
+        string typed = value == BadgeVisibility.DimWhileTyping ? "가나다라" : "가나";
+        var ts = TextRenderer.MeasureText(g, typed, sample, Size.Empty, flat);
+        float x = r.Left + 4 * dpi, mid = r.Top + artH / 2;
+        TextRenderer.DrawText(g, typed, sample, new Rectangle((int)x, (int)(mid - ts.Height / 2f), ts.Width, ts.Height), p.Text, flat);
+        float cx = x + ts.Width + 1 * dpi;
+        using (var pen = new Pen(p.Text, Math.Max(1f, dpi))) g.DrawLine(pen, cx, mid - 7 * dpi, cx, mid + 7 * dpi);
+        var at = new Rectangle((int)(cx + 3 * dpi), (int)(mid - bmp.Height / 2f), bmp.Width, bmp.Height);
+        g.DrawImage(bmp, at, new Rectangle(Point.Empty, bmp.Size), GraphicsUnit.Pixel);
+        if (value == BadgeVisibility.OnChange)
+        {
+            using var icon = Theme.IconFont((int)Math.Round(14 * dpi));
+            if (icon is not null)
+                TextRenderer.DrawText(g, Glyphs.ShiftNow, icon, new Rectangle(at.Right + (int)(4 * dpi), (int)(mid - 8 * dpi), (int)(16 * dpi), (int)(16 * dpi)), p.SubtleText,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
+        }
+        // 한 줄(좁으면 두 줄) 설명
+        using var small = new Font(Font.FontFamily, Font.Size * 0.84f);
+        var textRect = new Rectangle((int)(r.Left + 2 * dpi), (int)(r.Top + artH + 2 * dpi), (int)(r.Width - 4 * dpi), (int)(r.Height - artH - 2 * dpi));
+        TextRenderer.DrawText(g, Strings.Get("visibility." + value + ".desc"), small, textRect, p.SubtleText,
+            TextFormatFlags.WordBreak | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+    }
+
     // ── 도우미 ──
-    /// <summary>카드 하나: 아이콘, 제목(key, 니모닉 포함), 설명(key + ".desc"), 오른쪽 컨트롤 또는 아래 넓은 내용.</summary>
+    /// <summary>
+    /// 카드 하나: 아이콘, 제목(key, 니모닉 포함), 설명(key + ".desc", 한 줄), 오른쪽 컨트롤 또는 아래 넓은 내용.
+    /// key + ".details" 가 있으면 "자세히" 로 펼치는 긴 설명(UX-06). 설명이 없는 키(".desc" 없음)는 설명 줄 없이.
+    /// </summary>
     SettingsCard Card(string glyph, string key, Control? action = null, Control? body = null)
     {
-        var card = new SettingsCard { Glyph = glyph, Title = Strings.Get(key), Description = Strings.Get(key + ".desc") };
+        var card = new SettingsCard { Glyph = glyph, Title = Strings.Get(key), Description = Strings.TryGet(key + ".desc", out var desc) ? desc : "" };
         if (action is not null) card.Action = action;
         if (body is not null) card.Body = body;
+        if (Strings.TryGet(key + ".details", out var details)) card.Details = details;
         return card;
+    }
+
+    /// <summary>다른 카드 안의 하위 행(특수 키 카드의 Caps Lock 등): 아이콘 없이 제목·한 줄 설명·오른쪽 토글.</summary>
+    static SettingsCard SubCard(string key, Control action) => new()
+    {
+        Flat = true, Title = Strings.Get(key), Description = Strings.Get(key + ".desc"), Action = action,
+    };
+
+    /// <summary>특수 키 카드의 요약 줄: 지금 켜진 표시와 그 기호. 기호가 무슨 뜻인지 알려 주는 범례도 된다.</summary>
+    string KeysSummary()
+    {
+        var on = new List<string>();
+        if (_draft.ShowCapsLock) on.Add(Strings.Get("keys.caps"));
+        if (_draft.ShowCapsLock && _draft.ShowShiftHold) on.Add(Strings.Get("keys.shift"));
+        if (_draft.ShowInsert) on.Add(Strings.Get("keys.insert"));
+        return on.Count == 0 ? Strings.Get("look.keys.none") : Strings.Format("look.keys.on", string.Join("  ·  ", on));
     }
 
     /// <summary>누를 수 있는 카드(폴더·웹 페이지 열기). 오른쪽 끝에 "새 창에서 열기" 표시.</summary>
@@ -916,13 +1092,11 @@ sealed class SettingsForm : Form
         return panel;
     }
 
-    /// <summary>세로로 쌓기(배지 모양의 기본·캐릭터 두 줄).</summary>
-    static FlowLayoutPanel Stack(params Control[] controls)
+    /// <summary>카드 몸통 안의 작은 캡션(보조 글자색). 배지 모양 카드의 "기본" / "캐릭터" 줄 이름.</summary>
+    Label Caption(string key) => new()
     {
-        var panel = Row(controls);
-        panel.FlowDirection = FlowDirection.TopDown;
-        return panel;
-    }
+        Text = Strings.Get(key), AutoSize = true, Font = _hintFont, ForeColor = SystemColors.GrayText, UseMnemonic = false, Margin = Padding.Empty,
+    };
 
     /// <summary>슬라이더 + 현재 값(왼쪽). 값은 <paramref name="step"/> 단위로 맞춰진다(예: 137% → 135%).</summary>
     static Control Slider(out AccentSlider bar, int min, int max, int step, int page, string unit, Action<int> onChange)
@@ -944,19 +1118,56 @@ sealed class SettingsForm : Form
         return Row(s, h);
     }
 
-    void UpdateHint() => _commands.Hint = Strings.Get(_dirty ? "settings.hint.dirty" : "settings.hint.clean");
+    void UpdateHint()
+    {
+        _commands.Hint = Strings.Get(_dirty ? "settings.hint.dirty" : "settings.hint.clean");
+        _revert.Enabled = _dirty;
+    }
+
+    /// <summary>자동 시작 토글. 컨트롤을 채우는 중(값을 싣는 중)이면 기억만 하고, 사용자가 바꿨으면 바로 레지스트리에 반영한다.</summary>
+    void SetAutostart(bool on)
+    {
+        if (_loading || on == _autostart) { _autostart = on; return; }
+        if (!Autostart.Set(on))
+        {
+            Dialogs.Warning(Strings.Get("autostart.failed"), Strings.Get("autostart.failed.text"));
+            BeginInvoke(() => { if (IsDisposed) return; _loading = true; try { _autostartBox.Checked = _autostart; } finally { _loading = false; } });
+            return;
+        }
+        _autostart = on;
+        _dirty = true;
+        UpdateHint();
+    }
+
+    /// <summary>[되돌리기]: 창을 열었을 때의 설정(자동 시작 포함)으로 돌아가고 저장한다. 언어도 돌아가면 새 창으로 갈아 끼운다(<see cref="Touch"/>).</summary>
+    void Revert()
+    {
+        _draft.CopyFrom(_original);
+        if (_autostart != _originalAutostart || Autostart.ReadCommand() != _originalAutostartCommand)
+        {
+            if (Autostart.Restore(_originalAutostartCommand)) _autostart = _originalAutostart;
+            else Dialogs.Warning(Strings.Get("autostart.failed"), Strings.Get("autostart.failed.text"));
+        }
+        LoadDraftIntoControls();   // Touch 가 저장을 예약한다
+        _dirty = false;
+        UpdateHint();
+        _nav.Focus();   // 눌린 [되돌리기]가 꺼지므로 포커스를 탐색 목록으로
+    }
 
     /// <summary>
     /// 편집 값을 실제 설정에 넣는다. 업데이트 확인 기록(마지막 확인 시각·건너뛴 버전)은 이 창이 편집하는 값이 아니므로 실제 설정의 것을 지킨다:
     /// 창이 열린 동안 [새 버전 확인]이나 하루 한 번 자동 확인이 그 값을 바꿨을 수 있다.
+    /// "시작하기" 안내를 보일지도 이 PC 의 상태라 실제 설정의 것을 지킨다([되돌리기]로 닫은 안내가 다시 나타나지 않게).
     /// </summary>
     void Store(Settings from)
     {
         var lastCheck = _live.LastUpdateCheckUtc;
         var skipped = _live.SkippedUpdateTag;
+        var onboarding = _live.ShowOnboarding;
         _live.CopyFrom(from);
         _live.LastUpdateCheckUtc = lastCheck;
         _live.SkippedUpdateTag = skipped;
+        _live.ShowOnboarding = onboarding;
     }
 
     /// <summary>초안을 컨트롤에 싣는다. 컨트롤마다 변경 이벤트가 오지만 끝에 한 번만 반영한다.</summary>
@@ -981,11 +1192,11 @@ sealed class SettingsForm : Form
         SyncPlacementEnabled();
         _size.Value = _draft.SizePercent;
         _opacity.Value = _draft.OpacityPercent;
-        _poll.Value = Math.Clamp(_draft.PollIntervalMs, _poll.Minimum, _poll.Maximum);
+        FillPoll();
         _hangulColor.Hex = _draft.HangulColor; _hangulHex.Text = _hangulColor.Hex;
         _englishColor.Hex = _draft.EnglishColor; _englishHex.Text = _englishColor.Hex;
         _animate.Checked = _draft.Animate;
-        _visibility.SelectedIndex = Math.Max(0, Array.FindIndex(Labels.Visibilities, v => v.value == _draft.Visibility));
+        _visibility.SelectedValue = _draft.Visibility;
         _capsLock.Checked = _draft.ShowCapsLock;
         _shiftHold.Checked = _draft.ShowShiftHold;
         _shiftNow.Checked = _draft.ShowShiftImmediately;
@@ -1027,12 +1238,17 @@ sealed class SettingsForm : Form
         Store(_draft);
         _dirty = true;
         UpdateHint();
+        _saveTimer.Stop();   // 마지막 변경 뒤 SaveDelayMs 에 한 번 저장
+        _saveTimer.Start();
         Changed?.Invoke();   // BadgeForm 이 여기서 Strings.Setting 을 새 언어로 맞춘다
         var design = DesignThemes.Get(_draft.Theme);
         if (!ReferenceEquals(design, _painted)) { _painted = Theme.Design = design; Recolor(); }
         _style?.Invalidate();       // 타일은 배지 색을 쓴다
         _character?.Invalidate();
         _placement?.Invalidate();
+        _visibility?.Invalidate();
+        if (_keysCard is not null) _keysCard.Description = KeysSummary();
+        if (_startCard is { Visible: true }) _startCard.Description = StartText();   // 단축키가 바뀌었을 수 있다
         RefreshPreview();
         if (Strings.IsKorean != _builtKorean) LanguageChanged?.Invoke();
     }
@@ -1057,6 +1273,8 @@ sealed class SettingsForm : Form
     const int PreviewEdge = 4;           // 배지가 칸 위아래 끝에 붙지 않게 남기는 여백
     /// <summary>미리보기를 고정한 뒤에도 아래 카드가 이만큼은 보여야 고정한다. 이보다 낮은 창에서는 미리보기도 함께 스크롤한다.</summary>
     const int MinCardRoom = 240;
+    /// <summary>미리보기를 고정한 동안 아래 페이지 맨 위에 더 비우는 여백(경계선과 첫 소제목 사이).</summary>
+    const int PinnedTopGap = 8;
 
     /// <summary>
     /// 미리보기 줄. 상태가 있는 줄은 글자 끝에 caret 과 그 상태의 배지를 그리고, 나머지는 옅은 색 채움 글이다.
@@ -1111,6 +1329,7 @@ sealed class SettingsForm : Form
             target.Controls.SetChildIndex(_previewCard, 0);   // 함께 스크롤할 때는 카드들 맨 위
             if (focused) _previewToggle.Focus();
         }
+        stack.ExtraTop = pin ? PinnedTopGap : 0;   // 고정한 미리보기의 경계선 바로 밑에 첫 항목이 붙지 않게
         _previewHost.Visible = pin && CurrentPage == SettingsPage.Appearance;
     }
 
@@ -1132,19 +1351,18 @@ sealed class SettingsForm : Form
         float left = PreviewLeftMargin * dpi, pitch = PreviewRowPitch * dpi;
 
         // 1) 줄과 caret 자리. 반쪽의 왼쪽 위, 첫 줄 위를 y=0 으로 잰다(두 반쪽이 같은 자리를 쓴다).
-        //    Caps Lock 표시를 켰으면 영문 줄을 대문자 예시로 바꿔 "A + 밑줄" 배지도 미리 보여 준다(한글 줄은 평소 모습).
-        //    점·밑줄 모양이면 그 아래에 밑줄이 붙은 모습이 된다.
+        //    두 줄 모두 평소 모습(한 / a)이다. 예전에는 Caps Lock 표시가 켜져 있으면 영문 줄을 "HELLO WORLD" + A 로 그려,
+        //    늘 보게 될 a 배지가 미리보기에 없었다. Caps Lock 모습은 구석의 작은 범례로 따로 보여 준다(3).
         var lines = new string[PreviewRows.Length];
         var widths = new float[PreviewRows.Length];
-        var carets = new List<(ImeState state, bool caps, Rectangle caret)>();
+        var carets = new List<(ImeState state, Rectangle caret)>();
         for (int r = 0; r < PreviewRows.Length; r++)
         {
             var (text, state) = PreviewRows[r];
-            bool caps = state == ImeState.English && _draft.ShowCapsLock;
-            lines[r] = caps ? text.ToUpperInvariant() : text;
+            lines[r] = text;
             widths[r] = g.MeasureString(lines[r], font, PointF.Empty, fmt).Width;
             if (state is null) continue;
-            carets.Add((state.Value, caps, new Rectangle((int)Math.Round(left + widths[r] + dpi), (int)Math.Round(r * pitch), 1, lineH)));
+            carets.Add((state.Value, new Rectangle((int)Math.Round(left + widths[r] + dpi), (int)Math.Round(r * pitch), 1, lineH)));
         }
 
         // 2) 배지. 미리보기에서는 화면 가장자리 대피(위에 자리가 없으면 아래로, 왼쪽에 없으면 오른쪽으로)를 하지 않는다.
@@ -1154,11 +1372,14 @@ sealed class SettingsForm : Form
         var style = PreviewStyle;
         var room = new Rectangle(-4096, -4096, 8192, 8192);
         var badges = new List<(Bitmap bmp, Rectangle bounds)>();
+        // 3) Caps Lock 범례: Caps Lock 표시가 켜져 있으면 반쪽마다 비어 있는 구석에 "Caps Lock 켜짐 [A]" 를 작게 둔다.
+        //    줄을 하나 더 두면 칸이 높아져야 해서(200% 배지가 잘림) 줄 대신 범례로 보여 준다. 자리가 없으면(좁은 창·큰 배지) 생략한다.
+        Bitmap? capsBmp = _draft.ShowCapsLock ? BadgeRenderer.Render(ImeState.English, style, scale, theme, _draft.OpacityPercent, capsLock: true) : null;
         try
         {
-            foreach (var (state, caps, caret) in carets)
+            foreach (var (state, caret) in carets)
             {
-                var bmp = BadgeRenderer.Render(state, style, scale, theme, _draft.OpacityPercent, caps);
+                var bmp = BadgeRenderer.Render(state, style, scale, theme, _draft.OpacityPercent);
                 var pos = BadgeLayout.Compute(new LayoutInput(caret, bmp.Size, style, _draft.Placement, scale, room));
                 badges.Add((bmp, new Rectangle(pos, bmp.Size)));
             }
@@ -1195,7 +1416,7 @@ sealed class SettingsForm : Form
                     g.DrawString(lines[r], font, PreviewRows[r].state is null ? fillerBrush : textBrush, area.Left + left, y, fmt);
                     taken.Add(new Rectangle((int)(area.Left + left), (int)y, (int)Math.Ceiling(widths[r] + 3 * dpi), lineH));
                 }
-                foreach (var (_, _, caret) in carets)
+                foreach (var (_, caret) in carets)
                     if (Shown(top + caret.Top))
                         g.DrawLine(caretPen, area.Left + caret.Left, top + caret.Top, area.Left + caret.Left, top + caret.Bottom);
                 // 픽셀 크기를 명시한다. Point 만 주는 오버로드는 비트맵의 DPI(96)와 화면 DPI 차이만큼 확대해 버린다.
@@ -1216,7 +1437,27 @@ sealed class SettingsForm : Form
                     var clearance = Rectangle.Inflate(spot, (int)(10 * dpi), (int)(2 * dpi));   // 배지 바로 옆이면 "한 밝은 배경" 처럼 붙어 읽힌다
                     if (taken.Any(clearance.IntersectsWith)) continue;
                     TextRenderer.DrawText(g, title, capFont, spot, caption, capFlags);
+                    taken.Add(spot);
                     break;
+                }
+
+                // Caps Lock 범례: 오른쪽 아래, 막히면 오른쪽 위(캡션이 아래로 갔을 때). 글자 왼쪽 끝이 본문 글 자리를 넘보면 생략한다.
+                if (capsBmp is not null)
+                {
+                    string legend = Strings.Get("preview.caps");
+                    var ls = TextRenderer.MeasureText(g, legend, capFont, Size.Empty, capFlags);
+                    int gap = (int)Math.Round(6 * dpi), w = ls.Width + gap + capsBmp.Width, h = Math.Max(ls.Height, capsBmp.Height);
+                    int x = area.Right - (int)(10 * dpi) - w;
+                    foreach (int y in new[] { area.Bottom - margin - h, area.Top + margin })
+                    {
+                        var spot = new Rectangle(x, y, w, h);
+                        if (spot.Left < area.Left + (int)left || taken.Any(Rectangle.Inflate(spot, (int)(10 * dpi), (int)(2 * dpi)).IntersectsWith)) continue;
+                        TextRenderer.DrawText(g, legend, capFont, new Rectangle(x, y + (h - ls.Height) / 2, ls.Width, ls.Height), caption, capFlags);
+                        g.DrawImage(capsBmp, new Rectangle(x + ls.Width + gap, y + (h - capsBmp.Height) / 2, capsBmp.Width, capsBmp.Height),
+                            new Rectangle(Point.Empty, capsBmp.Size), GraphicsUnit.Pixel);
+                        taken.Add(spot);
+                        break;
+                    }
                 }
                 g.Restore(state);
             }
@@ -1224,6 +1465,7 @@ sealed class SettingsForm : Form
         finally
         {
             foreach (var (bmp, _) in badges) bmp.Dispose();
+            capsBmp?.Dispose();
         }
     }
 
@@ -1260,22 +1502,12 @@ sealed class SettingsForm : Form
         return path;
     }
 
-    /// <summary>[확인]: 자동 시작을 반영하고 저장을 알린다. 배지 설정은 이미 실제 설정에 들어가 있다.</summary>
-    void Apply()
-    {
-        Store(_draft);
-        if (_autostart != Autostart.IsEnabled()) Autostart.Set(_autostart);
-        _dirty = false;
-        Applied?.Invoke();
-    }
-
-    /// <summary>[취소]·닫기: 창을 열 때의 설정으로 되돌리고 저장을 알린다(그 사이 트레이 메뉴가 저장했을 수 있다).</summary>
+    /// <summary>닫기·X·Esc·Alt+F4: 되돌리지 않는다. 기다리던 저장이 있으면 지금 한다(새 창으로 갈아 끼울 때도: 저장 내용은 실제 설정 그대로다).</summary>
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         base.OnFormClosing(e);
-        if (e.Cancel || _detached || DialogResult == DialogResult.OK || !_dirty) return;
-        Store(_original);
-        _dirty = false;
+        if (e.Cancel || !_saveTimer.Enabled) return;
+        _saveTimer.Stop();
         Applied?.Invoke();
     }
 
@@ -1283,7 +1515,7 @@ sealed class SettingsForm : Form
     {
         if (disposing)
         {
-            _flashTimer.Dispose(); _copiedTimer.Dispose(); _tips.Dispose(); _sectionFont.Dispose(); _hintFont.Dispose(); _appsMenu?.Dispose();
+            _flashTimer.Dispose(); _copiedTimer.Dispose(); _saveTimer.Dispose(); _tips.Dispose(); _sectionFont.Dispose(); _hintFont.Dispose(); _appsMenu?.Dispose();
             _preview?.Dispose();   // 접혀 있으면 카드에서 빠져 있어 창과 함께 정리되지 않는다
         }
         base.Dispose(disposing);

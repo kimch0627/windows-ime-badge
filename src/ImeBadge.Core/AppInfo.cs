@@ -14,6 +14,8 @@ public static class AppInfo
     public const string RepoUrl = "https://github.com/" + RepoOwner + "/" + RepoName;
     public const string ReleasesUrl = RepoUrl + "/releases";
     public const string LatestReleaseApi = "https://api.github.com/repos/" + RepoOwner + "/" + RepoName + "/releases/latest";
+    /// <summary>Windows 설정 → 개인 설정 → 작업 표시줄. 트레이 아이콘을 늘 보이게 하는 곳("기타 시스템 트레이 아이콘").</summary>
+    public const string TaskbarSettingsUri = "ms-settings:taskbar";
 
     /// <summary>두 번째 인스턴스가 첫 인스턴스에게 "설정 창을 열어 달라"고 보낼 때 쓰는 창 메시지 이름.</summary>
     public const string ShowSettingsMessageName = "ImeBadge.ShowSettings";

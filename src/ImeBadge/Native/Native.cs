@@ -149,6 +149,9 @@ static class Native
     [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern uint RegisterWindowMessage(string name);
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+    /// <summary>다른 프로세스가 창을 앞으로 가져와도 되게 허락한다(내가 앞으로 나올 권리가 있을 때만 통한다). <see cref="ASFW_ANY"/> 는 모든 프로세스.</summary>
+    [DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(int processId);
+    public const int ASFW_ANY = -1;
 
     // ── 프로세스 이름 ──
     [DllImport("kernel32.dll")] public static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);

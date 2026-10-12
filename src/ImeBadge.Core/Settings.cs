@@ -135,8 +135,20 @@ public sealed class Settings
     /// <summary>"이 버전 건너뛰기"를 누른 릴리스 태그("v1.2.3"). 이 버전은 자동 알림을 띄우지 않는다.</summary>
     public string? SkippedUpdateTag { get; set; }
 
+    // ── 안내 ──
+    /// <summary>
+    /// 설정 창 모양 페이지 맨 위의 "시작하기" 안내 카드를 보여 준다. 처음 실행(설정 파일이 없던 실행)에 켜지고 카드의 [안내 닫기]로 꺼진다.
+    /// 기본값이 false 라 이 항목이 없는 예전 설정 파일로 업그레이드한 사용자에게는 보이지 않는다(정보 페이지에서 다시 볼 수 있다).
+    /// 업데이트 확인 기록처럼 이 PC 의 상태라 내보내지 않고, 설정 창의 [되돌리기]도 건드리지 않는다. 구버전은 모르는 항목으로 무시한다.
+    /// </summary>
+    public bool ShowOnboarding { get; set; }
+
     /// <summary>Windows 11 기본 강조색. 흰 글자와의 대비가 5.7:1 로 WCAG AA(4.5:1)를 여유 있게 넘는다.</summary>
     public const string DefaultHangulColor = "#0067C0";
+    /// <summary>
+    /// 진회색. 어두운 편집기(#1E1E1E) 위에서는 몸통 대비가 1.5:1 뿐이라 바깥 흰 림(<see cref="ColorHex.OuterRimAlpha"/>)이 윤곽을 맡는다.
+    /// 더 밝은 회색(#5C5C5C 등)은 한글 기본색과 밝기 차이가 1.5 아래로 떨어져 흑백·색약에서 한/영이 구별되지 않아 쓰지 않는다.
+    /// </summary>
     public const string DefaultEnglishColor = "#3C3C3C";
 
     /// <summary>범위를 벗어난 값을 안전한 값으로 되돌린다. 손으로 고친 설정 파일을 방어한다.</summary>
@@ -187,6 +199,7 @@ public sealed class Settings
         Language = other.Language;
         CheckForUpdates = other.CheckForUpdates; LastUpdateCheckUtc = other.LastUpdateCheckUtc;
         SkippedUpdateTag = other.SkippedUpdateTag;
+        ShowOnboarding = other.ShowOnboarding;
     }
 }
 
@@ -284,6 +297,7 @@ public sealed class SettingsStore
         var copy = settings.Clone();
         copy.LastUpdateCheckUtc = null;
         copy.SkippedUpdateTag = null;
+        copy.ShowOnboarding = false;
         File.WriteAllText(path, JsonSerializer.Serialize(copy, SettingsJsonContext.Default.Settings));
     }
 
@@ -443,5 +457,26 @@ public static class ColorHex
             if (ContrastRatio(c, e) >= target) return e;
         }
         return Darken(c, 0.3);
+    }
+
+    /// <summary>어두운 편집기 바탕(VS Code 기본 테마 #1E1E1E). 배지 윤곽이 이 위에서도 보여야 한다.</summary>
+    public const int DarkEditorBackground = unchecked((int)0xFF1E1E1E);
+
+    /// <summary>배지 윤곽(그래픽 요소)이 바탕과 이루어야 하는 대비. WCAG 1.4.11(비텍스트 대비)의 3:1.</summary>
+    public const double OutlineContrast = 3.0;
+
+    /// <summary>
+    /// 배지 바깥 흰 림의 알파(0 = 림 없음). 배지색이 어두운 편집기 바탕(<see cref="DarkEditorBackground"/>)과 <see cref="OutlineContrast"/> 에
+    /// 못 미치면(진회색·네이비·초콜릿 배지) 윤곽 바깥에 옅은 흰 선을 둘러 어두운 바탕에서도 모양이 보이게 한다. 마우스 포인터가 흰·검 이중
+    /// 윤곽으로 어느 바탕에서나 보이는 것과 같은 원리다. 알파는 그 흰 선이 어두운 바탕 위에서 3:1 이 되는 가장 낮은 값이라, 흰 문서 위에서는
+    /// 보이지 않고 배지가 스티커처럼 두꺼워 보이지 않는다. 배지 불투명도와는 상관없다(옅게 해도 자리는 보여야 한다).
+    /// </summary>
+    public static int OuterRimAlpha(int fill)
+    {
+        const int White = unchecked((int)0xFFFFFFFF);
+        if (ContrastRatio(fill | unchecked((int)0xFF000000), DarkEditorBackground) >= OutlineContrast) return 0;
+        for (int a = 1; a < 255; a++)
+            if (ContrastRatio(Over(White, a, DarkEditorBackground), DarkEditorBackground) >= OutlineContrast) return a;
+        return 255;
     }
 }
