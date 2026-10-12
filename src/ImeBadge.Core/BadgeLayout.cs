@@ -21,27 +21,41 @@ public static class BadgeLayout
     public const int Gap = 3;
 
     /// <summary>
+    /// 점·밑줄 아래 특수 키 표시 기호의 치수(배율 1 기준 px, VW-08). 렌더러(<c>BadgeRenderer.DrawMarksBelow</c>)가 이 값으로 그리고,
+    /// 그 자리(<see cref="Side"/>·<see cref="Tail"/>)가 기호 줄을 담는지는 테스트가 배율마다 확인한다.
+    /// 예전(▲·■ 3px, ▁ 7×2px)은 100% 에서 셋이 구별되지 않았다. 밑줄(폭 9)이 네모(4×4)보다 뚜렷이 넓어야 둘이 헷갈리지 않고,
+    /// 폭이 홀수라 점(지름 9) 가운데에 픽셀 경계가 맞아 좌우 틈이 같다.
+    /// </summary>
+    public const float MarkGap = 2.5f, MarkBarW = 9f, MarkBarH = 2f, MarkTriH = 4f, MarkTriW = 6f, MarkSpace = 2.2f;
+
+    /// <summary>기호 둘레에 테두리(절반)·바깥 림·그림자가 차지하는 폭(배율 1 기준 px).</summary>
+    public const float MarkOutline = 2.25f;
+
+    /// <summary>표시 줄의 가운데에서 왼쪽 끝(▲ 왼쪽 끝 + 둘레)까지(px). ■ 쪽(오른쪽)은 이보다 짧다.</summary>
+    public static float MarkRowHalf(float scale) => (MarkBarW / 2 + MarkSpace + MarkTriW + MarkOutline) * scale;
+
+    /// <summary>
     /// 점·밑줄 그림의 몸통 아래에 늘 비워 두는 특수 키 표시 자리(px). 글자가 없는 두 모양은 표시(▲ ▁ ■, <see cref="BadgeMark"/>)를
     /// 몸통 아래 한 줄에 그린다. 표시가 있든 없든 그림 크기를 같게 해 Caps Lock·Shift·Insert 를 바꿔도 몸통이 움직이지 않는다
     /// (렌더러도 이 값으로 그림을 늘린다). 글자 배지는 표시가 배지 안팎 모서리에 들어가 0.
     /// </summary>
     public static int Tail(BadgeStyle style, float scale) => style switch
     {
-        BadgeStyle.Dot => (int)Math.Ceiling(4 * scale),         // 점 그림은 원래 아래에 그림자 여백이 있어 조금만 더한다
-        BadgeStyle.Underline => (int)Math.Ceiling(6 * scale),
+        BadgeStyle.Dot => (int)Math.Ceiling(5.5f * scale),      // 점 그림은 원래 아래에 그림자 여백이 있어 조금만 더한다
+        BadgeStyle.Underline => (int)Math.Ceiling(7 * scale),
         _ => 0,
     };
 
     /// <summary>
     /// 점·밑줄 그림의 몸통 좌우에 각각 늘 비워 두는 표시 자리(px). 아래 줄의 ▲ 는 왼쪽, ■ 는 오른쪽 자리에 그려
-    /// 점(지름 9)·밑줄(폭 16)보다 넓어진다. 아래 자리(<see cref="Tail"/>)와 함께 위치 계산에서는 빼고 몸통으로 자리를 정하므로,
+    /// 점(지름 9)·밑줄(폭 16)보다 넓어진다(<see cref="MarkRowHalf"/>). 아래 자리(<see cref="Tail"/>)와 함께 위치 계산에서는 빼고 몸통으로 자리를 정하므로,
     /// 점·밑줄은 예전(1.13.0) 자리 그대로이고 표시 자리만 caret 과의 틈이나 화면 밖으로 나갈 수 있다(투명이라 보이지 않는다).
     /// </summary>
     public static int Side(BadgeStyle style, float scale) => style switch
     {
-        // 아래 줄은 가운데에서 ▲ 왼쪽 끝까지 약 11px(+테두리·그림자). 점은 반지름 6.5, 밑줄은 10 짜리 그림에 이만큼 더한다.
-        BadgeStyle.Dot => (int)Math.Ceiling(5.5f * scale + 0.5f),
-        BadgeStyle.Underline => (int)Math.Ceiling(2 * scale + 0.5f),
+        // 아래 줄은 가운데에서 ▲ 왼쪽 끝까지 약 14.5px(둘레 포함). 점은 반지름 6.5, 밑줄은 10 짜리 그림(그림자 여백 포함)에 이만큼 더한다.
+        BadgeStyle.Dot => (int)Math.Ceiling(8 * scale + 0.5f),
+        BadgeStyle.Underline => (int)Math.Ceiling(4.5f * scale + 0.5f),
         _ => 0,
     };
 

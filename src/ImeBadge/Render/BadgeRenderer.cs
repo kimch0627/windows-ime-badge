@@ -378,7 +378,7 @@ static class BadgeRenderer
             g.DrawPath(pen, path);
             DrawRim(g, path, rect, line, line, color, theme);
             if (HasSelection(mark)) DrawSelectionAnts(g, path, AntsWidth(scale), theme);
-            DrawMarksBelow(g, mark, rect.X + rect.Width / 2, rect.Bottom + OutsideGap * scale, scale, color, theme);
+            DrawMarksBelow(g, mark, rect.X + rect.Width / 2, rect.Bottom + BadgeLayout.MarkGap * scale, scale, color, theme);
         }
         return bmp;
     }
@@ -430,31 +430,26 @@ static class BadgeRenderer
                 g.DrawLine(gaps, rect.X + h, rect.Y + h / 2f, rect.Right, rect.Y + h / 2f);
                 g.Restore(state);
             }
-            DrawMarksBelow(g, mark, rect.X + rect.Width / 2, rect.Bottom + OutsideGap * scale, scale, color, theme);
+            DrawMarksBelow(g, mark, rect.X + rect.Width / 2, rect.Bottom + BadgeLayout.MarkGap * scale, scale, color, theme);
         }
         return bmp;
     }
 
     /// <summary>
-    /// 점·밑줄 아래 표시의 크기(배율 1 기준 px). 배지 밖, 문서 위에 그리므로 글자 배지 안의 표시보다 조금 굵게.
-    /// 몸통과의 틈은 몸통 그림자보다 넓어야 기호가 몸통에 붙은 한 덩어리(버섯·핀 모양)로 보이지 않는다.
-    /// 밑줄(폭 7)이 네모(3×3)보다 뚜렷이 넓어야 둘이 헷갈리지 않는다. 폭이 홀수라 점(지름 9) 가운데에 픽셀 경계가 맞아 좌우 틈이 같다.
-    /// </summary>
-    const float OutsideGap = 2.5f, OutsideBarW = 7f, OutsideBarH = 2f, OutsideTriH = 3f, OutsideSpace = 2.2f;
-
-    /// <summary>
     /// 점·밑줄 모양의 특수 키 표시. 글자 배지와 같은 기호를 몸통 아래 한 줄의 정해진 자리에 그린다: 왼쪽 Shift ▲, 가운데 Caps Lock ▁,
     /// 오른쪽 겹쳐 쓰기 ■(글자 배지의 왼쪽 아래·글자 아래·오른쪽 아래와 같은 순서). 없는 기호의 자리는 비워 두므로 하나만 켜져도
     /// 제자리에 보이고, 다른 기호가 켜지고 꺼져도 움직이지 않는다. 기호들은 아래쪽을 맞춘다.
-    /// 몸통과 같은 색·테두리·그림자로 그리고, 문서 위에 바로 놓이므로 테두리를 먼저 긋고 그 위를 채워 바깥 절반만 남긴다(가늘어지지 않게).
-    /// 줄 폭(가운데에서 ▲ 왼쪽 끝까지 약 11px)은 그림 좌우의 표시 자리(<see cref="BadgeLayout.Side"/>)에 들어간다.
+    /// 치수(▲ 6×4, ▁ 9×2, ■ 4×4, 배율 1)는 <see cref="BadgeLayout"/> 의 Mark 상수이고, 몸통과의 틈은 몸통 그림자보다 넓어야 기호가 몸통에 붙은
+    /// 한 덩어리(버섯·핀 모양)로 보이지 않는다. 몸통과 같은 색·테두리·바깥 림·그림자로 그리고, 문서 위에 바로 놓이므로 테두리를 먼저 긋고
+    /// 그 위를 채워 바깥 절반만 남긴다(가늘어지지 않게). 줄 폭(<see cref="BadgeLayout.MarkRowHalf"/>)은 그림 좌우의 표시 자리(<see cref="BadgeLayout.Side"/>)에 들어간다.
     /// </summary>
     static void DrawMarksBelow(Graphics g, BadgeMark mark, float cx, float top, float scale, Color fill, in BadgeTheme theme)
     {
         if (mark == BadgeMark.None) return;
-        float barW = OutsideBarW * scale, barH = OutsideBarH * scale, triH = OutsideTriH * scale, triW = triH * 1.8f;
+        float barW = BadgeLayout.MarkBarW * scale, barH = MathF.Max(1f, MathF.Round(BadgeLayout.MarkBarH * scale));
+        float triH = MathF.Round(BadgeLayout.MarkTriH * scale), triW = MathF.Round(BadgeLayout.MarkTriW * scale);
         float bottom = MathF.Round(top) + triH;
-        float inner = barW / 2 + OutsideSpace * scale;   // 가운데 밑줄 자리의 끝에서 양옆 기호까지
+        float inner = barW / 2 + BadgeLayout.MarkSpace * scale;   // 가운데 밑줄 자리의 끝에서 양옆 기호까지
         using var path = new GraphicsPath();
         if ((mark & BadgeMark.Shift) != 0)
         {

@@ -1,3 +1,4 @@
+using System;
 using System.Drawing;
 using Xunit;
 
@@ -112,21 +113,56 @@ public sealed class BadgeLayoutTests
         Assert.Equal(1040 - (20 - BadgeLayout.Tail(BadgeStyle.Underline, 1f)), p.Y);
     }
 
-    // 점 그림(배율 1): 몸통 = 지름 9 + 그림자 여백 → 13×15. 그 둘레에 특수 키 표시 자리: 좌우 Side(6), 아래 Tail(4) → 25×19.
+    // 점 그림(배율 1): 몸통 = 지름 9 + 그림자 여백 → 13×15. 그 둘레에 특수 키 표시 자리: 좌우 Side(9), 아래 Tail(6) → 31×21.
     static readonly int DotSide = BadgeLayout.Side(BadgeStyle.Dot, 1f);
     static readonly Size DotPicture = new(13 + 2 * DotSide, 15 + BadgeLayout.Tail(BadgeStyle.Dot, 1f));
 
     [Fact]
     public void MarkRoom_IsOnlyForDotAndUnderline_AndScales()
     {
-        Assert.Equal(4, BadgeLayout.Tail(BadgeStyle.Dot, 1f));
-        Assert.Equal(6, BadgeLayout.Tail(BadgeStyle.Underline, 1f));
-        Assert.Equal(6, BadgeLayout.Tail(BadgeStyle.Dot, 1.5f));
+        Assert.Equal(6, BadgeLayout.Tail(BadgeStyle.Dot, 1f));
+        Assert.Equal(7, BadgeLayout.Tail(BadgeStyle.Underline, 1f));
+        Assert.Equal(9, BadgeLayout.Tail(BadgeStyle.Dot, 1.5f));
         Assert.Equal(0, BadgeLayout.Tail(BadgeStyle.Pill, 1f));
         Assert.Equal(0, BadgeLayout.Tail(BadgeStyle.Box, 2f));
-        Assert.Equal(6, BadgeLayout.Side(BadgeStyle.Dot, 1f));
-        Assert.Equal(3, BadgeLayout.Side(BadgeStyle.Underline, 1f));
+        Assert.Equal(9, BadgeLayout.Side(BadgeStyle.Dot, 1f));
+        Assert.Equal(5, BadgeLayout.Side(BadgeStyle.Underline, 1f));
         Assert.Equal(0, BadgeLayout.Side(BadgeStyle.Pill, 1f));
+    }
+
+    /// <summary>
+    /// VW-08: 점·밑줄 아래 기호 줄(▲ ▁ ■, 둘레 포함)이 그림에 비워 둔 자리 안에 들어간다. 몸통 치수는 렌더러와 같은 계산
+    /// (점 지름 round(9·배율), 밑줄 round(16·배율)×round(3·배율), 그림자 여백 ceil(2·배율)). 0.5px 까지는 그림자 가장자리라 봐준다.
+    /// </summary>
+    [Theory]
+    [InlineData(1f)]
+    [InlineData(1.25f)]
+    [InlineData(1.5f)]
+    [InlineData(1.75f)]
+    [InlineData(2f)]
+    public void MarkRow_FitsItsRoom(float s)
+    {
+        int pad = (int)Math.Ceiling(2 * s);
+        float row = BadgeLayout.MarkRowHalf(s), outline = BadgeLayout.MarkOutline * s, tri = MathF.Round(BadgeLayout.MarkTriH * s);
+
+        int d = (int)Math.Round(9 * s);
+        Assert.True(BadgeLayout.Side(BadgeStyle.Dot, s) + d / 2f + pad >= row - 0.5f, $"dot side @{s}");
+        float dotBottom = MathF.Round(pad + d + BadgeLayout.MarkGap * s) + tri + outline;
+        Assert.True(d + 3 * pad + BadgeLayout.Tail(BadgeStyle.Dot, s) >= dotBottom - 0.5f, $"dot tail @{s}");
+
+        int w = (int)Math.Round(16 * s), h = (int)Math.Round(3 * s);
+        Assert.True(BadgeLayout.Side(BadgeStyle.Underline, s) + w / 2f + pad >= row - 0.5f, $"underline side @{s}");
+        float barBottom = MathF.Round(h + BadgeLayout.MarkGap * s) + tri + outline;
+        Assert.True(h + pad + BadgeLayout.Tail(BadgeStyle.Underline, s) >= barBottom - 0.5f, $"underline tail @{s}");
+    }
+
+    /// <summary>VW-08: 100% 에서 세 기호가 구별될 만큼 크다(3px 기호는 서로 구별되지 않았다). 밑줄이 네모보다 뚜렷이 넓다.</summary>
+    [Fact]
+    public void Marks_AreBigEnoughToTellApart()
+    {
+        Assert.True(BadgeLayout.MarkTriH >= 4 && BadgeLayout.MarkTriW >= 6);
+        Assert.True(BadgeLayout.MarkBarW >= 2 * BadgeLayout.MarkTriH);
+        Assert.Equal(1, (int)BadgeLayout.MarkBarW % 2);   // 홀수 폭: 점(지름 9) 가운데에 맞아 좌우 틈이 같다
     }
 
     /// <summary>표시 자리를 뺀 몸통(13×15)이 예전(1.13.0) 점 자리와 같다. 표시 자리는 caret 과의 틈이나 바깥으로 나간다.</summary>
