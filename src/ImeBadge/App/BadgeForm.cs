@@ -96,6 +96,7 @@ sealed class BadgeForm : Form, IExperimentHost
     long _lastSwitchKeyMs = long.MinValue;   // Alt·Win·Ctrl 을 마지막으로 누르고 있던 때
     const int StealWarningMs = 5000;
     readonly PasswordGuard _passwordGuard = new();   // 비밀번호 칸 경고: 들어올 때·위험이 바뀔 때만 알린다
+    readonly CalloutFocus _calloutFocus = new();       // 경고 말풍선이 붙은 포커스 자리: 벗어나면 바로 내린다
     const int PasswordWarningMs = 6000;
     readonly ImeModeKeeper _modeKeeper = new();      // 모든 프로그램에서 한/영 유지: 마지막으로 고른 모드를 다른 프로그램에 맞춘다
 
@@ -699,6 +700,7 @@ sealed class BadgeForm : Form, IExperimentHost
         _pausedUntil = null;
         Log.Write(_paused ? "paused" : "resumed");
         _callout?.Hide();
+        _calloutFocus.Clear();
         _stealGuard.Disarm();
         _passwordGuard.Reset();
         UpdateTray(ImeState.Unknown, force: true);
@@ -1033,6 +1035,9 @@ sealed class BadgeForm : Form, IExperimentHost
 
     void Apply(Snapshot s)
     {
+        // 실험 기능의 경고 말풍선은 포커스가 그 자리를 벗어나면 바로 내린다(배지가 숨거나 다른 칸·창으로 옮겨 감, CalloutFocus).
+        if (_calloutFocus.Check((long)s.Foreground, (long)s.Focus, hasCaret: s.Caret is not null && s.State != ImeState.Unknown) is { } left)
+            DropWarning(left);
         if (s.Caret is null || s.State == ImeState.Unknown)
         {
             if (s.Suppressed is not null) Log.WriteIfChanged($"suppressed: {s.Suppressed} fg='{Native.ClassName(s.Foreground)}'");
@@ -1175,7 +1180,9 @@ sealed class BadgeForm : Form, IExperimentHost
     void OnForegroundChanged()
     {
         if (TracksUserInput) TrackUserInput();
-        if (_settings.PasswordWarning) { _passwordGuard.Reset(); _callout?.Hide("password"); }
+        if (_settings.PasswordWarning) { _passwordGuard.Reset(); _callout?.Hide("password", immediate: true); }
+        // 경고 말풍선은 활성 창이 바뀌면 바로 내린다(다음 갱신을 기다리지 않는다). 포커스 뺏김 경고는 끼어든 창이 그대로면 남는다.
+        if (_calloutFocus.Check((long)Native.GetForegroundWindow(), focus: 0, hasCaret: false) is { } left) DropWarning(left);
         WatchForFocusSteal();
         _sonarPendingFg = IntPtr.Zero;
         if (!_settings.CaretSonar || !_settings.CaretSonarOnSwitch || _paused || _sessionLocked) return;
@@ -1291,6 +1298,8 @@ sealed class BadgeForm : Form, IExperimentHost
         Log.Write($"focus steal: warned fg='{Native.ClassName(fg)}'");
         ShowCallout("steal", new CalloutContent(CalloutKind.Warning, Strings.Get("steal.title"), Strings.Format("steal.detail", app), Glyphs.Shield),
             anchor, holdMs: StealWarningMs);
+        // 끼어든 창이 앞에 있는 동안만: 활성 창이 다시 바뀌면(Alt+Tab 으로 돌아감 등) 바로 내린다. 그 창의 입력칸·포커스와는 상관없다.
+        _calloutFocus.Pin("steal", (long)fg, focus: 0, needsCaret: false);
     }
 
     static readonly string[] ShellClasses =
@@ -1332,13 +1341,20 @@ sealed class BadgeForm : Form, IExperimentHost
     // ── 실험 기능: 비밀번호 칸 경고 ──
     /// <summary>
     /// 비밀번호 칸에서 한글 입력이거나 Caps Lock 이 켜져 있으면 커서 옆에 경고하고 배지를 한 번 살짝 키운다. 들어올 때와 위험이 바뀔 때만
-    /// 알리고(<see cref="PasswordGuard"/>), 영문으로 바꾸고 Caps Lock 을 끄면 바로 내린다. Caps Lock 은 "Caps Lock 표시" 설정과 상관없이 본다.
+    /// 알리고(<see cref="PasswordGuard"/>), 영문으로 바꾸고 Caps Lock 을 끄면 내린다. 비밀번호 칸을 벗어나면(다른 칸·창, 입력칸 밖) 페이드 없이
+    /// 바로 내린다(<see cref="CalloutFocus"/>). Caps Lock 은 "Caps Lock 표시" 설정과 상관없이 본다.
     /// </summary>
     void WarnPassword(in Snapshot s, Rectangle caret)
     {
         var risk = (s.State == ImeState.Hangul ? PasswordRisk.Hangul : PasswordRisk.None) | (Native.IsCapsLockOn() ? PasswordRisk.CapsLock : PasswordRisk.None);
         if (_passwordGuard.Update(s.Facts.Password, (long)s.Foreground, risk) is not { } todo) return;
-        if (todo == PasswordRisk.None) { _callout?.Hide("password"); return; }
+        if (todo == PasswordRisk.None)
+        {
+            // 같은 페이지의 비밀번호가 아닌 칸으로 옮겼으면(포커스가 떠남) 바로, 칸에 머문 채 위험이 없어졌으면(영문으로 바꿈) 서서히.
+            _callout?.Hide("password", immediate: !s.Facts.Password);
+            if (_calloutFocus.Tag == "password") _calloutFocus.Clear();
+            return;
+        }
         string detail = todo switch
         {
             PasswordRisk.Hangul | PasswordRisk.CapsLock => "password.both",
@@ -1347,7 +1363,16 @@ sealed class BadgeForm : Form, IExperimentHost
         };
         ShowCallout("password", new CalloutContent(CalloutKind.Warning, Strings.Get("password.title"), Strings.Get(detail), Glyphs.Lock),
             caret, PasswordWarningMs);
+        _calloutFocus.Pin("password", (long)s.Foreground, (long)s.Focus, needsCaret: true);
         if (AnimationsOn && _anim == Anim.None) StartAnim(Anim.Pulse);
+    }
+
+    /// <summary>포커스가 자리를 벗어난 경고를 바로 내린다. 비밀번호 칸 경고는 판정도 잊어, 그 칸에 다시 들어오면 새로 알린다.</summary>
+    void DropWarning(string tag)
+    {
+        Log.Write($"callout: {tag} hidden, focus left");
+        _callout?.Hide(tag, immediate: true);
+        if (tag == "password") _passwordGuard.Reset();
     }
 
     // ── 실험 기능: 모든 프로그램에서 한/영 유지 ──
