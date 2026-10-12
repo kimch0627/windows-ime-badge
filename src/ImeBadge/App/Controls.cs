@@ -402,10 +402,21 @@ sealed class AccentButton : ThemedControl, IButtonControl
 }
 
 /// <summary>
+/// 폭에 따라 크기가 바뀌는 카드 몸통(줄바꿈하는 타일 선택기, 그것을 쌓은 묶음). 카드(<see cref="SettingsCard"/>)가 쓸 수 있는 폭을 주고
+/// 크기를 묻는다. AutoSize 의 GetPreferredSize 는 폭을 모르고 한 줄 크기를 돌려주므로 따로 둔다.
+/// </summary>
+interface IWidthAware
+{
+    /// <summary>폭이 <paramref name="maxWidth"/>(물리 픽셀) 이하일 때의 크기.</summary>
+    Size SizeFor(int maxWidth);
+}
+
+/// <summary>
 /// 그림으로 고르는 타일 선택기. 각 타일은 값·이름·그리기 함수를 가지며, 배지 모양이나 위치처럼 "말보다 그림이 빠른" 선택에 쓴다.
 /// 선택된 타일은 강조색 테두리, 마우스를 올리면 살짝 밝아진다. 키보드 좌우로 옮길 수 있다.
+/// 카드 폭이 모자라면(좁은 창·큰 배율) 여러 줄로 놓는다(<see cref="SizeFor"/>). 줄이 여럿이면 위아래 화살표로 줄을 옮긴다.
 /// </summary>
-sealed class TilePicker : ThemedControl
+sealed class TilePicker : ThemedControl, IWidthAware
 {
     public sealed record Tile(object Value, string Label, Action<Graphics, RectangleF, Theme.Palette> Draw);
 
@@ -442,10 +453,26 @@ sealed class TilePicker : ThemedControl
         Invalidate();
     }
 
-    public override Size GetPreferredSize(Size proposed) =>
-        new(_tiles.Count * Px(TileSize.Width) + Math.Max(0, _tiles.Count - 1) * Px(Gap) + Px(4), Px(TileSize.Height) + Px(4));
+    /// <summary>폭 제한이 없을 때(한 줄)의 크기. 카드는 <see cref="SizeFor"/> 로 폭을 주고 다시 묻는다.</summary>
+    public override Size GetPreferredSize(Size proposed) => SizeFor(int.MaxValue / 2);
 
-    RectangleF TileRect(int i) => new(Px(2) + i * (Px(TileSize.Width) + Px(Gap)), Px(2), Px(TileSize.Width), Px(TileSize.Height));
+    public Size SizeFor(int maxWidth)
+    {
+        int cols = ColumnsFor(maxWidth), rows = Math.Max(1, (_tiles.Count + cols - 1) / cols);
+        return new(cols * Px(TileSize.Width) + (cols - 1) * Px(Gap) + Px(4), rows * Px(TileSize.Height) + (rows - 1) * Px(Gap) + Px(4));
+    }
+
+    /// <summary>폭 <paramref name="width"/> 에 한 줄로 들어가는 타일 수(1 이상, 타일 수 이하).</summary>
+    int ColumnsFor(int width) =>
+        _tiles.Count == 0 ? 1 : Math.Clamp((width - Px(4) + Px(Gap)) / (Px(TileSize.Width) + Px(Gap)), 1, _tiles.Count);
+
+    int Columns => ColumnsFor(Width);
+
+    RectangleF TileRect(int i)
+    {
+        int cols = Columns, col = i % cols, row = i / cols;
+        return new(Px(2) + col * (Px(TileSize.Width) + Px(Gap)), Px(2) + row * (Px(TileSize.Height) + Px(Gap)), Px(TileSize.Width), Px(TileSize.Height));
+    }
 
     int HitTest(Point pt)
     {
@@ -467,7 +494,9 @@ sealed class TilePicker : ThemedControl
         if (h >= 0) SelectedValue = _tiles[h].Value;
     }
     protected override bool IsInputKey(Keys keyData) =>
-        (keyData & Keys.KeyCode) is Keys.Left or Keys.Right or Keys.Home or Keys.End || base.IsInputKey(keyData);
+        (keyData & Keys.KeyCode) is Keys.Left or Keys.Right or Keys.Home or Keys.End
+        || ((keyData & Keys.KeyCode) is Keys.Up or Keys.Down && Columns < _tiles.Count)   // 여러 줄일 때만 위아래(한 줄이면 Tab 처럼 지나간다)
+        || base.IsInputKey(keyData);
     protected override void OnKeyDown(KeyEventArgs e)
     {
         if (_tiles.Count == 0) return;
@@ -476,11 +505,14 @@ sealed class TilePicker : ThemedControl
         {
             case Keys.Left: i = Math.Max(0, i - 1); break;
             case Keys.Right: i = Math.Min(_tiles.Count - 1, i + 1); break;
+            case Keys.Up when Columns < _tiles.Count: i = i - Columns >= 0 ? i - Columns : i; break;
+            case Keys.Down when Columns < _tiles.Count: i = i < 0 ? 0 : i + Columns < _tiles.Count ? i + Columns : i; break;
             case Keys.Home: i = 0; break;
             case Keys.End: i = _tiles.Count - 1; break;
             default: base.OnKeyDown(e); return;
         }
         e.Handled = true;
+        if (i < 0) return;
         SelectedValue = _tiles[i].Value;
     }
 

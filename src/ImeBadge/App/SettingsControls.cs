@@ -342,7 +342,9 @@ sealed class SettingsCard : Panel
     Size BodySize(int width)
     {
         if (_body is not { } b) return Size.Empty;
-        var s = Measure(b);
+        // 줄바꿈하는 몸통(타일 선택기)에는 카드 안에서 쓸 수 있는 폭을 알려 준다. 좁은 창에서 마지막 타일이 카드 밖으로 잘리지 않는다.
+        int room = Math.Max(1, (StretchBody || !HasHeader ? width - 2 * Px(PadH) : width - TextLeft - Px(PadH)));
+        var s = b is IWidthAware aware ? aware.SizeFor(room) : Measure(b);
         return StretchBody ? new Size(width - 2 * Px(PadH), s.Height) : s;
     }
 
@@ -528,6 +530,51 @@ sealed class SectionHeader : Label
     }
 }
 
+/// <summary>
+/// 카드 몸통에서 위에서 아래로 쌓는 묶음(배지 모양 카드의 "기본" 캡션 · 타일 · "캐릭터" 캡션 · 타일).
+/// 받은 폭을 줄바꿈하는 자식(<see cref="IWidthAware"/>)에 그대로 넘긴다. 항목 사이 간격은 96 DPI 논리 픽셀.
+/// </summary>
+sealed class VStack : Panel, IWidthAware
+{
+    readonly List<(Control control, int gapAfter)> _items = new();
+
+    public VStack(params (Control control, int gapAfter)[] items)
+    {
+        foreach (var item in items) { _items.Add(item); Controls.Add(item.control); }
+        TabStop = false;
+    }
+
+    float DpiScale => DeviceDpi / 96f;
+    int Px(int logical) => (int)Math.Round(logical * DpiScale);
+
+    static Size ChildSize(Control c, int maxWidth) =>
+        c is IWidthAware aware ? aware.SizeFor(maxWidth) : c.AutoSize ? c.GetPreferredSize(Size.Empty) : c.Size;
+
+    public Size SizeFor(int maxWidth)
+    {
+        int w = 0, h = 0;
+        for (int i = 0; i < _items.Count; i++)
+        {
+            var s = ChildSize(_items[i].control, maxWidth);
+            w = Math.Max(w, s.Width);
+            h += s.Height + (i < _items.Count - 1 ? Px(_items[i].gapAfter) : 0);
+        }
+        return new Size(Math.Min(w, Math.Max(1, maxWidth)), h);
+    }
+
+    protected override void OnLayout(LayoutEventArgs levent)
+    {
+        base.OnLayout(levent);
+        int y = 0;
+        foreach (var (c, gap) in _items)
+        {
+            var s = ChildSize(c, Width);
+            c.SetBounds(0, y, s.Width, s.Height);
+            y += s.Height + Px(gap);
+        }
+    }
+}
+
 /// <summary>카드 사이의 짧은 안내문(보조색). 폭에 맞춰 줄바꿈한다.</summary>
 sealed class NoteLabel : Label
 {
@@ -559,11 +606,22 @@ sealed class CardStack : Panel
     public const int SideMargin = 32, MaxWidth = 1000;
     const int TopMargin = 4, BottomMargin = 32, CardGap = 4, SectionGap = 28, AfterSection = 8, IndentWidth = 40;
     bool _arranging, _darkScrollBars;
+    int _extraTop;
 
     public CardStack()
     {
         AutoScroll = true;
         DoubleBuffered = true;
+    }
+
+    /// <summary>
+    /// 맨 위에 더 비울 여백(96 DPI 논리 픽셀). 위에 고정한 카드(<see cref="PinnedCardHost"/>)의 경계선 바로 밑에
+    /// 첫 항목이 붙어 보이지 않게 모양 페이지가 미리보기를 고정한 동안만 쓴다.
+    /// </summary>
+    public int ExtraTop
+    {
+        get => _extraTop;
+        set { if (_extraTop == value) return; _extraTop = value; PerformLayout(); }
     }
 
     /// <summary>어두운 테마면 스크롤바도 어둡게(기본 스크롤바는 늘 밝은 회색이라 어두운 창에서 튄다). <see cref="Theme"/> 가 정한다.</summary>
@@ -600,7 +658,7 @@ sealed class CardStack : Panel
     void Arrange()
     {
         var (x, width) = Column(Width, DpiScale);
-        int y = Px(TopMargin);
+        int y = Px(TopMargin + _extraTop);
         Control? prev = null;
         foreach (Control c in Controls)
         {
@@ -622,12 +680,16 @@ sealed class CardStack : Panel
     /// <summary>
     /// 카드 열의 왼쪽 위치와 폭(물리 픽셀). 스크롤바 자리는 늘 비워 둔다: 스크롤바가 있는 페이지와 없는 페이지를 오갈 때
     /// 카드 오른쪽 끝이 흔들리지 않는다. 고정한 카드(<see cref="PinnedCardHost"/>)도 이 열에 맞춰 아래 카드들과 줄이 맞는다.
+    /// 폭은 패널 안쪽을 넘지 않는다. 숨겨 둔 페이지는 처음 보일 때 잠깐 기본 크기(200px)로 배치되는데, 그때 카드가 패널 밖으로
+    /// 나가면 가로 스크롤바가 켜진 채 남는다(1.15.1 까지 모양·제외 앱을 뺀 모든 페이지). 최소 폭(240)은 패널이 넉넉할 때만 지킨다.
     /// </summary>
     public static (int x, int width) Column(int panelWidth, float dpiScale)
     {
         int Scaled(int logical) => (int)Math.Round(logical * dpiScale);
         int usable = panelWidth - SystemInformation.VerticalScrollBarWidth;
-        return (Scaled(SideMargin), Math.Max(Scaled(240), Math.Min(usable - 2 * Scaled(SideMargin), Scaled(MaxWidth))));
+        int room = usable - 2 * Scaled(SideMargin);
+        int width = Math.Max(Math.Min(Scaled(240), room), Math.Min(room, Scaled(MaxWidth)));
+        return (Scaled(SideMargin), Math.Max(1, width));
     }
 }
 
@@ -639,7 +701,7 @@ sealed class PinnedCardHost : Panel
 {
     const int TopGap = 4, BottomGap = 8;
 
-    public PinnedCardHost() { DoubleBuffered = true; TabStop = false; }
+    public PinnedCardHost() { DoubleBuffered = true; TabStop = false; SetStyle(ControlStyles.ResizeRedraw, true); }
 
     float DpiScale => DeviceDpi / 96f;
     int Px(int logical) => (int)Math.Round(logical * DpiScale);
@@ -658,6 +720,18 @@ sealed class PinnedCardHost : Panel
         card.SetBounds(x, Px(TopGap), width, h);
         int want = Px(TopGap) + h + Px(BottomGap);
         if (Height != want) Height = want;   // Dock=Top 이라 높이만 정하면 아래 페이지가 그만큼 줄어든다
+    }
+
+    /// <summary>
+    /// 아래 스크롤 영역과의 경계선. 스크롤하면 카드가 이 선 밑으로 들어가며 잘리는데, 선이 없으면 카드가 반쯤 깨진 것처럼 보였다.
+    /// 아래 버튼 줄(<see cref="CommandBar"/>)의 위쪽 선과 같은 색이라 스크롤되는 영역이 위아래 두 선 사이에 놓인다.
+    /// </summary>
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        var color = SystemInformation.HighContrast ? SystemColors.ControlDark : Theme.Current.Border;
+        using var pen = new Pen(color);
+        e.Graphics.DrawLine(pen, 0, Height - 1, Width, Height - 1);
     }
 }
 

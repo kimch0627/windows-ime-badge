@@ -341,13 +341,15 @@ sealed class SettingsForm : Form
 
         page.Controls.Add(Section("section.themeShape"));
         // 테마: 배지 색·질감과 이 창의 색을 한 벌로 바꾼다. 타일에는 그 테마의 한/영 배지를 실제 렌더러로 그린다.
-        _theme = new TilePicker { TileSize = new Size(68, 58) };
+        // 다른 타일보다 크게: 테마마다 다른 질감(젤리 광택·파스텔)이 배지 크기에서 보여야 고를 수 있다.
+        _theme = new TilePicker { TileSize = new Size(84, 64) };
         _theme.SetTiles(DesignThemes.All.Select(d => new TilePicker.Tile(d.Id, Strings.Get("theme." + d.Id), (gr, r, p) => DrawThemeTile(gr, r, d))));
         _theme.SelectedChanged += (_, _) => { if (_theme.SelectedValue is string id && id != _draft.Theme) ChooseTheme(DesignThemes.Get(id)); };
         page.Controls.Add(Card(Glyphs.Theme, "look.theme", body: _theme));
 
         // 배지 모양: 실제 렌더러로 그린 타일에서 고른다. 윗줄은 기본 모양, 아랫줄은 캐릭터. 둘 중 한 줄에서만 선택된다.
-        _style = new TilePicker { TileSize = new Size(68, 58), AccessibleName = Strings.Get("menu.style.basic"), Margin = new Padding(0, 0, 0, 8) };
+        // 두 줄이 왜 나뉘는지 보이도록 줄마다 작은 캡션("기본" / "캐릭터")을 단다.
+        _style = new TilePicker { TileSize = new Size(68, 58), AccessibleName = Strings.Get("menu.style.basic") };
         _style.SetTiles(Labels.Styles.Select(s => new TilePicker.Tile(s.value, ShortStyle(s.value), (gr, r, p) => DrawStyleTile(gr, r, p, s.value))));
         _style.SelectedChanged += (_, _) =>
         {
@@ -358,7 +360,7 @@ sealed class SettingsForm : Form
             SyncPlacementEnabled();
             Touch();
         };
-        _character = new TilePicker { TileSize = new Size(68, 58), AccessibleName = Strings.Get("menu.style.characters"), Margin = Padding.Empty };
+        _character = new TilePicker { TileSize = new Size(68, 58), AccessibleName = Strings.Get("menu.style.characters") };
         _character.SetTiles(Labels.Characters.Select(c => new TilePicker.Tile(c.id, c.label, (gr, r, p) => DrawCharacterTile(gr, r, p, c.id))));
         _character.SelectedChanged += (_, _) =>
         {
@@ -369,7 +371,8 @@ sealed class SettingsForm : Form
             SyncPlacementEnabled();
             Touch();
         };
-        page.Controls.Add(Card(Glyphs.Shape, "look.style", body: Stack(_style, _character)));
+        page.Controls.Add(Card(Glyphs.Shape, "look.style",
+            body: new VStack((Caption("menu.style.basic"), 4), (_style, 12), (Caption("menu.style.characters"), 4), (_character, 0))));
 
         _placement = new TilePicker { TileSize = new Size(68, 58) };
         _placement.SetTiles(Labels.Placements.Select(pl => new TilePicker.Tile(pl.value, ShortPlacement(pl.value), (gr, r, p) => DrawPlacementTile(gr, r, p, pl.value))));
@@ -803,9 +806,14 @@ sealed class SettingsForm : Form
         using (var brush = new SolidBrush(bg))
             g.FillPath(brush, path);
         var theme = BadgeTheme.Of(design);
-        using var ko = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Pill, 0.72f * dpi, theme);
-        using var en = BadgeRenderer.Render(ImeState.English, BadgeStyle.Pill, 0.72f * dpi, theme);
-        float gap = 1 * dpi, total = ko.Width + gap + en.Width;
+        // 질감(광택·파스텔)이 보이도록 칸에 들어가는 가장 큰 배율(실제 배지 100% 까지)로 그린다.
+        float gap = 2 * dpi, scale;
+        using (var ko1 = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Pill, dpi, theme))
+        using (var en1 = BadgeRenderer.Render(ImeState.English, BadgeStyle.Pill, dpi, theme))
+            scale = dpi * Math.Min(1f, Math.Min((r.Width - gap) / (ko1.Width + en1.Width), r.Height / Math.Max(ko1.Height, en1.Height)));
+        using var ko = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Pill, scale, theme);
+        using var en = BadgeRenderer.Render(ImeState.English, BadgeStyle.Pill, scale, theme);
+        float total = ko.Width + gap + en.Width;
         float x = r.Left + (r.Width - total) / 2, y = r.Top + (r.Height - ko.Height) / 2;
         g.DrawImage(ko, new RectangleF(x, y, ko.Width, ko.Height), new Rectangle(Point.Empty, ko.Size), GraphicsUnit.Pixel);
         g.DrawImage(en, new RectangleF(x + ko.Width + gap, y, en.Width, en.Height), new Rectangle(Point.Empty, en.Size), GraphicsUnit.Pixel);
@@ -916,13 +924,11 @@ sealed class SettingsForm : Form
         return panel;
     }
 
-    /// <summary>세로로 쌓기(배지 모양의 기본·캐릭터 두 줄).</summary>
-    static FlowLayoutPanel Stack(params Control[] controls)
+    /// <summary>카드 몸통 안의 작은 캡션(보조 글자색). 배지 모양 카드의 "기본" / "캐릭터" 줄 이름.</summary>
+    Label Caption(string key) => new()
     {
-        var panel = Row(controls);
-        panel.FlowDirection = FlowDirection.TopDown;
-        return panel;
-    }
+        Text = Strings.Get(key), AutoSize = true, Font = _hintFont, ForeColor = SystemColors.GrayText, UseMnemonic = false, Margin = Padding.Empty,
+    };
 
     /// <summary>슬라이더 + 현재 값(왼쪽). 값은 <paramref name="step"/> 단위로 맞춰진다(예: 137% → 135%).</summary>
     static Control Slider(out AccentSlider bar, int min, int max, int step, int page, string unit, Action<int> onChange)
@@ -1057,6 +1063,8 @@ sealed class SettingsForm : Form
     const int PreviewEdge = 4;           // 배지가 칸 위아래 끝에 붙지 않게 남기는 여백
     /// <summary>미리보기를 고정한 뒤에도 아래 카드가 이만큼은 보여야 고정한다. 이보다 낮은 창에서는 미리보기도 함께 스크롤한다.</summary>
     const int MinCardRoom = 240;
+    /// <summary>미리보기를 고정한 동안 아래 페이지 맨 위에 더 비우는 여백(경계선과 첫 소제목 사이).</summary>
+    const int PinnedTopGap = 8;
 
     /// <summary>
     /// 미리보기 줄. 상태가 있는 줄은 글자 끝에 caret 과 그 상태의 배지를 그리고, 나머지는 옅은 색 채움 글이다.
@@ -1111,6 +1119,7 @@ sealed class SettingsForm : Form
             target.Controls.SetChildIndex(_previewCard, 0);   // 함께 스크롤할 때는 카드들 맨 위
             if (focused) _previewToggle.Focus();
         }
+        stack.ExtraTop = pin ? PinnedTopGap : 0;   // 고정한 미리보기의 경계선 바로 밑에 첫 항목이 붙지 않게
         _previewHost.Visible = pin && CurrentPage == SettingsPage.Appearance;
     }
 
@@ -1132,19 +1141,18 @@ sealed class SettingsForm : Form
         float left = PreviewLeftMargin * dpi, pitch = PreviewRowPitch * dpi;
 
         // 1) 줄과 caret 자리. 반쪽의 왼쪽 위, 첫 줄 위를 y=0 으로 잰다(두 반쪽이 같은 자리를 쓴다).
-        //    Caps Lock 표시를 켰으면 영문 줄을 대문자 예시로 바꿔 "A + 밑줄" 배지도 미리 보여 준다(한글 줄은 평소 모습).
-        //    점·밑줄 모양이면 그 아래에 밑줄이 붙은 모습이 된다.
+        //    두 줄 모두 평소 모습(한 / a)이다. 예전에는 Caps Lock 표시가 켜져 있으면 영문 줄을 "HELLO WORLD" + A 로 그려,
+        //    늘 보게 될 a 배지가 미리보기에 없었다. Caps Lock 모습은 구석의 작은 범례로 따로 보여 준다(3).
         var lines = new string[PreviewRows.Length];
         var widths = new float[PreviewRows.Length];
-        var carets = new List<(ImeState state, bool caps, Rectangle caret)>();
+        var carets = new List<(ImeState state, Rectangle caret)>();
         for (int r = 0; r < PreviewRows.Length; r++)
         {
             var (text, state) = PreviewRows[r];
-            bool caps = state == ImeState.English && _draft.ShowCapsLock;
-            lines[r] = caps ? text.ToUpperInvariant() : text;
+            lines[r] = text;
             widths[r] = g.MeasureString(lines[r], font, PointF.Empty, fmt).Width;
             if (state is null) continue;
-            carets.Add((state.Value, caps, new Rectangle((int)Math.Round(left + widths[r] + dpi), (int)Math.Round(r * pitch), 1, lineH)));
+            carets.Add((state.Value, new Rectangle((int)Math.Round(left + widths[r] + dpi), (int)Math.Round(r * pitch), 1, lineH)));
         }
 
         // 2) 배지. 미리보기에서는 화면 가장자리 대피(위에 자리가 없으면 아래로, 왼쪽에 없으면 오른쪽으로)를 하지 않는다.
@@ -1154,11 +1162,14 @@ sealed class SettingsForm : Form
         var style = PreviewStyle;
         var room = new Rectangle(-4096, -4096, 8192, 8192);
         var badges = new List<(Bitmap bmp, Rectangle bounds)>();
+        // 3) Caps Lock 범례: Caps Lock 표시가 켜져 있으면 반쪽마다 비어 있는 구석에 "Caps Lock 켜짐 [A]" 를 작게 둔다.
+        //    줄을 하나 더 두면 칸이 높아져야 해서(200% 배지가 잘림) 줄 대신 범례로 보여 준다. 자리가 없으면(좁은 창·큰 배지) 생략한다.
+        Bitmap? capsBmp = _draft.ShowCapsLock ? BadgeRenderer.Render(ImeState.English, style, scale, theme, _draft.OpacityPercent, capsLock: true) : null;
         try
         {
-            foreach (var (state, caps, caret) in carets)
+            foreach (var (state, caret) in carets)
             {
-                var bmp = BadgeRenderer.Render(state, style, scale, theme, _draft.OpacityPercent, caps);
+                var bmp = BadgeRenderer.Render(state, style, scale, theme, _draft.OpacityPercent);
                 var pos = BadgeLayout.Compute(new LayoutInput(caret, bmp.Size, style, _draft.Placement, scale, room));
                 badges.Add((bmp, new Rectangle(pos, bmp.Size)));
             }
@@ -1195,7 +1206,7 @@ sealed class SettingsForm : Form
                     g.DrawString(lines[r], font, PreviewRows[r].state is null ? fillerBrush : textBrush, area.Left + left, y, fmt);
                     taken.Add(new Rectangle((int)(area.Left + left), (int)y, (int)Math.Ceiling(widths[r] + 3 * dpi), lineH));
                 }
-                foreach (var (_, _, caret) in carets)
+                foreach (var (_, caret) in carets)
                     if (Shown(top + caret.Top))
                         g.DrawLine(caretPen, area.Left + caret.Left, top + caret.Top, area.Left + caret.Left, top + caret.Bottom);
                 // 픽셀 크기를 명시한다. Point 만 주는 오버로드는 비트맵의 DPI(96)와 화면 DPI 차이만큼 확대해 버린다.
@@ -1216,7 +1227,27 @@ sealed class SettingsForm : Form
                     var clearance = Rectangle.Inflate(spot, (int)(10 * dpi), (int)(2 * dpi));   // 배지 바로 옆이면 "한 밝은 배경" 처럼 붙어 읽힌다
                     if (taken.Any(clearance.IntersectsWith)) continue;
                     TextRenderer.DrawText(g, title, capFont, spot, caption, capFlags);
+                    taken.Add(spot);
                     break;
+                }
+
+                // Caps Lock 범례: 오른쪽 아래, 막히면 오른쪽 위(캡션이 아래로 갔을 때). 글자 왼쪽 끝이 본문 글 자리를 넘보면 생략한다.
+                if (capsBmp is not null)
+                {
+                    string legend = Strings.Get("preview.caps");
+                    var ls = TextRenderer.MeasureText(g, legend, capFont, Size.Empty, capFlags);
+                    int gap = (int)Math.Round(6 * dpi), w = ls.Width + gap + capsBmp.Width, h = Math.Max(ls.Height, capsBmp.Height);
+                    int x = area.Right - (int)(10 * dpi) - w;
+                    foreach (int y in new[] { area.Bottom - margin - h, area.Top + margin })
+                    {
+                        var spot = new Rectangle(x, y, w, h);
+                        if (spot.Left < area.Left + (int)left || taken.Any(Rectangle.Inflate(spot, (int)(10 * dpi), (int)(2 * dpi)).IntersectsWith)) continue;
+                        TextRenderer.DrawText(g, legend, capFont, new Rectangle(x, y + (h - ls.Height) / 2, ls.Width, ls.Height), caption, capFlags);
+                        g.DrawImage(capsBmp, new Rectangle(x + ls.Width + gap, y + (h - capsBmp.Height) / 2, capsBmp.Width, capsBmp.Height),
+                            new Rectangle(Point.Empty, capsBmp.Size), GraphicsUnit.Pixel);
+                        taken.Add(spot);
+                        break;
+                    }
                 }
                 g.Restore(state);
             }
@@ -1224,6 +1255,7 @@ sealed class SettingsForm : Form
         finally
         {
             foreach (var (bmp, _) in badges) bmp.Dispose();
+            capsBmp?.Dispose();
         }
     }
 
