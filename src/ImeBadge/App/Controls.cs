@@ -97,6 +97,19 @@ abstract class ThemedControl : Control
     }
 
     protected static Color Alpha(Color c, int alpha) => Color.FromArgb(alpha, c);
+
+    /// <summary>
+    /// 글자색. 꺼져 있으면 바탕색 쪽으로 섞어 흐리게 한다. TextRenderer(GDI)는 색의 알파를 무시해서, Alpha(색, 90) 으로 그린 글자가
+    /// 켜진 것과 똑같이 또렷했다(꺼진 [되돌리기]·토글 상태 글자·고르기 상자).
+    /// </summary>
+    protected Color TextColor(Color c)
+    {
+        if (Enabled) return c;
+        var bg = BackColor;
+        const float keep = 0.4f;   // 글자색을 40% 만 남긴다(나머지는 바탕색)
+        int Ch(int text, int back) => (int)Math.Round(back + (text - back) * keep);
+        return Color.FromArgb(Ch(c.R, bg.R), Ch(c.G, bg.G), Ch(c.B, bg.B));
+    }
     protected static float Ease(float t) => 1f - (1f - t) * (1f - t);
 }
 
@@ -211,12 +224,12 @@ sealed class ToggleSwitch : ThemedControl
         if (state)
         {
             var stateRect = new Rectangle(0, 0, Math.Max(0, (int)track.Left - Px(StateGap)), Height);
-            TextRenderer.DrawText(g, _checked ? OnText : OffText, Font, stateRect, Alpha(p.Text, alpha), TextFlags(TextFormatFlags.Right | TextFormatFlags.NoPrefix));
+            TextRenderer.DrawText(g, _checked ? OnText : OffText, Font, stateRect, TextColor(p.Text), TextFlags(TextFormatFlags.Right | TextFormatFlags.NoPrefix));
         }
         else
         {
             var textRect = new Rectangle((int)track.Right + Px(Gap), 0, Width - (int)track.Right - Px(Gap), Height);
-            TextRenderer.DrawText(g, CueText(Text), Font, textRect, Alpha(p.Text, alpha), TextFlags(TextFormatFlags.Left));
+            TextRenderer.DrawText(g, CueText(Text), Font, textRect, TextColor(p.Text), TextFlags(TextFormatFlags.Left));
         }
         DrawFocusRing(g, track, track.Height / 2f);
     }
@@ -396,7 +409,7 @@ sealed class AccentButton : ThemedControl, IButtonControl
             using (var bottom = new Pen(Alpha(p.Dark ? Color.Black : Color.Black, p.Dark ? 60 : 24), Px(1)))
                 g.DrawLine(bottom, r.Left + Px(4), r.Bottom, r.Right - Px(4), r.Bottom);
 
-        TextRenderer.DrawText(g, CueText(Text), Font, new Rectangle(0, 0, Width, Height), Alpha(text, alpha), TextFlags(TextFormatFlags.HorizontalCenter));
+        TextRenderer.DrawText(g, CueText(Text), Font, new Rectangle(0, 0, Width, Height), TextColor(text), TextFlags(TextFormatFlags.HorizontalCenter));
         DrawFocusRing(g, r, Px(Palette.Radius / 2));
     }
 }

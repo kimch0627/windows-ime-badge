@@ -21,7 +21,8 @@ interface IExperimentHost
 /// <summary>
 /// 설정 창. Windows 11 설정 앱처럼 왼쪽 탐색 목록에서 페이지를 고르고, 페이지마다 아이콘·제목·설명이 붙은 카드로 항목을 보여 준다.
 /// 바꾸는 즉시 실제 배지에 반영되어(WYSIWYG) 창 밖 배지로 결과를 바로 볼 수 있고,
-/// [확인]을 누르면 저장, [취소]나 닫기를 누르면 창을 열 때의 설정으로 되돌린다.
+/// 저장도 바로 한다(Windows 11 설정 앱과 같다. 슬라이더를 끄는 동안처럼 몰린 변경은 <see cref="SaveDelayMs"/> 뒤 한 번).
+/// 닫기·X·Esc 는 그대로 닫고, [되돌리기]를 누르면 창을 열었을 때의 설정으로 돌아간다. 1.15 까지는 X 로 닫으면 조용히 되돌아갔다(UX-02).
 /// 편집은 복사본(<see cref="_draft"/>)에 하고 매번 실제 설정(<see cref="_live"/>)으로 복사한다.
 /// 미리보기는 실제 렌더러(<see cref="BadgeRenderer"/>)로 그려 창 밖 배지와 똑같이 보인다.
 /// 뼈대 컨트롤(탐색 목록·카드·페이지)은 SettingsControls.cs 에 있다.
@@ -30,12 +31,16 @@ sealed class SettingsForm : Form
 {
     readonly Settings _live;
     readonly Settings _draft;
-    readonly Settings _original;   // 취소할 때 되돌릴 값
+    readonly Settings _original;   // [되돌리기]가 돌아갈 값(창을 열었을 때)
     readonly AppPaths _paths;
     readonly Action _checkUpdates;
     readonly IExperimentHost _experiments;
     readonly bool _builtKorean = Strings.IsKorean;   // 이 창을 만들 때의 언어. 바뀌면 새 창으로 갈아 끼운다
-    bool _autostart, _dirty, _loading, _detached;
+    bool _autostart, _originalAutostart, _dirty, _loading, _detached;
+    AccentButton _revert = null!;
+    /// <summary>값이 바뀐 뒤 저장할 때까지 기다리는 시간. 슬라이더를 끄는 동안 파일을 수십 번 쓰지 않게 마지막 변경 뒤 한 번 저장한다.</summary>
+    const int SaveDelayMs = 400;
+    readonly System.Windows.Forms.Timer _saveTimer = new() { Interval = SaveDelayMs };
 
     TilePicker _theme = null!, _style = null!, _character = null!, _placement = null!;
     AccentSlider _size = null!, _opacity = null!, _poll = null!;
@@ -91,9 +96,9 @@ sealed class SettingsForm : Form
     static readonly Size DefaultClient = new(1040, 760), MinClient = new(800, 540);
     const int NavWidth = 264, CommandHeight = 64;
 
-    /// <summary>편집 중 값이 바뀔 때마다 발생. 실제 설정에는 이미 복사되어 있으니 다시 그리기만 하면 된다(저장은 하지 않는다).</summary>
+    /// <summary>편집 중 값이 바뀔 때마다 발생. 실제 설정에는 이미 복사되어 있으니 다시 그리기만 하면 된다(저장은 <see cref="Applied"/>).</summary>
     public event Action? Changed;
-    /// <summary>[확인]으로 확정되었거나 [취소]로 되돌려졌을 때 발생. 저장한다.</summary>
+    /// <summary>저장할 때 발생: 마지막 변경 뒤 <see cref="SaveDelayMs"/>, 또는 창을 닫을 때 저장하지 않은 변경이 남아 있으면.</summary>
     public event Action? Applied;
     /// <summary>UI 언어가 이 창을 만들 때와 달라졌다. 받는 쪽(BadgeForm)이 <see cref="Reopen"/> 으로 새 창을 만들고 이 창을 <see cref="Detach"/> 한다.</summary>
     public event Action? LanguageChanged;
@@ -103,7 +108,7 @@ sealed class SettingsForm : Form
     public SettingsForm(Settings live, AppPaths paths, Action checkUpdates, IExperimentHost experiments, SettingsPage page = SettingsPage.Appearance)
         : this(live, live.Clone(), dirty: false, paths, checkUpdates, experiments, page) { }
 
-    /// <param name="original">취소할 때 되돌릴 값. 새 창이 이전 창의 기준을 이어받을 때 넘긴다.</param>
+    /// <param name="original">[되돌리기]가 돌아갈 값. 새 창이 이전 창의 기준을 이어받을 때 넘긴다.</param>
     /// <param name="dirty">이미 편집이 있었는가(이어받은 창은 true).</param>
     SettingsForm(Settings live, Settings original, bool dirty, AppPaths paths, Action checkUpdates, IExperimentHost experiments, SettingsPage page)
     {
@@ -114,6 +119,7 @@ sealed class SettingsForm : Form
         _checkUpdates = checkUpdates;
         _experiments = experiments;
         _autostart = Autostart.IsEnabled();
+        _originalAutostart = _autostart;
 
         Text = Strings.Format("settings.title", AppInfo.ProductName);
         Icon = Icons.App;
@@ -130,10 +136,12 @@ sealed class SettingsForm : Form
 
         _flashTimer.Tick += (_, _) => { _flashTimer.Stop(); _flashing = false; _preview.Invalidate(); };
         _copiedTimer.Tick += (_, _) => { _copiedTimer.Stop(); if (!_diagCard.IsDisposed) _diagCard.Description = Strings.Get("about.copyDiag.desc"); };
+        _saveTimer.Tick += (_, _) => { _saveTimer.Stop(); Applied?.Invoke(); };
 
         Build(page);
         LoadDraftIntoControls();
         _dirty = dirty;   // 컨트롤 초기화로 생긴 변경 알림은 실제 변경이 아니다
+        if (!dirty) _saveTimer.Stop();   // 연 그대로면 저장할 것이 없다
         UpdateHint();
         _painted = Theme.Design = DesignThemes.Get(_draft.Theme);
         Theme.Apply(this);
@@ -150,11 +158,15 @@ sealed class SettingsForm : Form
         Invalidate(true);
     }
 
-    /// <summary>같은 편집 상태(기준값·자동 시작 체크)를 이어받는 새 창을 현재 언어로 만든다. 위치·크기·페이지·스크롤도 그대로.</summary>
+    /// <summary>같은 편집 상태(되돌리기 기준값·자동 시작)를 이어받는 새 창을 현재 언어로 만든다. 위치·크기·페이지·스크롤도 그대로.</summary>
     public SettingsForm Reopen()
     {
-        var next = new SettingsForm(_live, _original, dirty: true, _paths, _checkUpdates, _experiments, CurrentPage) { _autostart = _autostart };
+        var next = new SettingsForm(_live, _original, _dirty, _paths, _checkUpdates, _experiments, CurrentPage)
+        {
+            _autostart = _autostart, _originalAutostart = _originalAutostart,
+        };
         next._autostartBox.Checked = _autostart;
+        next.UpdateHint();
         if (IsHandleCreated)
         {
             next._restoreBounds = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
@@ -165,8 +177,20 @@ sealed class SettingsForm : Form
         return next;
     }
 
-    /// <summary>닫을 때 되돌리기·저장 알림을 하지 않게 한다(새 창에 편집을 넘긴 뒤).</summary>
+    /// <summary>새 창에 편집을 넘겼다는 표시(언어를 바꿔 갈아 끼울 때). 닫을 때 남은 저장만 마친다.</summary>
     public void Detach() => _detached = true;
+
+    /// <summary>
+    /// 트레이 메뉴에서 바꾼 값(실제 설정)을 열려 있는 이 창에도 보여 준다. [되돌리기] 기준(창을 열었을 때)은 그대로라
+    /// 트레이에서 바꾼 것도 되돌리기 대상이다. 이렇게 하지 않으면 창에서 다음 값을 바꿀 때 트레이에서 바꾼 값을 옛 값으로 덮어썼다.
+    /// </summary>
+    public void SyncFromLive()
+    {
+        if (IsDisposed || _detached) return;
+        _draft.CopyFrom(_live);
+        _autostart = Autostart.IsEnabled();
+        LoadDraftIntoControls();
+    }
 
     public SettingsPage CurrentPage => (SettingsPage)Math.Max(0, _nav.SelectedIndex);
     CardStack CurrentStack => _pages[(int)CurrentPage];
@@ -270,13 +294,15 @@ sealed class SettingsForm : Form
             Dock = DockStyle.Left, Width = NavWidth, TabIndex = 0,
         };
 
-        var ok = new AccentButton { Text = Strings.Get("settings.ok"), Primary = true, AutoSize = true };
-        var cancel = new AccentButton { Text = Strings.Get("settings.cancel"), DialogResult = DialogResult.Cancel, AutoSize = true };
-        // 모드리스(Show) 창은 DialogResult 만으로는 닫히지 않는다. 명시적으로 닫는다.
-        ok.Click += (_, _) => { Apply(); DialogResult = DialogResult.OK; Close(); };
-        cancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
-        AcceptButton = ok; CancelButton = cancel;
-        _commands = new CommandBar(Strings.Get("settings.hint.clean"), cancel, ok) { Dock = DockStyle.Bottom, Height = CommandHeight, TabIndex = 2 };
+        // 저장은 바꿀 때마다 하므로 [확인]/[취소] 대신 [닫기]와 [되돌리기]. 닫기·X·Esc 는 모두 그대로 닫는다(되돌리지 않는다).
+        // Enter 로 창을 닫지 않는다(AcceptButton 없음): 입력칸·타일에서 Enter 를 누르다 창이 닫히지 않게.
+        var close = new AccentButton { Text = Strings.Get("settings.close"), Primary = true, AutoSize = true };
+        close.Click += (_, _) => Close();
+        _revert = new AccentButton { Text = Strings.Get("settings.revert"), AutoSize = true, Enabled = false };
+        _revert.Click += (_, _) => Revert();
+        _tips.SetToolTip(_revert, Strings.Get("settings.revert.tip"));
+        CancelButton = close;
+        _commands = new CommandBar(Strings.Get("settings.hint.clean"), close, _revert) { Dock = DockStyle.Bottom, Height = CommandHeight, TabIndex = 2 };
 
         _pages[(int)SettingsPage.Appearance] = BuildAppearancePage();
         _pages[(int)SettingsPage.Display] = BuildDisplayPage();
@@ -437,8 +463,8 @@ sealed class SettingsForm : Form
         var page = new CardStack();
 
         page.Controls.Add(Section("section.startup"));
-        // 자동 시작은 레지스트리를 만지므로 [확인] 때만 반영한다.
-        _autostartBox = Toggle(v => { _autostart = v; if (!_loading) { _dirty = true; UpdateHint(); } });
+        // 자동 시작도 바로 반영한다(레지스트리). 실패하면 토글을 되돌리고 알린다.
+        _autostartBox = Toggle(SetAutostart);
         page.Controls.Add(Card(Glyphs.Power, "behavior.autostart", action: _autostartBox));
 
         // 단축키: 키 조합을 받는 입력칸 + 켜기/끄기.
@@ -950,7 +976,41 @@ sealed class SettingsForm : Form
         return Row(s, h);
     }
 
-    void UpdateHint() => _commands.Hint = Strings.Get(_dirty ? "settings.hint.dirty" : "settings.hint.clean");
+    void UpdateHint()
+    {
+        _commands.Hint = Strings.Get(_dirty ? "settings.hint.dirty" : "settings.hint.clean");
+        _revert.Enabled = _dirty;
+    }
+
+    /// <summary>자동 시작 토글. 컨트롤을 채우는 중(값을 싣는 중)이면 기억만 하고, 사용자가 바꿨으면 바로 레지스트리에 반영한다.</summary>
+    void SetAutostart(bool on)
+    {
+        if (_loading || on == _autostart) { _autostart = on; return; }
+        if (!Autostart.Set(on))
+        {
+            Dialogs.Warning(Strings.Get("autostart.failed"), Strings.Get("autostart.failed.text"));
+            BeginInvoke(() => { if (IsDisposed) return; _loading = true; try { _autostartBox.Checked = _autostart; } finally { _loading = false; } });
+            return;
+        }
+        _autostart = on;
+        _dirty = true;
+        UpdateHint();
+    }
+
+    /// <summary>[되돌리기]: 창을 열었을 때의 설정(자동 시작 포함)으로 돌아가고 저장한다. 언어도 돌아가면 새 창으로 갈아 끼운다(<see cref="Touch"/>).</summary>
+    void Revert()
+    {
+        _draft.CopyFrom(_original);
+        if (_autostart != _originalAutostart)
+        {
+            if (Autostart.Set(_originalAutostart)) _autostart = _originalAutostart;
+            else Dialogs.Warning(Strings.Get("autostart.failed"), Strings.Get("autostart.failed.text"));
+        }
+        LoadDraftIntoControls();   // Touch 가 저장을 예약한다
+        _dirty = false;
+        UpdateHint();
+        _nav.Focus();   // 눌린 [되돌리기]가 꺼지므로 포커스를 탐색 목록으로
+    }
 
     /// <summary>
     /// 편집 값을 실제 설정에 넣는다. 업데이트 확인 기록(마지막 확인 시각·건너뛴 버전)은 이 창이 편집하는 값이 아니므로 실제 설정의 것을 지킨다:
@@ -1033,6 +1093,8 @@ sealed class SettingsForm : Form
         Store(_draft);
         _dirty = true;
         UpdateHint();
+        _saveTimer.Stop();   // 마지막 변경 뒤 SaveDelayMs 에 한 번 저장
+        _saveTimer.Start();
         Changed?.Invoke();   // BadgeForm 이 여기서 Strings.Setting 을 새 언어로 맞춘다
         var design = DesignThemes.Get(_draft.Theme);
         if (!ReferenceEquals(design, _painted)) { _painted = Theme.Design = design; Recolor(); }
@@ -1292,22 +1354,12 @@ sealed class SettingsForm : Form
         return path;
     }
 
-    /// <summary>[확인]: 자동 시작을 반영하고 저장을 알린다. 배지 설정은 이미 실제 설정에 들어가 있다.</summary>
-    void Apply()
-    {
-        Store(_draft);
-        if (_autostart != Autostart.IsEnabled()) Autostart.Set(_autostart);
-        _dirty = false;
-        Applied?.Invoke();
-    }
-
-    /// <summary>[취소]·닫기: 창을 열 때의 설정으로 되돌리고 저장을 알린다(그 사이 트레이 메뉴가 저장했을 수 있다).</summary>
+    /// <summary>닫기·X·Esc·Alt+F4: 되돌리지 않는다. 기다리던 저장이 있으면 지금 한다(새 창으로 갈아 끼울 때도: 저장 내용은 실제 설정 그대로다).</summary>
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         base.OnFormClosing(e);
-        if (e.Cancel || _detached || DialogResult == DialogResult.OK || !_dirty) return;
-        Store(_original);
-        _dirty = false;
+        if (e.Cancel || !_saveTimer.Enabled) return;
+        _saveTimer.Stop();
         Applied?.Invoke();
     }
 
@@ -1315,7 +1367,7 @@ sealed class SettingsForm : Form
     {
         if (disposing)
         {
-            _flashTimer.Dispose(); _copiedTimer.Dispose(); _tips.Dispose(); _sectionFont.Dispose(); _hintFont.Dispose(); _appsMenu?.Dispose();
+            _flashTimer.Dispose(); _copiedTimer.Dispose(); _saveTimer.Dispose(); _tips.Dispose(); _sectionFont.Dispose(); _hintFont.Dispose(); _appsMenu?.Dispose();
             _preview?.Dispose();   // 접혀 있으면 카드에서 빠져 있어 창과 함께 정리되지 않는다
         }
         base.Dispose(disposing);

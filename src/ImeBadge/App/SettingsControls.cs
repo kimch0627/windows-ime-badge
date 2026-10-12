@@ -1027,7 +1027,7 @@ sealed class ThemedComboBox : ThemedControl
                 g.DrawLine(bottom, r.Left + Px(4), r.Bottom, r.Right - Px(4), r.Bottom);
 
         int chevron = Px(32);
-        TextRenderer.DrawText(g, SelectedText, Font, new Rectangle(Px(11), 0, Math.Max(0, Width - Px(11) - chevron), Height), Alpha(p.Text, alpha),
+        TextRenderer.DrawText(g, SelectedText, Font, new Rectangle(Px(11), 0, Math.Max(0, Width - Px(11) - chevron), Height), TextColor(p.Text),
             TextFlags(TextFormatFlags.Left | TextFormatFlags.NoPrefix));
         var box = new Rectangle(Width - chevron, 0, chevron - Px(4), Height);
         using var icon = Theme.IconFont(Px(10));

@@ -312,6 +312,7 @@ sealed class BadgeForm : Form, IExperimentHost
             bool on = !Autostart.IsEnabled();
             if (!Autostart.Set(on))
                 Dialogs.Warning(Strings.Get("autostart.failed"), Strings.Get("autostart.failed.text"));
+            _settingsForm?.SyncFromLive();
         });
         menu.Items.Add(_autostartItem);
         var update = new ToolStripMenuItem(Strings.Get("menu.checkUpdates"), null, (_, _) => CheckForUpdates(manual: true));
@@ -580,7 +581,7 @@ sealed class BadgeForm : Form, IExperimentHost
     ToolStripMenuItem AddRadio(ToolStripMenuItem parent, string text, Func<bool> isOn, Action apply)
     {
         var item = new ToolStripMenuItem(text) { Tag = isOn };
-        item.Click += (_, _) => { apply(); OnSettingsChanged(); };
+        item.Click += (_, _) => { apply(); OnSettingsChanged(); _settingsForm?.SyncFromLive(); };   // 열린 설정 창에도 보여 준다
         parent.DropDownItems.Add(item);
         return item;
     }
@@ -607,6 +608,11 @@ sealed class BadgeForm : Form, IExperimentHost
 
     // 마지막으로 반영한 단축키·트레이·언어 설정. 설정 창에서 슬라이더를 끌 때마다 불리므로, 실제로 바뀐 것만 다시 적용한다.
     (bool enabled, string hotkey, bool sonar, string sonarHotkey) _appliedHotkey;
+    /// <summary>
+    /// 등록 실패를 사용자에게 알린(또는 알릴 기회가 있었던) 단축키 설정. 설정 창은 바꿀 때마다 저장하므로, 같은 조합이 다른 프로그램과
+    /// 겹쳐 있으면 저장할 때마다 경고가 뜨지 않게 조합이 바뀌었을 때 한 번만 알린다. 처음(null)에는 첫 저장 때 한 번 알린다(1.15 까지 [확인] 때와 같음).
+    /// </summary>
+    (bool enabled, string hotkey, bool sonar, string sonarHotkey)? _confirmedHotkey;
     (string hangul, string english, bool showState, string theme) _appliedTray;
     bool _appliedKorean = Strings.IsKorean;
     DesignTheme _appliedDesign = DesignThemes.Classic;   // 생성자에서 실제 값으로 맞춘다
@@ -632,7 +638,8 @@ sealed class BadgeForm : Form, IExperimentHost
         if (Strings.IsKorean != _appliedKorean) { _appliedKorean = Strings.IsKorean; ApplyLanguage(); }
 
         var hk = (_settings.HotkeyEnabled, _settings.Hotkey, _settings.CaretSonar, _settings.CaretSonarHotkey);
-        if (hk != _appliedHotkey || save) { _appliedHotkey = hk; ApplyHotkey(warnOnFailure: save); }
+        if (hk != _appliedHotkey) { _appliedHotkey = hk; ApplyHotkey(warnOnFailure: false); }   // 편집 중: 조용히 다시 등록
+        if (save && hk != _confirmedHotkey) { _confirmedHotkey = hk; ApplyHotkey(warnOnFailure: true); }   // 저장할 때: 실패하면 한 번 알림
         if (!_settings.CaretSonar) _sonarPendingFg = IntPtr.Zero;
         if (!_settings.FocusStealWarning) { _stealGuard.Disarm(); _callout?.Hide("steal"); }
         if (!_settings.PasswordWarning) { _passwordGuard.Reset(); _callout?.Hide("password"); }
@@ -684,8 +691,8 @@ sealed class BadgeForm : Form, IExperimentHost
     void ShowSettings(SettingsForm form)
     {
         _settingsForm = form;
-        form.Changed += () => OnSettingsChanged(save: false);   // 편집 중: 배지에 바로 반영, 저장은 아직
-        form.Applied += () => OnSettingsChanged();               // 확인·취소: 저장
+        form.Changed += () => OnSettingsChanged(save: false);   // 바뀔 때마다: 배지에 바로 반영
+        form.Applied += () => OnSettingsChanged();               // 변경이 멎은 뒤·닫을 때: 저장
         form.FormClosed += (_, _) => { if (ReferenceEquals(_settingsForm, form)) _settingsForm = null; form.Dispose(); };
         // 언어를 바꾸면 창의 모든 문구를 새로 그려야 한다. 같은 편집 상태를 이어받는 새 창으로 갈아 끼운다(이벤트 처리가 끝난 뒤).
         form.LanguageChanged += () => BeginInvoke(() =>
