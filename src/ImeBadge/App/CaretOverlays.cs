@@ -11,6 +11,7 @@ namespace ImeBadge;
 sealed class OverlayWindow : Form
 {
     bool _allowShow;
+    readonly TopmostRaiser _raiser;
 
     public OverlayWindow(string name)
     {
@@ -21,6 +22,7 @@ sealed class OverlayWindow : Form
         AutoScaleMode = AutoScaleMode.None;
         Size = new Size(1, 1);
         Text = name;
+        _raiser = new TopmostRaiser(() => Handle, name);
     }
 
     protected override CreateParams CreateParams
@@ -36,7 +38,10 @@ sealed class OverlayWindow : Form
     protected override void SetVisibleCore(bool value) => base.SetVisibleCore(_allowShow && value);
     protected override void OnPaintBackground(PaintEventArgs e) { }
 
-    /// <summary>그림을 화면의 <paramref name="pos"/> 에 창 전체 알파 <paramref name="alpha"/> 로 올린다. 처음 보일 때 최상위 창들 중 맨 위로.</summary>
+    /// <summary>
+    /// 그림을 화면의 <paramref name="pos"/> 에 창 전체 알파 <paramref name="alpha"/> 로 올린다. 처음 보일 때 최상위 창들 중 맨 위로, 그 뒤에도
+    /// 활성 창이 최상위라 위에 올라와 있으면 그 위로(VW-05, 배지와 같은 <see cref="TopmostRaiser"/>).
+    /// </summary>
     public void Present(Bitmap bmp, Point pos, byte alpha)
     {
         bool appearing = !Visible;
@@ -63,8 +68,8 @@ sealed class OverlayWindow : Form
             Native.DeleteDC(memDc);
             Native.ReleaseDC(IntPtr.Zero, screenDc);
         }
-        if (appearing)
-            Native.SetWindowPos(Handle, Native.HWND_TOPMOST, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+        if (appearing) _raiser.RaiseToTop();
+        _raiser.KeepAboveForeground();
     }
 
     public void Conceal()

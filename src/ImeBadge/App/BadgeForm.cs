@@ -72,7 +72,7 @@ sealed class BadgeForm : Form, IExperimentHost
     bool _sonarHotkeyRegistered;
     long _hiddenSince = Environment.TickCount64;
     int _pollErrors;
-    IntPtr _raiseFailFg; int _raiseFailCount;
+    readonly TopmostRaiser _raiser;
     UpdateInfo? _pendingUpdate;
     CancellationTokenSource? _updateCts;
     SettingsForm? _settingsForm;
@@ -104,6 +104,7 @@ sealed class BadgeForm : Form, IExperimentHost
 
     public BadgeForm(Settings settings, SettingsStore store, AppPaths paths, bool firstRun)
     {
+        _raiser = new TopmostRaiser(() => Handle, "badge");
         _settings = settings;
         _store = store;
         _paths = paths;
@@ -1374,40 +1375,10 @@ sealed class BadgeForm : Form, IExperimentHost
     }
 
     /// <summary>위치·크기는 그대로 두고 z-order만 최상위 창들 중 맨 위로 올린다. 포커스는 건드리지 않는다.</summary>
-    void RaiseToTop() =>
-        Native.SetWindowPos(Handle, Native.HWND_TOPMOST, 0, 0, 0, 0,
-                            Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+    void RaiseToTop() => _raiser.RaiseToTop();
 
-    /// <summary>
-    /// 활성 창 <paramref name="fg"/>보다 위로 올린다. 보통의 SetWindowPos로 안 되면(Windows는 마지막 입력을 받지 않은
-    /// 프로세스가 활성 창 위로 창을 올리는 것을 막는다) 활성 창 스레드의 입력 큐에 잠깐 붙어 그 권한을 빌린 뒤 바로 떼어 낸다.
-    /// 안전장치: 응답 없는 창에는 붙지 않고(같이 멈출 수 있음), 같은 창에 세 번 실패하면 그 창에 대해서는 포기한다.
-    /// 마우스 버튼이 눌려 있으면(드래그 중) 붙지 않는다. 입력 큐를 붙였다 떼면 그 스레드의 마우스 캡처가 풀려 드래그가 끊긴다.
-    /// </summary>
-    void RaiseAbove(IntPtr fg)
-    {
-        RaiseToTop();
-        if (!Native.IsAbove(fg, Handle)) return;
-        if (Native.IsMouseButtonDown()) { Log.WriteIfChanged($"raise: skip attach while mouse button down fg='{Native.ClassName(fg)}'"); return; }
-        if (_raiseFailFg == fg && _raiseFailCount >= 3) return;
-        if (Native.IsHungAppWindow(fg)) { Log.WriteIfChanged($"raise: skip hung fg='{Native.ClassName(fg)}'"); return; }
-
-        uint fgTid = Native.GetWindowThreadProcessId(fg, out _), me = Native.GetCurrentThreadId();
-        if (fgTid == 0 || fgTid == me) return;
-        if (!Native.AttachThreadInput(me, fgTid, true)) { NoteRaiseFailure(fg); Log.WriteIfChanged($"raise: AttachThreadInput failed fg='{Native.ClassName(fg)}'"); return; }
-        try { RaiseToTop(); }
-        finally { Native.AttachThreadInput(me, fgTid, false); }
-
-        bool ok = !Native.IsAbove(fg, Handle);
-        if (ok) { _raiseFailFg = IntPtr.Zero; _raiseFailCount = 0; } else NoteRaiseFailure(fg);
-        Log.WriteIfChanged($"raise: via AttachThreadInput fg='{Native.ClassName(fg)}' ok={ok}");
-    }
-
-    void NoteRaiseFailure(IntPtr fg)
-    {
-        if (_raiseFailFg == fg) _raiseFailCount++;
-        else { _raiseFailFg = fg; _raiseFailCount = 1; }
-    }
+    /// <summary>활성 창 <paramref name="fg"/>보다 위로 올린다(<see cref="TopmostRaiser.RaiseAbove"/>: 안 되면 입력 큐를 잠깐 빌림, 안전장치 포함).</summary>
+    void RaiseAbove(IntPtr fg) => _raiser.RaiseAbove(fg);
 
     /// <summary>비트맵을 픽셀별 알파로 창에 올리면서 위치·크기도 함께 지정한다. <paramref name="alpha"/> 는 창 전체 알파(페이드인 × 표시 방식).</summary>
     void Present(Bitmap bmp, Point pos, byte alpha)

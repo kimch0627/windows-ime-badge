@@ -200,6 +200,7 @@ src/ImeBadge/           Windows 앱
   App/TrayIcons.cs      상태별 트레이 아이콘("한"/"A"/일시 중지)을 GDI+ 로 그려 캐시
   App/Dialogs.cs        대화상자: 테마를 입힌 ThemedDialog → (고대비·실패 시) TaskDialog → MessageBox
 App/ThemedDialog.cs   설정 창 테마를 입힌 대화상자(아이콘·제목·본문·명령 링크·자세히 펼침)
+App/TopmostRaiser.cs  배지·말풍선·소나 창을 최상위 활성 창 위로 올리기(안 되면 입력 큐를 잠깐 빌림, 안전장치 포함)
   App/Labels.cs         트레이 메뉴·설정 창이 함께 쓰는 문구·프리셋
   App/Theme.cs          밝게/어둡게 테마 감지·적용(디자인 토큰), 아이콘 글꼴, 평면 메뉴 렌더러, 메뉴 글리프 아이콘
   App/Controls.cs       직접 그리는 컨트롤: 토글 스위치, 강조색 슬라이더, 기본/보조 버튼, 타일 선택기, 색 견본 팔레트
