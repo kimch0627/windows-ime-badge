@@ -91,8 +91,9 @@ sealed class TrayIcons : IDisposable
                 g.DrawPath(edge, path);
             }
 
-            // 글자는 상자의 약 70%. "한"은 획이 많아 "A"보다 조금 작게 그려야 16px 에서 뭉개지지 않는다.
-            float px = size * (text == "A" ? 0.78f : 0.68f);
+            // 글자는 상자의 약 70%. "한"은 획이 많아 "A"보다 조금 작게 그린다. 다만 16px(100% 배율)에서 0.68(약 11px)은 ㅎ 이 뭉개져
+            // 0.74(약 12px)로 키운다(VW-10: 0.68·0.74·0.80 × Bold·Regular 를 8배로 비교해 고름. Regular 는 획이 회색으로 옅어졌다).
+            float px = size * (text == "A" ? 0.78f : size <= 16 ? 0.74f : 0.68f);
             using var textBrush = new SolidBrush(BadgeRenderer.InkFor(state, color, theme));
             using var font = new Font(BadgeFonts.For(text), px, FontStyle.Bold, GraphicsUnit.Pixel);
             using var glyph = BadgeRenderer.TextPath(text, font);
