@@ -83,10 +83,11 @@ sealed class TrayIcons : IDisposable
                 using var edge = new Pen(hc.Edge, 1f);
                 g.DrawPath(edge, path);
             }
-            else if (ColorHex.OuterRimAlpha(color.ToArgb()) is > 0 and int rim)
+            else if (BadgeRenderer.OuterRimColor(color, theme) is { } rim)
             {
-                // 어두운 배지색(진회색·네이비)은 어두운 작업 표시줄에 묻힌다. 배지의 바깥 흰 림과 같은 기준으로, 칸 안쪽 가장자리에 옅은 흰 선.
-                using var edge = new Pen(Color.FromArgb(rim, Color.White), 1f);
+                // 어두운 배지색(진회색·네이비)은 어두운 작업 표시줄에, 밝은 배지색(금색·민트)은 밝은 작업 표시줄에 묻힌다. 배지의 바깥 림과
+                // 같은 기준으로(흰 선 또는 같은 색조의 진한 선, VW-07), 칸 안쪽 가장자리에 1px.
+                using var edge = new Pen(rim, 1f);
                 g.DrawPath(edge, path);
             }
 

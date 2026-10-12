@@ -313,7 +313,9 @@ installer/ImeBadge.iss  Inno Setup 스크립트
 위치 계산은 `BadgeLayout.Compute`(Core) 이며 단위 테스트가 있습니다. 배지 아래의 옅은 그림자는 렌더러가 비트맵에
 함께 그리므로(GDI+ 에는 흐림이 없어 굵고 옅은 선 + 채움 두 겹) 비트맵이 사방 `2·배율` px 만큼 큽니다.
 진회색·네이비처럼 어두운 배지는 같은 여백 안에 옅은 흰 바깥 림을 둘러, VS Code·터미널 같은 어두운 편집기(#1E1E1E) 위에서도
-윤곽이 3:1 대비로 보이게 합니다(`ColorHex.OuterRimAlpha`, 흰 문서 위에서는 보이지 않음). 트레이 아이콘도 같은 기준으로 칸 안쪽에 1px 선을 긋습니다.
+윤곽이 3:1 대비로 보이게 합니다(`ColorHex.OuterRimAlpha`, 흰 문서 위에서는 보이지 않음). 거꾸로 금색·민트·파스텔처럼 밝은 배지는
+같은 색조를 진하게 한 바깥 림을 둘러 흰 문서 위에서 3:1 로 보이게 합니다(`ColorHex.OuterShadeAlpha`, 어두운 편집기 위에서는 거의 보이지 않음).
+한 배지에는 둘 중 하나만 생기고, 트레이 아이콘도 같은 기준으로 칸 안쪽에 1px 선을 긋습니다.
 
 애니메이션은 별도의 16 ms 타이머가 마지막 판정 결과(`_lastSnapshot`)로 `Apply` 를 다시 부르는 방식입니다. IME 를 다시 읽지
 않으니 UIA 호출이 늘지 않습니다. 페이드인은 `UpdateLayeredWindow` 의 `SourceConstantAlpha` 만 바꿔 같은 비트맵을 다시 올리고,

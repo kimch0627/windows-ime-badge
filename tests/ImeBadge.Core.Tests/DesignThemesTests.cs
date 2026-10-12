@@ -339,4 +339,69 @@ public sealed class BadgeTextTests
         Assert.InRange(alpha, 1, 127);
         Assert.Equal(White, ColorHex.Over(White, alpha, White));
     }
+
+    /// <summary>윤곽이 흰 문서 위에서 보이는 정도: 바깥 어두운 림이 있으면 림, 없으면 배지색 자체의 대비.</summary>
+    static double OutlineOnWhiteDocument(int fill)
+    {
+        int shade = ColorHex.OuterShadeAlpha(fill);
+        int paper = ColorHex.LightDocumentBackground;
+        return shade == 0 ? ColorHex.ContrastRatio(fill, paper) : ColorHex.ContrastRatio(ColorHex.Over(ColorHex.OuterShadeColor(fill), shade, paper), paper);
+    }
+
+    /// <summary>VW-07: 모든 테마의 견본·기본색 배지가 흰 문서 위에서도 윤곽 대비 3:1 이상(UX-01 의 거울상).</summary>
+    [Theory]
+    [MemberData(nameof(DesignThemesTests.ThemeIds), MemberType = typeof(DesignThemesTests))]
+    public void Outline_IsVisibleOnWhiteDocument_ForEveryColor(string id)
+    {
+        var t = DesignThemes.Get(id);
+        foreach (var hex in t.Swatches.Concat(new[] { t.HangulColor, t.EnglishColor, t.OtherColor }))
+        {
+            ColorHex.TryParse(hex, out int fill);
+            double ratio = OutlineOnWhiteDocument(fill);
+            Assert.True(ratio >= ColorHex.OutlineContrast, $"{id} {hex}: {ratio:0.00}");
+        }
+    }
+
+    /// <summary>어두운 림은 밝은 배지에만 생기고, 클래식 기본색(파랑·진회색)처럼 흰 문서와 이미 3:1 인 배지는 그대로다.</summary>
+    [Theory]
+    [InlineData("#F2C75C", true)]    // 미드나잇 한글(금색) — 흰색과 1.6
+    [InlineData("#7FD8C4", true)]    // 민트초코 한글
+    [InlineData("#F29CBF", true)]    // 벚꽃 한글
+    [InlineData("#FF6B81", true)]    // 캔디 한글
+    [InlineData("#FFB900", true)]
+    [InlineData("#0067C0", false)]   // 클래식 한글
+    [InlineData("#3C3C3C", false)]   // 클래식 영문
+    [InlineData("#1C74C9", false)]
+    [InlineData("#8E7CE0", false)]
+    public void OuterShade_OnlyAroundLightFills(string hex, bool shade)
+    {
+        ColorHex.TryParse(hex, out int fill);
+        Assert.Equal(shade, ColorHex.OuterShadeAlpha(fill) > 0);
+    }
+
+    /// <summary>흰 림과 어두운 림이 함께 필요한 색은 없다(한 배지에는 많아야 한 겹).</summary>
+    [Fact]
+    public void NoColor_NeedsBothRims()
+    {
+        for (int r = 0; r < 256; r += 15)
+            for (int g = 0; g < 256; g += 15)
+                for (int b = 0; b < 256; b += 15)
+                {
+                    int c = unchecked((int)0xFF000000) | (r << 16) | (g << 8) | b;
+                    Assert.False(ColorHex.OuterRimAlpha(c) > 0 && ColorHex.OuterShadeAlpha(c) > 0, ColorHex.ToHex(c));
+                }
+    }
+
+    /// <summary>어두운 림은 어두운 편집기 위에서는 거의 보이지 않는다(흰 문서에서만 윤곽 노릇을 한다).</summary>
+    [Theory]
+    [InlineData("#F2C75C")]
+    [InlineData("#7FD8C4")]
+    [InlineData("#F29CBF")]
+    public void OuterShade_IsFaintOnDarkEditor(string hex)
+    {
+        ColorHex.TryParse(hex, out int fill);
+        int dark = ColorHex.DarkEditorBackground;
+        double ratio = ColorHex.ContrastRatio(ColorHex.Over(ColorHex.OuterShadeColor(fill), ColorHex.OuterShadeAlpha(fill), dark), dark);
+        Assert.True(ratio < 1.6, $"{hex}: {ratio:0.00}");
+    }
 }

@@ -325,21 +325,33 @@ static class BadgeRenderer
     static float OuterRimWidth(float scale) => Math.Max(1f, scale);
 
     /// <summary>
-    /// 바깥 흰 림(UX-01): 어두운 배지(진회색·네이비·초콜릿)가 어두운 편집기 바탕에서 묻히지 않게 윤곽 바깥에 옅은 흰 선을 두른다.
-    /// 둘러야 하는지와 짙기는 <see cref="ColorHex.OuterRimAlpha"/> 가 정한다(밝은 배지는 그리지 않음). 테두리(<paramref name="edge"/> 굵기,
-    /// 경로 가운데에 걸침) 바깥으로 <paramref name="rim"/> 만큼 보이게 굵은 선을 긋되, 배지 안쪽은 잘라 낸다: 반투명 배지 안으로 비치지 않는다.
-    /// 그림자보다 나중에, 채우기 전에 그린다. 고대비는 시스템 색 테두리가 윤곽을 맡으므로 그리지 않는다.
+    /// 바깥 림: 배지가 바탕에 묻히지 않게 윤곽 바깥에 두르는 옅은 선. 어두운 배지(진회색·네이비·초콜릿)는 어두운 편집기에서 보이게 흰 선(UX-01,
+    /// <see cref="ColorHex.OuterRimAlpha"/>), 밝은 배지(금색·민트·파스텔)는 흰 문서에서 보이게 같은 색조의 진한 선(VW-07,
+    /// <see cref="ColorHex.OuterShadeAlpha"/>). 한 배지에는 둘 중 하나만 생기고, 중간 밝기 배지는 둘 다 없다.
+    /// 테두리(<paramref name="edge"/> 굵기, 경로 가운데에 걸침) 바깥으로 <paramref name="rim"/> 만큼 보이게 굵은 선을 긋되, 배지 안쪽은 잘라 낸다:
+    /// 반투명 배지 안으로 비치지 않는다. 그림자보다 나중에, 채우기 전에 그린다. 고대비는 시스템 색 테두리가 윤곽을 맡으므로 그리지 않는다.
     /// </summary>
     static void DrawOuterRim(Graphics g, GraphicsPath path, float rim, float edge, Color fill, in BadgeTheme theme)
     {
-        if (theme.Contrast is not null) return;
-        int alpha = ColorHex.OuterRimAlpha(fill.ToArgb());
-        if (alpha == 0) return;
+        if (OuterRimColor(fill, theme) is not { } color) return;
         var state = g.Save();
         using (var inside = new Region(path)) g.ExcludeClip(inside);
-        using var pen = new Pen(Color.FromArgb(alpha, Color.White), edge + 2 * rim) { LineJoin = LineJoin.Round };
+        using var pen = new Pen(color, edge + 2 * rim) { LineJoin = LineJoin.Round };
         g.DrawPath(pen, path);
         g.Restore(state);
+    }
+
+    /// <summary>
+    /// 이 배지색에 두를 바깥 림의 색(알파 포함). 흰 림(어두운 배지) 또는 같은 색조의 진한 림(밝은 배지), 필요 없거나 고대비면 null.
+    /// 트레이 아이콘·커서 소나도 같은 규칙을 쓴다.
+    /// </summary>
+    public static Color? OuterRimColor(Color fill, in BadgeTheme theme)
+    {
+        if (theme.Contrast is not null) return null;
+        int argb = fill.ToArgb();
+        if (ColorHex.OuterRimAlpha(argb) is > 0 and int white) return Color.FromArgb(white, Color.White);
+        if (ColorHex.OuterShadeAlpha(argb) is > 0 and int shade) return Color.FromArgb(shade, Color.FromArgb(ColorHex.OuterShadeColor(argb)));
+        return null;
     }
 
     /// <summary>
