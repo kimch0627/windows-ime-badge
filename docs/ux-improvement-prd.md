@@ -51,9 +51,9 @@
 | UX-03 | 첫 실행 온보딩 ("시작하기" 카드) | P1 | M4 | 🔍 | `codex/ux-improvements` (로컬 커밋, PR 전) | 카드는 모양 페이지 맨 위 |
 | UX-04 | 고정 미리보기 아래 경계 | P2 | M1 | 🔍 | `codex/ux-improvements` (로컬 커밋, PR 전) | 선택 항목(컴팩트 모드)은 하지 않음 |
 | UX-05 | "표시" 페이지 가로 스크롤바 제거 | P2 | M1 | 🔍 | `codex/ux-improvements` (로컬 커밋, PR 전) | 원인: 숨긴 페이지의 첫 배치. 표시 외 3개 페이지도 같았음 |
-| UX-06 | 카드 설명 다이어트 (1줄 + 자세히 펼침) | P2 | M5 | ⬜ | | 펼침 컴포넌트를 07·08 이 재사용 |
-| UX-07 | 배지 표시 방식을 라디오 타일로 | P2 | M5 | ⬜ | | UX-06 뒤에 |
-| UX-08 | 특수 키 설정을 한 카드로 | P2 | M5 | ⬜ | | UX-06 뒤에 |
+| UX-06 | 카드 설명 다이어트 (1줄 + 자세히 펼침) | P2 | M5 | 🔍 | `codex/ux-improvements` (로컬 커밋, PR 전) | 툴팁 11개를 펼침으로 |
+| UX-07 | 배지 표시 방식을 라디오 타일로 | P2 | M5 | 🔍 | `codex/ux-improvements` (로컬 커밋, PR 전) | |
+| UX-08 | 특수 키 설정을 한 카드로 | P2 | M5 | 🔍 | `codex/ux-improvements` (로컬 커밋, PR 전) | 요약 줄이 UX-11 범례를 겸함 |
 | UX-09 | 미리보기 영문 줄을 평소 모습으로 | P2 | M1 | 🔍 | `codex/ux-improvements` (로컬 커밋, PR 전) | 두 번째 영문 줄 대신 구석 범례 |
 | UX-10 | 타일 가독성 (행 라벨, 테마 타일 크기) | P2 | M1 | 🔍 | `codex/ux-improvements` (로컬 커밋, PR 전) | 타일 줄바꿈 추가(최소 폭에서 위치 타일 잘림도 해결) |
 | UX-11 | 특수 키 기본값과 기호 범례 | P3 | M6 | ⬜ | | 기본값 변경 결정 필요 |
@@ -335,7 +335,7 @@ M6  UX-11 · UX-13 · UX-14 · UX-15 · UX-16 · UX-17   독립
 
 ### UX-06 카드 설명 다이어트 (1줄 + 자세히 펼침)
 
-- 우선순위 P2 · 마일스톤 M5 · 상태 ⬜
+- 우선순위 P2 · 마일스톤 M5 · 상태 🔍
 
 **문제**
 거의 모든 카드가 2줄 설명이고 툴팁에 5~6줄이 더 있습니다(`look.shiftHold.tip`, `look.insert.tip`, `exp.keepMode.tip` 등). 핵심이 묻히고 페이지가 길어집니다. 스크린 리더는 카드 하나에 긴 문장을 다 읽습니다.
@@ -345,39 +345,39 @@ M6  UX-11 · UX-13 · UX-14 · UX-15 · UX-16 · UX-17   독립
 2. 더 설명할 것이 있는 카드는 오른쪽 끝 쉐브론(⌄)으로 **펼침** → 카드 아래에 본문(`*.details`)이 열린다. Windows 11 `SettingsExpander` 패턴.
 3. 펼침으로 옮긴 내용은 툴팁에서 뺀다. 툴팁은 컨트롤 조작법("여기를 클릭한 뒤 키 조합을 누르세요")처럼 짧은 것만.
 4. 펼침 본문은 `AccessibleDescription` 로도 노출. 펼침 상태는 기억하지 않는다.
-5. 대상(1차): `look.theme` · `look.placement` · `look.capsLock` · `look.shiftHold` · `look.shiftNow` · `look.insert` · `look.visibility` · `behavior.updates` · `behavior.language` · `behavior.poll` · `settings.backup` · `settings.resetTitle` · `exclude.addTitle` · `exp.*` 전부.
+5. 대상(1차): `look.theme` · `look.placement` · `look.capsLock` · `look.shiftHold` · `look.shiftNow` · `look.insert` · `look.visibility` · `behavior.updates` · `behavior.language` · `behavior.poll` · `settings.backup` · ~~`settings.resetTitle`~~ · `exclude.addTitle` · `exp.*` 전부. (+ `look.hangulColor` · `look.animate`. `settings.resetTitle` 은 한 줄에 다 들어가 펼침 없음. Caps Lock·Shift·Insert 는 UX-08 카드의 펼침 하나로 모음)
 6. 문체는 기존(~합니다) 유지. 1줄 요약은 "무엇을 하는가"만, 본문은 "언제·어디서·예외".
 
 **완료 조건**
-- [ ] `SettingsCard` 에 `Details`(string) 와 펼침 버튼. `GetPreferredSize` 가 펼침 높이를 반영하고 `CardStack` 이 다시 배치
-- [ ] 키보드: 쉐브론이 Tab 순서에 있고 Enter/Space 로 토글, 접근성 이름 "자세히"/"접기"
-- [ ] 대상 키 전부 1줄 요약 + 본문으로 분리(한/영), `StringsTests` 통과
-- [ ] 툴팁 중복 제거
-- [ ] README "설정 창" 표의 설명은 그대로 두되(문서는 상세해도 됨) 항목 이름이 바뀌었으면 갱신
+- [x] `SettingsCard` 에 `Details`(string) 와 펼침 단추(`ChevronButton`, ⌄/⌃). `GetPreferredSize` 가 펼침 높이를 반영하고 `CardStack` 이 다시 배치. 제목 줄을 눌러도 펼침
+- [x] 키보드: 쉐브론이 컨트롤 다음 Tab 순서에 있고 Enter/Space 로 토글, 접근성 이름 "자세히"/"접기"(`card.more`/`card.less`), 카드 `AccessibleDescription` 에 본문 포함
+- [x] 대상 키 전부 1줄 요약 + `*.details` 로 분리(한/영). `Card()` 가 `*.details` 가 있으면 자동으로 붙임(`Strings.TryGet`). `StringsTests` 통과
+- [x] 툴팁 중복 제거: `look.visibility/capsLock/shiftHold/shiftNow/insert.tip`, `behavior.poll.tip`, `exp.sonar/keepMode/focusSteal/selection/password.tip` 삭제. `look.swatch.tip` 은 조작법 한 줄로. 남은 툴팁은 조작법뿐(단축키 입력, 가져오기/내보내기, 실행 중인 앱, 소나 [보기], 작업 표시줄 설정, 되돌리기)
+- [x] README "설정 창" 표: 툴팁 안내 문장을 펼침 안내로, 표시 방식·특수 키 행 갱신
 
 **구현 가이드**: `SettingsControls.cs` `SettingsCard`(199); `SettingsForm.Card(...)` 헬퍼에 `details:` 인자; `Strings.cs`.
 
 **검증**
-- [ ] 100%·150% · 한/영 · 최소 창 폭에서 1줄 유지(안 되면 요약을 더 줄인다)
+- [x] 100% · 한/영 · 기본 크기에서 1줄(오른쪽 컨트롤이 넓은 "일시 중지 단축키"·"확인 주기"·소나 카드도 문구를 줄여 1줄). 최소 창 폭에서는 2줄이 되는 카드가 있음 — 폭이 450px 안팎이라 허용. 150% 는 미확인
 
 ---
 
 ### UX-07 배지 표시 방식을 라디오 타일로
 
-- 우선순위 P2 · 마일스톤 M5 · 상태 ⬜ · 의존: UX-06
+- 우선순위 P2 · 마일스톤 M5 · 상태 🔍 · 의존: UX-06
 
 **문제**
 "늘 보이기 / 타이핑 중에는 옅게 / 한/영이 바뀔 때만 잠깐"의 차이가 툴팁에만 있습니다. 이 설정은 "배지가 글자를 가려요"라는 가장 흔한 불만의 해법이라 눈에 띄어야 합니다.
 
 **요구사항**
-1. 콤보박스 대신 카드 본문에 **타일 3개**(아이콘 + 이름 + 1줄 설명). 현재 선택 강조, 화살표 키로 이동, `AccessibleRole.RadioButton`.
+1. 콤보박스 대신 카드 본문에 **타일 3개**(그림 + 이름 + ~~1줄~~ 2줄 설명). 현재 선택 강조, 화살표 키로 이동, ~~`AccessibleRole.RadioButton`~~ (다른 타일 선택기와 같은 `TilePicker` 접근성 — 아래 메모).
 2. 타일 아이콘: 늘 보이기 = 배지 실선, 옅게 = 배지 반투명, 잠깐 = 배지 + 시계. 실제 렌더러로 그려도 좋다.
 3. 트레이 메뉴(UX-13)와 같은 값(`BadgeVisibility`).
 
 **완료 조건**
-- [ ] `TilePicker` 재사용 또는 `OptionTiles` 신설. 설명 줄이 있는 타일 크기 결정
-- [ ] 키보드·접근성 · 밝게/어둡게/고대비
-- [ ] `look.visibility.tip` 제거, 각 옵션 설명 키 추가(한/영)
+- [x] `TilePicker` 재사용(160×96). 그림: 짧은 글 + caret + 지금 테마의 한글 배지, "옅게" 는 35% 배지, "잠깐" 은 초시계. 그 아래 두 줄 설명(한국어는 줄바꿈 위치를 문구에 넣음 — 음절 중간에서 끊겨서)
+- [x] 키보드(좌우·Home·End) · 어둡게 · 한/영 확인. 밝게·고대비는 다른 타일과 같은 그리기라 미확인. 메모: `TilePicker` 는 타일 하나하나를 접근성 개체로 내보내지 않는다(모양·위치 타일도 같음) — 화면 읽기 지원은 별도 과제
+- [x] `look.visibility.tip` 제거, `visibility.{always,dimWhileTyping,onChange}.desc` 추가(한/영)
 
 **구현 가이드**: `SettingsForm.BuildDisplayPage`; `Controls.cs`/`SettingsControls.cs` `TilePicker`; `Labels.Visibilities`.
 
@@ -385,21 +385,21 @@ M6  UX-11 · UX-13 · UX-14 · UX-15 · UX-16 · UX-17   독립
 
 ### UX-08 특수 키 설정을 한 카드로
 
-- 우선순위 P2 · 마일스톤 M5 · 상태 ⬜ · 의존: UX-06
+- 우선순위 P2 · 마일스톤 M5 · 상태 🔍 · 의존: UX-06
 
 **문제**
 Caps Lock → Shift → "누르는 즉시"가 3단 들여쓰기로 꺾여 들어가 의존 관계를 한눈에 알기 어렵습니다.
 
 **요구사항**
-1. "특수 키 표시" 카드 하나. 펼치면 안에 토글 3개: Caps Lock(▁) · Shift(▲, 하위에 "누르는 즉시" 1단 들여쓰기) · Insert(■). 들여쓰기는 최대 1단.
+1. "특수 키 표시" 카드 하나. ~~펼치면~~ 안에 토글 ~~3개~~ 4개(늘 보임): Caps Lock(▁) · Shift(▲, 하위에 "누르는 즉시" 1단 들여쓰기) · Insert(■). 들여쓰기는 최대 1단. — 토글을 펼침 뒤에 숨기면 찾기 어려워 늘 보이게 했고, 펼침(⌄)에는 기호마다 긴 설명을 넣었다.
 2. 의존 비활성 규칙(Caps 끄면 Shift·즉시 흐림, Shift 끄면 즉시 흐림)은 그대로. 값은 보존.
-3. 카드 요약 줄에 현재 켜진 것을 요약("Caps Lock · Shift · Insert" / "꺼짐").
+3. 카드 요약 줄에 현재 켜진 것을 요약("켜짐: ▁ Caps Lock · ▲ Shift · ■ Insert" / "모두 꺼져 있습니다"). 기호를 함께 보여 줘 UX-11 의 범례를 겸한다.
 4. 니모닉(C · S · R · I) 유지.
 
 **완료 조건**
-- [ ] 카드 구조 변경, 요약 줄 동기화
-- [ ] 키보드 Tab 순서가 자연스럽다(카드 → 펼침 → 토글 3개)
-- [ ] test-matrix "Shift 누름" · "Shift 누르는 즉시 표시" · "Insert" 행의 설정 경로 문구 갱신
+- [x] 카드 구조 변경: 하위 행은 `SettingsCard.Flat`(위쪽 구분선만, 좌우 여백 없음)을 `VStack` 에 쌓음, "누르는 즉시" 만 `Indent = 1`. 요약 줄은 `Touch` 마다 갱신
+- [x] 키보드 Tab 순서: ~~카드 → 펼침 → 토글 3개~~ 토글 4개 → 펼침(⌄). 니모닉 C·S·R·I 유지(`StringsTests`)
+- [x] test-matrix: 설정 이름이 그대로라 "Shift 누름" · "Shift 누르는 즉시 표시" · "Insert" 행은 고칠 것이 없음. "특수 키 카드" 행 추가
 
 **구현 가이드**: `SettingsForm.BuildDisplayPage` `section.keys` 블록, `SyncShiftEnabled`.
 

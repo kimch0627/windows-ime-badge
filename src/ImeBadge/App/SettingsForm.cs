@@ -44,7 +44,9 @@ sealed class SettingsForm : Form
 
     TilePicker _theme = null!, _style = null!, _character = null!, _placement = null!;
     AccentSlider _size = null!, _opacity = null!, _poll = null!;
-    ThemedComboBox _language = null!, _visibility = null!;
+    ThemedComboBox _language = null!;
+    TilePicker _visibility = null!;
+    SettingsCard _keysCard = null!;
     InputTextBox _excludeInput = null!;
     InputFrame _excludeFrame = null!;
     ContextMenuStrip? _appsMenu;
@@ -427,33 +429,26 @@ sealed class SettingsForm : Form
     {
         var page = new CardStack();
 
-        _visibility = Combo(240, Labels.Visibilities.Select(v => v.label), i => { _draft.Visibility = Labels.Visibilities[i].value; Touch(); });
-        _tips.SetToolTip(_visibility, Strings.Get("look.visibility.tip"));
-        page.Controls.Add(Card(Glyphs.Visibility, "look.visibility", action: _visibility));
+        // 표시 방식: "배지가 글자를 가려요" 의 답이라 눈에 띄어야 한다. 고르기 상자 대신 그림과 한 줄 설명이 있는 타일(UX-07).
+        _visibility = new TilePicker { TileSize = new Size(160, 96), AccessibleName = Mnemonic.Plain(Strings.Get("look.visibility")) };
+        _visibility.SetTiles(Labels.Visibilities.Select(v => new TilePicker.Tile(v.value, v.label, (gr, r, p) => DrawVisibilityTile(gr, r, p, v.value))));
+        _visibility.SelectedChanged += (_, _) => { if (_visibility.SelectedValue is string v && v != _draft.Visibility) { _draft.Visibility = v; Touch(); } };
+        page.Controls.Add(Card(Glyphs.Visibility, "look.visibility", body: _visibility));
 
         _animate = Toggle(v => { _draft.Animate = v; Touch(); });
         page.Controls.Add(Card(Glyphs.Animation, "look.animate", action: _animate));
 
-        page.Controls.Add(Section("section.keys"));
+        // 특수 키 표시: 한 카드 안에 하위 행 넷(UX-08). 요약 줄은 지금 켜진 기호(▁ ▲ ■)를 보여 주어 범례를 겸한다(UX-11).
+        // Shift 는 Caps Lock 표시가, "누르는 즉시" 는 둘 다 켜져 있어야 의미가 있다(꺼져 있으면 흐리게, 값은 남는다). 들여쓰기는 "누르는 즉시" 한 단계뿐.
         _capsLock = Toggle(v => { _draft.ShowCapsLock = v; SyncShiftEnabled(); Touch(); });
-        _tips.SetToolTip(_capsLock, Strings.Get("look.capsLock.tip"));
-        page.Controls.Add(Card(Glyphs.CapsLock, "look.capsLock", action: _capsLock));
-        // Caps Lock 표시의 하위 옵션: 대소문자를 글자로 구별할 때만 의미가 있다. 들여 쓰고, Caps Lock 표시가 꺼져 있으면 흐리게.
         _shiftHold = Toggle(v => { _draft.ShowShiftHold = v; SyncShiftEnabled(); Touch(); });
-        _tips.SetToolTip(_shiftHold, Strings.Get("look.shiftHold.tip"));
-        var shift = Card(Glyphs.Shift, "look.shiftHold", action: _shiftHold);
-        shift.Indent = 1;
-        page.Controls.Add(shift);
-        // Shift 표시의 하위 옵션: 0.3초를 기다리지 않고 누르는 즉시. 한 단계 더 들여 쓰고, Shift 표시가 꺼져 있으면 흐리게.
         _shiftNow = Toggle(v => { _draft.ShowShiftImmediately = v; Touch(); });
-        _tips.SetToolTip(_shiftNow, Strings.Get("look.shiftNow.tip"));
-        var shiftNow = Card(Glyphs.ShiftNow, "look.shiftNow", action: _shiftNow);
-        shiftNow.Indent = 2;
-        page.Controls.Add(shiftNow);
-        // 겹쳐 쓰기는 대소문자와 상관없어 Caps Lock 표시와 따로 켜고 끈다.
         _insert = Toggle(v => { _draft.ShowInsert = v; Touch(); });
-        _tips.SetToolTip(_insert, Strings.Get("look.insert.tip"));
-        page.Controls.Add(Card(Glyphs.Insert, "look.insert", action: _insert));
+        var shiftNow = SubCard("look.shiftNow", _shiftNow);
+        shiftNow.Indent = 1;
+        _keysCard = Card(Glyphs.Keyboard, "look.keys",
+            body: new VStack((SubCard("look.capsLock", _capsLock), 0), (SubCard("look.shiftHold", _shiftHold), 0), (shiftNow, 0), (SubCard("look.insert", _insert), 0)));
+        page.Controls.Add(_keysCard);
 
         page.Controls.Add(Section("section.hideTray"));
         _fullscreen = Toggle(v => { _draft.HideOnFullscreen = v; Touch(); });
@@ -489,7 +484,6 @@ sealed class SettingsForm : Form
 
         page.Controls.Add(Section("section.advanced"));
         page.Controls.Add(Card(Glyphs.Clock, "behavior.poll", action: Slider(out _poll, 50, 1000, 50, 100, " ms", v => { _draft.PollIntervalMs = v; Touch(); })));
-        _tips.SetToolTip(_poll, Strings.Get("behavior.poll.tip"));
 
         page.Controls.Add(Section("section.manage"));
         // 내보내기·가져오기: 다른 PC 로 설정을 옮긴다. 가져온 값은 초안에만 채우므로 [확인] 해야 저장되고 [취소] 하면 되돌아간다.
@@ -620,7 +614,6 @@ sealed class SettingsForm : Form
         preview.Margin = new Padding(0, 0, 16, 0);
         _tips.SetToolTip(preview, Strings.Get("exp.sonar.preview.tip"));
         _sonar = Toggle(v => { _draft.CaretSonar = v; SyncExperimentalEnabled(); Touch(); });
-        _tips.SetToolTip(_sonar, Strings.Get("exp.sonar.tip"));
         page.Controls.Add(Card(Glyphs.Sonar, "exp.sonar", action: Row(preview, _sonar)));
 
         _sonarHotkeyBox = new HotkeyBox { AccessibleName = Mnemonic.Plain(Strings.Get("exp.sonarHotkey")) };
@@ -637,19 +630,15 @@ sealed class SettingsForm : Form
 
         page.Controls.Add(Section("section.exp.typing"));
         _keepMode = Toggle(v => { _draft.KeepImeMode = v; Touch(); });
-        _tips.SetToolTip(_keepMode, Strings.Get("exp.keepMode.tip"));
         page.Controls.Add(Card(Glyphs.InputMode, "exp.keepMode", action: _keepMode));
 
         _selection = Toggle(v => { _draft.ShowSelection = v; Touch(); });
-        _tips.SetToolTip(_selection, Strings.Get("exp.selection.tip"));
         page.Controls.Add(Card(Glyphs.Selection, "exp.selection", action: _selection));
 
         _password = Toggle(v => { _draft.PasswordWarning = v; Touch(); });
-        _tips.SetToolTip(_password, Strings.Get("exp.password.tip"));
         page.Controls.Add(Card(Glyphs.Lock, "exp.password", action: _password));
 
         _focusSteal = Toggle(v => { _draft.FocusStealWarning = v; Touch(); });
-        _tips.SetToolTip(_focusSteal, Strings.Get("exp.focusSteal.tip"));
         page.Controls.Add(Card(Glyphs.Shield, "exp.focusSteal", action: _focusSteal));
         return page;
     }
@@ -939,14 +928,68 @@ sealed class SettingsForm : Form
         g.DrawImage(bmp, new Rectangle(pos, bmp.Size), new Rectangle(Point.Empty, bmp.Size), GraphicsUnit.Pixel);
     }
 
+    /// <summary>
+    /// 표시 방식 타일(UX-07): 위에 짧은 글·caret·배지 그림, 아래에 한 줄 설명. 늘 보이기 = 또렷한 배지, 타이핑 중 옅게 = 옅은 배지와 치는 중인 글,
+    /// 바뀔 때만 = 배지와 초시계. 배지는 지금 테마·색의 한글 배지(실제 렌더러).
+    /// </summary>
+    void DrawVisibilityTile(Graphics g, RectangleF r, Theme.Palette p, string value)
+    {
+        float dpi = DeviceDpi / 96f;
+        float artH = 30 * dpi;
+        int opacity = value == BadgeVisibility.DimWhileTyping ? 35 : 100;
+        using var bmp = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Pill, 0.8f * dpi, BadgeTheme.From(_draft) with { Character = BadgeCharacters.None }, opacity);
+        using var sample = new Font(BadgeRenderer.FontFamily, 9f);
+        const TextFormatFlags flat = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.VerticalCenter;
+        string typed = value == BadgeVisibility.DimWhileTyping ? "가나다라" : "가나";
+        var ts = TextRenderer.MeasureText(g, typed, sample, Size.Empty, flat);
+        float x = r.Left + 4 * dpi, mid = r.Top + artH / 2;
+        TextRenderer.DrawText(g, typed, sample, new Rectangle((int)x, (int)(mid - ts.Height / 2f), ts.Width, ts.Height), p.Text, flat);
+        float cx = x + ts.Width + 1 * dpi;
+        using (var pen = new Pen(p.Text, Math.Max(1f, dpi))) g.DrawLine(pen, cx, mid - 7 * dpi, cx, mid + 7 * dpi);
+        var at = new Rectangle((int)(cx + 3 * dpi), (int)(mid - bmp.Height / 2f), bmp.Width, bmp.Height);
+        g.DrawImage(bmp, at, new Rectangle(Point.Empty, bmp.Size), GraphicsUnit.Pixel);
+        if (value == BadgeVisibility.OnChange)
+        {
+            using var icon = Theme.IconFont((int)Math.Round(14 * dpi));
+            if (icon is not null)
+                TextRenderer.DrawText(g, Glyphs.ShiftNow, icon, new Rectangle(at.Right + (int)(4 * dpi), (int)(mid - 8 * dpi), (int)(16 * dpi), (int)(16 * dpi)), p.SubtleText,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
+        }
+        // 한 줄(좁으면 두 줄) 설명
+        using var small = new Font(Font.FontFamily, Font.Size * 0.84f);
+        var textRect = new Rectangle((int)(r.Left + 2 * dpi), (int)(r.Top + artH + 2 * dpi), (int)(r.Width - 4 * dpi), (int)(r.Height - artH - 2 * dpi));
+        TextRenderer.DrawText(g, Strings.Get("visibility." + value + ".desc"), small, textRect, p.SubtleText,
+            TextFormatFlags.WordBreak | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+    }
+
     // ── 도우미 ──
-    /// <summary>카드 하나: 아이콘, 제목(key, 니모닉 포함), 설명(key + ".desc"), 오른쪽 컨트롤 또는 아래 넓은 내용.</summary>
+    /// <summary>
+    /// 카드 하나: 아이콘, 제목(key, 니모닉 포함), 설명(key + ".desc", 한 줄), 오른쪽 컨트롤 또는 아래 넓은 내용.
+    /// key + ".details" 가 있으면 "자세히" 로 펼치는 긴 설명(UX-06). 설명이 없는 키(".desc" 없음)는 설명 줄 없이.
+    /// </summary>
     SettingsCard Card(string glyph, string key, Control? action = null, Control? body = null)
     {
-        var card = new SettingsCard { Glyph = glyph, Title = Strings.Get(key), Description = Strings.Get(key + ".desc") };
+        var card = new SettingsCard { Glyph = glyph, Title = Strings.Get(key), Description = Strings.TryGet(key + ".desc", out var desc) ? desc : "" };
         if (action is not null) card.Action = action;
         if (body is not null) card.Body = body;
+        if (Strings.TryGet(key + ".details", out var details)) card.Details = details;
         return card;
+    }
+
+    /// <summary>다른 카드 안의 하위 행(특수 키 카드의 Caps Lock 등): 아이콘 없이 제목·한 줄 설명·오른쪽 토글.</summary>
+    static SettingsCard SubCard(string key, Control action) => new()
+    {
+        Flat = true, Title = Strings.Get(key), Description = Strings.Get(key + ".desc"), Action = action,
+    };
+
+    /// <summary>특수 키 카드의 요약 줄: 지금 켜진 표시와 그 기호. 기호가 무슨 뜻인지 알려 주는 범례도 된다.</summary>
+    string KeysSummary()
+    {
+        var on = new List<string>();
+        if (_draft.ShowCapsLock) on.Add(Strings.Get("keys.caps"));
+        if (_draft.ShowCapsLock && _draft.ShowShiftHold) on.Add(Strings.Get("keys.shift"));
+        if (_draft.ShowInsert) on.Add(Strings.Get("keys.insert"));
+        return on.Count == 0 ? Strings.Get("look.keys.none") : Strings.Format("look.keys.on", string.Join("  ·  ", on));
     }
 
     /// <summary>누를 수 있는 카드(폴더·웹 페이지 열기). 오른쪽 끝에 "새 창에서 열기" 표시.</summary>
@@ -1099,7 +1142,7 @@ sealed class SettingsForm : Form
         _hangulColor.Hex = _draft.HangulColor; _hangulHex.Text = _hangulColor.Hex;
         _englishColor.Hex = _draft.EnglishColor; _englishHex.Text = _englishColor.Hex;
         _animate.Checked = _draft.Animate;
-        _visibility.SelectedIndex = Math.Max(0, Array.FindIndex(Labels.Visibilities, v => v.value == _draft.Visibility));
+        _visibility.SelectedValue = _draft.Visibility;
         _capsLock.Checked = _draft.ShowCapsLock;
         _shiftHold.Checked = _draft.ShowShiftHold;
         _shiftNow.Checked = _draft.ShowShiftImmediately;
@@ -1149,6 +1192,8 @@ sealed class SettingsForm : Form
         _style?.Invalidate();       // 타일은 배지 색을 쓴다
         _character?.Invalidate();
         _placement?.Invalidate();
+        _visibility?.Invalidate();
+        if (_keysCard is not null) _keysCard.Description = KeysSummary();
         if (_startCard is { Visible: true }) _startCard.Description = StartText();   // 단축키가 바뀌었을 수 있다
         RefreshPreview();
         if (Strings.IsKorean != _builtKorean) LanguageChanged?.Invoke();
