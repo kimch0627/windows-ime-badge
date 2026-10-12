@@ -16,7 +16,13 @@ interface IExperimentHost
 {
     /// <summary>화면의 이 사각형(설정 창의 [보기] 단추) 둘레에서 커서 소나를 한 번 보여 준다.</summary>
     void PreviewSonar(Rectangle screen);
+
+    /// <summary>화면의 이 사각형(설정 창의 [보기] 단추) 아래에 실험 기능의 경고 말풍선을 한 번 보여 준다(VW-06).</summary>
+    void PreviewCallout(CalloutPreview which, Rectangle screen);
 }
+
+/// <summary>설정 창에서 미리 볼 수 있는 말풍선.</summary>
+enum CalloutPreview { Password, FocusSteal }
 
 /// <summary>
 /// 설정 창. Windows 11 설정 앱처럼 왼쪽 탐색 목록에서 페이지를 고르고, 페이지마다 아이콘·제목·설명이 붙은 카드로 항목을 보여 준다.
@@ -659,12 +665,23 @@ sealed class SettingsForm : Form
         _selection = Toggle(v => { _draft.ShowSelection = v; Touch(); });
         page.Controls.Add(Card(Glyphs.Selection, "exp.selection", action: _selection));
 
+        // 경고 말풍선은 실제 상황(비밀번호 칸·포커스 뺏김)을 만들어야 볼 수 있어, [보기] 로 그 모습을 미리 보여 준다(VW-06).
         _password = Toggle(v => { _draft.PasswordWarning = v; Touch(); });
-        page.Controls.Add(Card(Glyphs.Lock, "exp.password", action: _password));
+        page.Controls.Add(Card(Glyphs.Lock, "exp.password", action: Row(CalloutPreviewButton("exp.password.preview", CalloutPreview.Password), _password)));
 
         _focusSteal = Toggle(v => { _draft.FocusStealWarning = v; Touch(); });
-        page.Controls.Add(Card(Glyphs.Shield, "exp.focusSteal", action: _focusSteal));
+        page.Controls.Add(Card(Glyphs.Shield, "exp.focusSteal", action: Row(CalloutPreviewButton("exp.focusSteal.preview", CalloutPreview.FocusSteal), _focusSteal)));
         return page;
+    }
+
+    /// <summary>경고 말풍선 [보기] 단추. 누르면 단추 아래에 그 말풍선을 한 번 띄운다.</summary>
+    AccentButton CalloutPreviewButton(string key, CalloutPreview which)
+    {
+        AccentButton? button = null;
+        button = Button(key, () => _experiments.PreviewCallout(which, button!.RectangleToScreen(button.ClientRectangle)));
+        button.Margin = new Padding(0, 0, 16, 0);
+        _tips.SetToolTip(button, Strings.Get(key + ".tip"));
+        return button;
     }
 
     /// <summary>실험 기능의 하위 옵션을 위 옵션에 맞춰 켜고 끈다(흐리게). 꺼 둔 하위 옵션의 값은 그대로 남는다.</summary>

@@ -1221,6 +1221,18 @@ sealed class BadgeForm : Form, IExperimentHost
     }
 
     /// <summary>
+    /// 설정 창의 경고 말풍선 [보기](VW-06): 그 단추 아래에 실제와 같은 말풍선을 4초 동안 보여 준다. 비밀번호 칸은 위험이 둘 다인 문구,
+    /// 포커스 뺏김은 앞으로 나온 앱이 이 프로그램(설정 창)인 문구로.
+    /// </summary>
+    public void PreviewCallout(CalloutPreview which, Rectangle screen)
+    {
+        var content = which == CalloutPreview.Password
+            ? new CalloutContent(CalloutKind.Warning, Strings.Get("password.title"), Strings.Get("password.both"), Glyphs.Lock)
+            : new CalloutContent(CalloutKind.Warning, Strings.Get("steal.title"), Strings.Format("steal.detail", AppInfo.ProductName), Glyphs.Shield);
+        ShowCallout("preview", content, new Rectangle(screen.Left + Math.Min(screen.Width / 2, 24), screen.Top, 1, screen.Height), holdMs: 4000, preferBelow: true);
+    }
+
+    /// <summary>
     /// 소나 재생. 원의 색은 그 상태의 배지 색, 고대비 모드면 강조색(영문 배지는 창 바탕색이라 원이 보이지 않는다).
     /// 원 둘레의 짝 색은 배지색이 밝으면 같은 색조의 진한 색, 아니면 흰색(<see cref="OverlayRenderer.SonarPartner"/>).
     /// </summary>
