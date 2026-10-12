@@ -263,7 +263,8 @@ static class RenderSheet
         }
 
         s.Section("11. 실험 기능 — 커서 옆 말풍선",
-            "배율 150%. caret(선) 아래(꼬리가 위)와 위(꼬리가 아래). 정보는 테마 카드색, 주의는 Windows 11 InfoBar 의 주의 색.");
+            "caret(선) 아래(꼬리가 위)와 위(꼬리가 아래). 정보는 테마 카드색, 주의는 Windows 11 InfoBar 의 주의 색. " +
+            "100% 줄은 가장 흔한 배율에서 글자가 또렷한지 보려고 실제 픽셀 그대로 그렸다.");
         var calloutCases = new (string Name, CalloutContent Content)[]
         {
             ("소나: 커서 못 찾음", new(CalloutKind.Info, Strings.Get("sonar.notFound"), Strings.Get("sonar.notFound.detail"), Glyphs.Sonar)),
@@ -273,11 +274,18 @@ static class RenderSheet
         };
         foreach (var (name, content) in calloutCases)
         {
-            var cells = new[] { (false, true), (false, false), (true, true), (true, false) }
-                .Select(c => CalloutCell(content, Main, c.Item1, c.Item2)).ToList();
-            float w = cells.Max(c => c.Width) + 4;
-            s.Headers(new[] { ("밝게 · 아래", new[] { "" }, w), ("밝게 · 위", new[] { "" }, w), ("어둡게 · 아래", new[] { "" }, w), ("어둡게 · 위", new[] { "" }, w) });
-            s.Row(name, cells.Select((c, i) => new SheetPanel(i < 2 ? Light : Dark, w, new List<Bitmap> { c })).ToList());
+            // 100%: 밝게·어둡게 × 아래·위 네 칸. 150%: 칸이 넓어 시트 폭을 넘지 않게 밝게·아래와 어둡게·위 두 칸.
+            foreach (var (scale, label, cases) in new[]
+            {
+                (1f, "100%", new[] { (false, true), (false, false), (true, true), (true, false) }),
+                (Main, "150%", new[] { (false, true), (true, false) }),
+            })
+            {
+                var cells = cases.Select(c => CalloutCell(content, scale, c.Item1, c.Item2)).ToList();
+                float w = cells.Max(c => c.Width) + 4;
+                s.Headers(cases.Select(c => ((c.Item1 ? "어둡게" : "밝게") + (c.Item2 ? " · 아래" : " · 위"), new[] { "" }, w)).ToArray());
+                s.Row($"{name} · {label}", cells.Select((c, i) => new SheetPanel(cases[i].Item1 ? Dark : Light, w, new List<Bitmap> { c })).ToList());
+            }
         }
 
         s.Section("12. 실험 기능 — 선택 영역 덮어쓰기 표시",
@@ -494,6 +502,7 @@ static class RenderSheet
         public void Section(string title, string note)
         {
             _y += 26;
+            Log.Write($"render-sheet section y={_y:0} '{title}'");   // --debug 일 때 자리를 남겨 전후 비교 그림을 잘라 내기 쉽게
             Text(title, _section, Ink, Margin, _y);
             _y += 26;
             Text(note, _label, Subtle, Margin, _y);
@@ -523,6 +532,7 @@ static class RenderSheet
         {
             float itemsH = panels.SelectMany(p => p.Items).Select(b => (float)b.Height).DefaultIfEmpty(20).Max();
             float h = itemsH + 2 * PanelPad;
+            Log.Write($"render-sheet row y={_y:0} h={h:0} w={panels.Sum(p => p.Width + PanelGap):0} '{label}'");
             var labelSize = _g.MeasureString(label, _label);
             Text(label, _label, Ink, Margin, _y + (h - labelSize.Height) / 2);
 
