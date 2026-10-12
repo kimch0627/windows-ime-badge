@@ -21,6 +21,12 @@ public static class Sonar
     /// <summary>원·끝 윤곽 둘레에 까는 짝 색(흰색 또는 같은 색조의 진한 색)의 알파. 짝 색이 바탕과 3:1 이 되기에 넉넉하다(테스트).</summary>
     public const int PartnerAlpha = 230;
 
+    /// <summary>
+    /// 소나 배율(VW-04): 모니터 배율 × 배지 크기(100~200%). 배지를 키운 사용자에게는 원도 굵고 크게. 작게 줄인 배지에서도 원은 줄이지 않고
+    /// (커서를 찾는 것이 목적), 아주 크게 키운 배지(300%)에서도 원이 화면을 덮지 않게 2배까지만. 글자가 없으므로 텍스트 크기와는 상관없다.
+    /// </summary>
+    public static float Scale(float dpi, int sizePercent) => dpi * Math.Clamp(sizePercent, 100, 200) / 100f;
+
     /// <summary>뒤 원이 앞 원보다 늦게 출발하는 시간(전체에 대한 비율).</summary>
     public const float RingDelay = 0.2f;
 

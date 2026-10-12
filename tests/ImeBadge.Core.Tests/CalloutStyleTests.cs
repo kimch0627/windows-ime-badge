@@ -89,4 +89,16 @@ public sealed class CalloutStyleTests
     [InlineData(1.25f, 5)]
     [InlineData(1.5f, 6)]
     public void StripeWidth_ScalesInWholePixels(float scale, int width) => Assert.Equal(width, CalloutStyle.StripeWidth(scale));
+
+    /// <summary>VW-04: 말풍선은 배지 크기와 Windows 텍스트 크기 중 큰 쪽을 따른다(곱하지 않음). 100% 아래로 줄지 않고 225% 를 넘지 않는다.</summary>
+    [Theory]
+    [InlineData(1f, 100, 100, 1f)]
+    [InlineData(1f, 150, 100, 1.5f)]     // 배지를 키우면 말풍선도
+    [InlineData(1f, 100, 150, 1.5f)]     // 글자를 키우면 말풍선도
+    [InlineData(1f, 150, 150, 1.5f)]     // 둘 다 150% 여도 2.25 배가 되지 않는다
+    [InlineData(1f, 50, 100, 1f)]        // 작은 배지에서도 글자는 줄지 않는다
+    [InlineData(1f, 300, 100, 2.25f)]    // 아주 큰 배지에서도 225% 까지
+    [InlineData(1.5f, 130, 100, 1.95f)]  // 모니터 배율과는 곱한다
+    public void Scale_FollowsBadgeSizeOrTextSize(float dpi, int size, int text, float expected) =>
+        Assert.Equal(expected, CalloutStyle.Scale(dpi, size, text), 3);
 }

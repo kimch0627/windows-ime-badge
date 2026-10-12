@@ -64,6 +64,23 @@ static class Theme
 
     public static Palette Current => Palette.From(IsDark ? Design.Dark : Design.Light, Design.CornerRadius);
 
+    /// <summary>
+    /// Windows 설정 → 접근성 → 텍스트 크기(%, 100~225). 커서 옆 말풍선의 글자가 따른다(<see cref="CalloutStyle.Scale"/>).
+    /// 읽을 수 없으면 100. 바꾸면 다음 말풍선부터 반영된다(그때마다 읽는다).
+    /// </summary>
+    public static int TextScalePercent
+    {
+        get
+        {
+            try
+            {
+                using var k = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Accessibility");
+                return k?.GetValue("TextScaleFactor") is int v ? Math.Clamp(v, 100, CalloutStyle.MaxTextScale) : 100;
+            }
+            catch { return 100; }
+        }
+    }
+
     /// <summary>대화상자 글꼴. 시스템 설정(한국어 Windows 는 맑은 고딕 9pt, 영어는 Segoe UI 9pt)을 따른다.</summary>
     public static Font DialogFont => SystemFonts.MessageBoxFont ?? new Font(BadgeRenderer.FontFamily, 9f);
 

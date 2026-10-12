@@ -1229,7 +1229,7 @@ sealed class BadgeForm : Form, IExperimentHost
         bool hc = SystemInformation.HighContrast;
         var color = hc ? SystemColors.Highlight : state switch { ImeState.Hangul => theme.Hangul, ImeState.English => theme.English, _ => theme.Other };
         var halo = hc ? SystemColors.HighlightText : OverlayRenderer.SonarPartner(color);
-        try { (_sonar ??= new SonarPlayer()).Play(caret, color, halo, AnimationsOn); }
+        try { (_sonar ??= new SonarPlayer()).Play(caret, color, halo, AnimationsOn, _settings.SizePercent); }
         catch (Exception ex) { Log.Error("sonar failed", ex); }
     }
 
@@ -1239,7 +1239,7 @@ sealed class BadgeForm : Form, IExperimentHost
     /// </summary>
     void ShowCallout(string tag, CalloutContent content, Rectangle anchor, int holdMs, bool? preferBelow = null)
     {
-        try { (_callout ??= new CalloutPlayer()).Show(tag, content, anchor, preferBelow ?? CalloutBelow, holdMs, AnimationsOn); }
+        try { (_callout ??= new CalloutPlayer()).Show(tag, content, anchor, preferBelow ?? CalloutBelow, holdMs, AnimationsOn, _settings.SizePercent); }
         catch (Exception ex) { Log.Error("callout failed", ex); }
     }
 

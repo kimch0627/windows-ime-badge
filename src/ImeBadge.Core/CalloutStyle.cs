@@ -51,6 +51,17 @@ public static class CalloutStyle
     /// <summary>테두리 굵기(px). 정수로 맞춰야 125% 에서 1.25px 펜이 2px 짜리 반투명 선으로 번지지 않는다.</summary>
     public static int BorderWidth(float scale) => Math.Max(1, (int)MathF.Round(scale, MidpointRounding.AwayFromZero));
 
+    /// <summary>Windows 접근성 "텍스트 크기"의 범위(%). 설정 앱의 슬라이더가 100~225 다.</summary>
+    public const int MaxTextScale = 225;
+
+    /// <summary>
+    /// 말풍선 배율(VW-04): 모니터 배율 × (배지 크기와 Windows 텍스트 크기 중 큰 쪽). 배지를 키운 사용자·글자를 키운 사용자 모두에게 말풍선이
+    /// 함께 커진다. 둘을 곱하지 않는 것은 150% × 150% 처럼 겹쳐 지나치게 커지지 않게, 100% 아래로 줄이지 않는 것은 배지를 작게 쓰는 사용자에게도
+    /// 안내 글자는 읽혀야 해서다. 위로는 텍스트 크기의 최대(225%)까지.
+    /// </summary>
+    public static float Scale(float dpi, int sizePercent, int textScalePercent) =>
+        dpi * Math.Clamp(Math.Max(sizePercent, textScalePercent), 100, MaxTextScale) / 100f;
+
     /// <summary>테마 팔레트(설정 창 색 한 벌)로 정한 말풍선 색. 고대비 모드는 앱 쪽에서 시스템 색을 그대로 쓴다.</summary>
     public static CalloutColors For(CalloutKind kind, ThemePalette p)
     {

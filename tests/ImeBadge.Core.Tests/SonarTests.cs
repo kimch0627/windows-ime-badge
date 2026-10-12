@@ -74,6 +74,15 @@ public sealed class SonarTests
     public void Ring_IsOpaqueSoonAfterStart() =>
         Assert.Equal(1f, Sonar.Ring(0, 0.05f, Start, End).Alpha);
 
+    /// <summary>VW-04: 소나는 배지 크기를 따르되 100~200% 로 묶는다(작은 배지에서도 원은 그대로, 300% 배지에서도 2배까지).</summary>
+    [Theory]
+    [InlineData(1f, 100, 1f)]
+    [InlineData(1f, 150, 1.5f)]
+    [InlineData(1f, 50, 1f)]
+    [InlineData(1f, 300, 2f)]
+    [InlineData(1.25f, 130, 1.625f)]
+    public void Scale_FollowsBadgeSize(float dpi, int size, float expected) => Assert.Equal(expected, Sonar.Scale(dpi, size), 3);
+
     /// <summary>
     /// VW-03: 밝은 배지색(금색·민트·분홍·코랄)의 원은 짝 색(같은 색조의 진한 색, <see cref="Sonar.PartnerAlpha"/>)이 흰 문서 위에서 3:1 이상이라
     /// 원 윤곽이 보인다. 어두운 바탕에서는 배지색 자체가 3:1 이상이다.

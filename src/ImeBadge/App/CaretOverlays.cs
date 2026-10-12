@@ -92,10 +92,11 @@ sealed class SonarPlayer : IDisposable
     /// <param name="caret">커서 사각형(화면 좌표).</param>
     /// <param name="color">원의 색(지금 한/영 배지 색).</param>
     /// <param name="halo">원 둘레 짝 색(<see cref="OverlayRenderer.SonarPartner"/>). 흰색이면 어두운 화면에서, 진한 색이면 흰 문서에서 원이 보인다.</param>
-    public void Play(Rectangle caret, Color color, Color halo, bool animate)
+    /// <param name="sizePercent">배지 크기 설정. 원의 크기·굵기가 따른다(<see cref="Sonar.Scale"/>).</param>
+    public void Play(Rectangle caret, Color color, Color halo, bool animate, int sizePercent = 100)
     {
         _caret = caret; _color = color; _halo = halo; _animate = animate; _stillShown = false;
-        _scale = Native.DpiScaleAt(caret.Location);
+        _scale = Sonar.Scale(Native.DpiScaleAt(caret.Location), sizePercent);
         _start = Environment.TickCount64;
         _timer.Start();
         Frame();
@@ -154,9 +155,10 @@ sealed class CalloutPlayer : IDisposable
     /// <param name="anchor">가리킬 커서 사각형(화면 좌표).</param>
     /// <param name="preferBelow">자리가 있으면 커서 아래에(배지가 커서 위에 있을 때).</param>
     /// <param name="holdMs">보이는 시간. 0 이하면 <see cref="Hide"/> 할 때까지.</param>
-    public void Show(string tag, CalloutContent content, Rectangle anchor, bool preferBelow, int holdMs, bool animate)
+    /// <param name="sizePercent">배지 크기 설정. Windows 텍스트 크기와 함께 말풍선 크기를 정한다(<see cref="CalloutStyle.Scale"/>).</param>
+    public void Show(string tag, CalloutContent content, Rectangle anchor, bool preferBelow, int holdMs, bool animate, int sizePercent = 100)
     {
-        float scale = Native.DpiScaleAt(anchor.Location);
+        float scale = CalloutStyle.Scale(Native.DpiScaleAt(anchor.Location), sizePercent, Theme.TextScalePercent);
         var body = OverlayRenderer.MeasureCallout(content, scale);
         var area = Screen.FromPoint(anchor.Location).WorkingArea;
         var place = CalloutLayout.Compute(anchor, body, OverlayRenderer.TailHeight(scale), (int)Math.Round(3 * scale), area, preferBelow,
