@@ -83,6 +83,12 @@ sealed class TrayIcons : IDisposable
                 using var edge = new Pen(hc.Edge, 1f);
                 g.DrawPath(edge, path);
             }
+            else if (ColorHex.OuterRimAlpha(color.ToArgb()) is > 0 and int rim)
+            {
+                // 어두운 배지색(진회색·네이비)은 어두운 작업 표시줄에 묻힌다. 배지의 바깥 흰 림과 같은 기준으로, 칸 안쪽 가장자리에 옅은 흰 선.
+                using var edge = new Pen(Color.FromArgb(rim, Color.White), 1f);
+                g.DrawPath(edge, path);
+            }
 
             // 글자는 상자의 약 70%. "한"은 획이 많아 "A"보다 조금 작게 그려야 16px 에서 뭉개지지 않는다.
             float px = size * (text == "A" ? 0.78f : 0.68f);

@@ -321,6 +321,27 @@ static class BadgeRenderer
         g.FillPath(core, shadow);
     }
 
+    /// <summary>바깥 림 굵기(px). 1px 미만이면 흐려져 보이지 않는다.</summary>
+    static float OuterRimWidth(float scale) => Math.Max(1f, scale);
+
+    /// <summary>
+    /// 바깥 흰 림(UX-01): 어두운 배지(진회색·네이비·초콜릿)가 어두운 편집기 바탕에서 묻히지 않게 윤곽 바깥에 옅은 흰 선을 두른다.
+    /// 둘러야 하는지와 짙기는 <see cref="ColorHex.OuterRimAlpha"/> 가 정한다(밝은 배지는 그리지 않음). 테두리(<paramref name="edge"/> 굵기,
+    /// 경로 가운데에 걸침) 바깥으로 <paramref name="rim"/> 만큼 보이게 굵은 선을 긋되, 배지 안쪽은 잘라 낸다: 반투명 배지 안으로 비치지 않는다.
+    /// 그림자보다 나중에, 채우기 전에 그린다. 고대비는 시스템 색 테두리가 윤곽을 맡으므로 그리지 않는다.
+    /// </summary>
+    static void DrawOuterRim(Graphics g, GraphicsPath path, float rim, float edge, Color fill, in BadgeTheme theme)
+    {
+        if (theme.Contrast is not null) return;
+        int alpha = ColorHex.OuterRimAlpha(fill.ToArgb());
+        if (alpha == 0) return;
+        var state = g.Save();
+        using (var inside = new Region(path)) g.ExcludeClip(inside);
+        using var pen = new Pen(Color.FromArgb(alpha, Color.White), edge + 2 * rim) { LineJoin = LineJoin.Round };
+        g.DrawPath(pen, path);
+        g.Restore(state);
+    }
+
     /// <summary>
     /// 지름 9px(배율 1)의 점. 특수 키 표시는 점 아래 한 줄에 그린다(<see cref="DrawMarksBelow"/>). 표시 자리(아래
     /// <see cref="BadgeLayout.Tail"/>, 좌우 <see cref="BadgeLayout.Side"/>)는 표시가 없어도 비워 두어, 표시가 생기고 사라져도
@@ -337,8 +358,9 @@ static class BadgeRenderer
             using var path = new GraphicsPath();
             path.AddEllipse(rect);
             DrawShadow(g, path, scale, color, theme);
-            using var brush = FillBrush(color, rect, theme);
             float line = Math.Max(1f, scale);   // 테두리와 림의 굵기
+            DrawOuterRim(g, path, OuterRimWidth(scale), line, color, theme);
+            using var brush = FillBrush(color, rect, theme);
             using var pen = OutlinePen(color, line, theme, 2 * line);
             g.FillPath(brush, path);
             g.DrawPath(pen, path);
@@ -368,6 +390,7 @@ static class BadgeRenderer
             var rect = new RectangleF(side + pad, 0, w, h);
             using var path = RoundedRect(rect, h / 2f);
             DrawShadow(g, path, scale, color, theme);
+            DrawOuterRim(g, path, OuterRimWidth(scale), 0f, color, theme);   // 막대 위쪽은 캔버스 끝이라 잘리고, 좌우·아래에 보인다
             using var brush = new SolidBrush(color);
             g.FillPath(brush, path);
             float line = Math.Max(1f, MathF.Floor(scale));   // 정수 px 라 흐려지지 않고, 150%(막대 4px)에서도 1px 에 그친다
@@ -432,6 +455,7 @@ static class BadgeRenderer
             path.AddRectangle(new RectangleF(MathF.Round(cx + inner), bottom - triH, triH, triH));
         DrawShadow(g, path, scale, fill, theme);
         float line = Math.Max(1f, scale);
+        DrawOuterRim(g, path, OuterRimWidth(scale), line, fill, theme);
         using (var edge = OutlinePen(fill, line, theme, 2 * line)) { edge.LineJoin = LineJoin.Round; g.DrawPath(edge, path); }
         using var brush = new SolidBrush(fill);
         g.FillPath(brush, path);
@@ -508,6 +532,7 @@ static class BadgeRenderer
             float radius = rounded ? (h - 1) / 2f : 3 * scale;
             using var path = RoundedRect(rect, radius);
             DrawShadow(g, path, scale, color, theme);
+            DrawOuterRim(g, path, OuterRimWidth(scale), 1f, color, theme);
             using var brush = FillBrush(color, rect, theme);
             using var pen = OutlinePen(color, 1f, theme, 2 * Math.Max(1f, scale));
             g.FillPath(brush, path);
@@ -630,6 +655,7 @@ static class BadgeRenderer
             // 테두리를 먼저 굵게 그리고 그 위를 채우면 바깥 절반만 남아, 겹친 원(구름)의 안쪽 선이 보이지 않는다.
             // 고대비는 바깥으로 보이는 절반이 1.6 단위(배율 1 에서 약 1.6px)가 되게 굵게.
             bool hc = theme.Contrast is not null;
+            DrawOuterRim(g, body, OuterRimWidth(scale) / scale, star ? 4f : 1.6f, color, theme);   // 확대 변환 안이라 단위로 준다
             using (var edge = OutlinePen(color, 1.6f, theme, 3.2f)) { edge.LineJoin = LineJoin.Round; if (star) edge.Width = hc ? 5.6f : 4f; g.DrawPath(edge, body); }
             if (star) { using var round = new Pen(brush, 2.4f) { LineJoin = LineJoin.Round }; g.DrawPath(round, body); }
             g.FillPath(brush, body);
