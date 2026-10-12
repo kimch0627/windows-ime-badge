@@ -61,6 +61,9 @@ static class Program
             // 개발 빌드가 뜬다. (자동 업그레이드도 같은 이유로 개발 빌드에서는 하지 않는다)
             if (!AppVersion.IsDevBuild) Autostart.RefreshIfEnabled();
 
+            // 처음 실행이면 곧 설정 창을 연다. 실행해 준 쪽(탐색기·설치 프로그램)에게서 받은 "창을 앞으로 가져올 권리"는
+            // 배지 창이 처음 보일 때 사라지므로, 지금 스스로에게 넘겨 둔다. (안 하면 설정 창이 다른 창 뒤에서 열린다)
+            if (firstRun) Native.AllowSetForegroundWindow(Environment.ProcessId);
             Application.Run(new BadgeForm(settings, store, paths, firstRun));
         }
         catch (Exception ex)

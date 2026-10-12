@@ -77,7 +77,17 @@ abstract class ThemedControl : Control
     {
         if (!Focused || !ShowFocusCues) return;
         r.Inflate(Px(2), Px(2));
-        using var path = Rounded(r, radius + Px(2));
+        // 컨트롤 테두리에 붙은 사각형(단추·고르기 상자·쉐브론)은 부풀리면 밖으로 나가 잘리고 모서리 점만 남았다(실기 확인).
+        // 2px 선이 통째로 보이도록 컨트롤 안쪽으로 당긴다. 여유가 있는 곳(토글·슬라이더 손잡이)은 그대로다.
+        float half = Px(2) / 2f;
+        var inside = RectangleF.FromLTRB(half, half, Width - half, Height - half);
+        if (!inside.Contains(r))
+        {
+            r = RectangleF.Intersect(r, inside);
+            radius = Math.Max(0, radius - Px(2));
+        }
+        else radius += Px(2);
+        using var path = Rounded(r, radius);
         using var pen = new Pen(Palette.Text, Px(2));
         g.DrawPath(pen, path);
     }

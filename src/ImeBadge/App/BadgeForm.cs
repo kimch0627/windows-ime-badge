@@ -203,16 +203,15 @@ sealed class BadgeForm : Form, IExperimentHost
         // 첫 실행 안내와 업데이트 확인은 창이 준비된 뒤 잠깐 있다가. (핸들이 다시 만들어져도 한 번만)
         if (_startupScheduled) return;
         _startupScheduled = true;
+        // 처음 실행: 설정 창은 곧바로 연다. 실행해 준 쪽(탐색기·설치 프로그램)에게서 받은 "창을 앞으로 가져올 권리"는 실행 직후에만
+        // 통해서, 몇 초 뒤에 열면 창이 다른 창 뒤에 깔리고 작업 표시줄 단추만 깜빡였다(실기 확인).
+        if (_firstRun) BeginInvoke(() => OpenSettings(SettingsPage.Appearance));
         var once = new System.Windows.Forms.Timer { Interval = 3000 };
         once.Tick += (_, _) =>
         {
             once.Dispose();
-            if (_firstRun)
-            {
-                // 트레이 아이콘은 Windows 11 에서 처음에 ^ 안에 숨으므로 풍선만으로는 어디를 눌러야 할지 모른다. 설정 창을 직접 연다.
-                _tray.ShowBalloonTip(8000, AppInfo.DisplayName, Strings.Get("app.firstRun"), ToolTipIcon.Info);
-                OpenSettings(SettingsPage.Appearance);
-            }
+            // 트레이 아이콘은 Windows 11 에서 처음에 ^ 안에 숨으므로 풍선만으로는 어디를 눌러야 할지 모른다. 그래서 설정 창도 함께 연다(위).
+            if (_firstRun) _tray.ShowBalloonTip(8000, AppInfo.DisplayName, Strings.Get("app.firstRun"), ToolTipIcon.Info);
             if (UpdateChecker.IsDue(_settings)) CheckForUpdates(manual: false);
         };
         once.Start();

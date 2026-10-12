@@ -37,6 +37,7 @@ sealed class SettingsForm : Form
     readonly IExperimentHost _experiments;
     readonly bool _builtKorean = Strings.IsKorean;   // 이 창을 만들 때의 언어. 바뀌면 새 창으로 갈아 끼운다
     bool _autostart, _originalAutostart, _dirty, _loading, _detached;
+    string? _originalAutostartCommand;   // 창을 열 때 Run 키에 적혀 있던 명령. [되돌리기]가 경로까지 그대로 되살린다
     AccentButton _revert = null!;
     /// <summary>값이 바뀐 뒤 저장할 때까지 기다리는 시간. 슬라이더를 끄는 동안 파일을 수십 번 쓰지 않게 마지막 변경 뒤 한 번 저장한다.</summary>
     const int SaveDelayMs = 400;
@@ -128,6 +129,7 @@ sealed class SettingsForm : Form
         _experiments = experiments;
         _autostart = Autostart.IsEnabled();
         _originalAutostart = _autostart;
+        _originalAutostartCommand = Autostart.ReadCommand();
 
         Text = Strings.Format("settings.title", AppInfo.ProductName);
         Icon = Icons.App;
@@ -171,7 +173,7 @@ sealed class SettingsForm : Form
     {
         var next = new SettingsForm(_live, _original, _dirty, _paths, _checkUpdates, _experiments, CurrentPage)
         {
-            _autostart = _autostart, _originalAutostart = _originalAutostart,
+            _autostart = _autostart, _originalAutostart = _originalAutostart, _originalAutostartCommand = _originalAutostartCommand,
         };
         next._autostartBox.Checked = _autostart;
         next.UpdateHint();
@@ -1141,9 +1143,9 @@ sealed class SettingsForm : Form
     void Revert()
     {
         _draft.CopyFrom(_original);
-        if (_autostart != _originalAutostart)
+        if (_autostart != _originalAutostart || Autostart.ReadCommand() != _originalAutostartCommand)
         {
-            if (Autostart.Set(_originalAutostart)) _autostart = _originalAutostart;
+            if (Autostart.Restore(_originalAutostartCommand)) _autostart = _originalAutostart;
             else Dialogs.Warning(Strings.Get("autostart.failed"), Strings.Get("autostart.failed.text"));
         }
         LoadDraftIntoControls();   // Touch 가 저장을 예약한다

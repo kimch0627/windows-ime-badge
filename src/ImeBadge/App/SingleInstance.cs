@@ -28,6 +28,8 @@ sealed class SingleInstance : IDisposable
     /// 배지 창(BadgeForm)은 작업 표시줄에 뜨지 않도록 WinForms 가 다른 숨은 창의 "소유 창"으로 만든다. HWND_BROADCAST 는
     /// 숨겨진 소유 창에는 메시지를 보내지 않아서, 배지가 숨어 있는 동안(글자를 입력하지 않는 대부분의 시간)은 알림이 닿지 않았다.
     /// 그래서 최상위 창을 돌며 이름이 "ImeBadge" 인 WinForms 창(다른 프로세스의 배지 창)을 찾아 직접 보낸다. 못 찾으면 예전처럼 broadcast.
+    /// 보내기 전에 그 프로세스에 "창을 앞으로 가져와도 된다"고 허락한다. 바로 가기를 누른 사용자의 권리는 이 두 번째 프로세스가 받았으므로,
+    /// 넘겨주지 않으면 떠 있던 인스턴스의 설정 창이 다른 창 뒤에서 열리고 작업 표시줄 단추만 깜빡인다.
     /// </summary>
     public static void NotifyExisting()
     {
@@ -40,12 +42,24 @@ sealed class SingleInstance : IDisposable
             if (Native.GetWindowText(h, title, title.Capacity) > 0 && title.ToString() == AppInfo.ProductName
                 && Native.ClassName(h).StartsWith("WindowsForms10.", StringComparison.Ordinal)
                 && Native.GetWindowThreadProcessId(h, out uint pid) != 0 && pid != self
+                && AllowForeground(pid)
                 && Native.PostMessage(h, ShowSettingsMessage, IntPtr.Zero, IntPtr.Zero))
                 sent++;
             return true;
         }, IntPtr.Zero);
         Log.Write($"notify existing: posted to {sent} window(s)");
-        if (sent == 0) Native.PostMessage(Native.HWND_BROADCAST, ShowSettingsMessage, IntPtr.Zero, IntPtr.Zero);
+        if (sent == 0)
+        {
+            Native.AllowSetForegroundWindow(Native.ASFW_ANY);
+            Native.PostMessage(Native.HWND_BROADCAST, ShowSettingsMessage, IntPtr.Zero, IntPtr.Zero);
+        }
+    }
+
+    /// <summary>허락이 거절돼도(권리가 없을 때) 메시지는 보낸다. 그래서 늘 true.</summary>
+    static bool AllowForeground(uint pid)
+    {
+        if (!Native.AllowSetForegroundWindow((int)pid)) Log.Write("AllowSetForegroundWindow denied");
+        return true;
     }
 
     public void Dispose()

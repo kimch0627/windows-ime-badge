@@ -278,7 +278,7 @@ public static class Strings
 
         // ── 시작하기 안내 (모양 페이지 맨 위, 첫 실행) ──
         ["start.title"] = "시작하기",
-        ["start.desc"] = "① 메모장을 열고 한/영 키를 눌러 보세요. 커서 옆 배지가 한 ↔ a 로 바뀝니다.\n② 트레이 아이콘은 작업 표시줄 오른쪽 끝의 ^ 안에 숨어 있을 수 있습니다. 작업 표시줄로 끌어다 놓으면 한/영 상태가 늘 보입니다.\n③ 화면 공유처럼 잠깐 끄려면 {0} 를 누르세요.\n설정은 바꾸는 즉시 저장됩니다.",
+        ["start.desc"] = "① 메모장을 열고 한/영 키를 눌러 보세요. 커서 옆 배지가 한 ↔ a 로 바뀝니다.\n② 트레이 아이콘은 작업 표시줄 오른쪽 끝 ^ 안에 숨어 있을 수 있습니다. 늘 보이게 하려면 작업 표시줄로 끌어다 놓거나, 아래 단추로 설정을 열어 \"기타 시스템 트레이 아이콘\" 에서 ImeBadge 를 켜세요.\n③ 화면 공유처럼 잠깐 끄려면 {0} 를 누르세요.\n설정은 바꾸는 즉시 저장됩니다.",
         ["start.noHotkey"] = "트레이 메뉴의 [일시 중지]",
         ["start.taskbar"] = "작업 표시줄 설정 열기",
         ["start.taskbar.tip"] = "Windows 설정의 작업 표시줄 페이지를 엽니다. \"기타 시스템 트레이 아이콘\" 에서 ImeBadge 를 켜면 아이콘이 늘 보입니다.",
@@ -507,7 +507,7 @@ public static class Strings
         ["settings.revert"] = "Revert",
         ["settings.revert.tip"] = "Go back to the settings you had when you opened this window.",
         ["settings.hint.clean"] = "Changes apply to the badge and are saved right away.",
-        ["settings.hint.dirty"] = "Saved. Revert goes back to how things were when you opened this window.",
+        ["settings.hint.dirty"] = "Saved. Revert undoes changes since this window opened.",
         ["toggle.on"] = "On",
         ["toggle.off"] = "Off",
         ["card.more"] = "More info",
@@ -647,7 +647,7 @@ public static class Strings
 
         // ── Getting started (top of the Appearance page, first run) ──
         ["start.title"] = "Getting started",
-        ["start.desc"] = "① Open Notepad and press the Korean/English key. The badge next to the caret switches between 한 and a.\n② The tray icon may be hidden under the ^ at the right end of the taskbar. Drag it onto the taskbar to always see the mode.\n③ To turn the badge off for a while, such as during screen sharing, press {0}.\nSettings are saved as soon as you change them.",
+        ["start.desc"] = "① Open Notepad and press the Korean/English key. The badge next to the caret switches between 한 and a.\n② The tray icon may be hidden under the ^ at the right end of the taskbar. To always see it, drag it onto the taskbar, or use the button below and turn ImeBadge on under \"Other system tray icons\".\n③ To turn the badge off for a while, such as during screen sharing, press {0}.\nSettings are saved as soon as you change them.",
         ["start.noHotkey"] = "Pause in the tray menu",
         ["start.taskbar"] = "Open taskbar settings",
         ["start.taskbar.tip"] = "Opens the Taskbar page in Windows Settings. Turn ImeBadge on under \"Other system tray icons\" to always see the icon.",

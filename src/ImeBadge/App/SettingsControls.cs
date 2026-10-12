@@ -910,6 +910,25 @@ sealed class CardStack : Panel
     public void ScrollToTop() => AutoScrollPosition = Point.Empty;
 
     /// <summary>
+    /// Tab 으로 들어온 컨트롤을 보이게 스크롤할 때 그 컨트롤만이 아니라 감싼 카드(제목·설명)까지 들어오게 한다.
+    /// 기본 동작은 토글·단추만 보이게 해서, 카드 제목이 위쪽 경계에 반쯤 잘린 채 포커스가 오기도 했다(실기 확인).
+    /// 카드가 보이는 영역보다 크면 기본 동작을 따른다. 마우스로 누른 경우는 아예 스크롤하지 않는다: 반쯤 가려진 카드의 슬라이더를
+    /// 끌기 시작하자마자 페이지가 움직여 손잡이가 포인터에서 달아났다(실기 확인). 누른 곳은 이미 보이는 곳이다.
+    /// </summary>
+    protected override Point ScrollToControl(Control activeControl)
+    {
+        if (MouseButtons != MouseButtons.None) return AutoScrollPosition;
+        var card = activeControl;
+        while (card.Parent is { } p && p != this) card = p;
+        if (card.Parent != this || card.Height + 2 * Px(CardGap) > ClientSize.Height) return base.ScrollToControl(activeControl);
+        var pos = AutoScrollPosition;   // 스크롤한 만큼 음수
+        int y = pos.Y;
+        if (card.Top < 0) y += Px(CardGap) - card.Top;
+        else if (card.Bottom > ClientSize.Height) y -= card.Bottom - ClientSize.Height + Px(CardGap);
+        return new Point(pos.X, Math.Min(0, y));
+    }
+
+    /// <summary>
     /// 카드 열의 왼쪽 위치와 폭(물리 픽셀). 스크롤바 자리는 늘 비워 둔다: 스크롤바가 있는 페이지와 없는 페이지를 오갈 때
     /// 카드 오른쪽 끝이 흔들리지 않는다. 고정한 카드(<see cref="PinnedCardHost"/>)도 이 열에 맞춰 아래 카드들과 줄이 맞는다.
     /// 폭은 패널 안쪽을 넘지 않는다. 숨겨 둔 페이지는 처음 보일 때 잠깐 기본 크기(200px)로 배치되는데, 그때 카드가 패널 밖으로
