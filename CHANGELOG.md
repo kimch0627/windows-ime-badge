@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [1.16.1] - 2026-10-13
+
+실험 기능의 **경고 말풍선이 포커스가 떠난 자리에 남아 있던 문제**를 고친 릴리스입니다. 설정 항목과 설정 파일은 그대로입니다.
+
 ### 변경
 - **실험 기능의 경고 말풍선이 포커스가 벗어나면 바로 사라집니다.** 비밀번호 칸 경고는 비밀번호 칸을 벗어나면(다른 칸·창으로 옮기거나 입력칸 밖을 눌러
   배지가 사라지면), 포커스 뺏김 경고는 다른 창으로 옮기면(Alt+Tab 으로 돌아가는 등) 페이드 없이 바로 내려갑니다. 예전에는 배지는 이미 사라졌는데
@@ -634,7 +638,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.16.0...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.16.1...HEAD
+[1.16.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.16.0...v1.16.1
 [1.16.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.15.1...v1.16.0
 [1.15.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.15.0...v1.15.1
 [1.15.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.14.0...v1.15.0
