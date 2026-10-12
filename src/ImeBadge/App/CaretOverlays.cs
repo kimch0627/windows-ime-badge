@@ -183,12 +183,15 @@ sealed class CalloutPlayer : IDisposable
         Tick();
     }
 
-    /// <summary><paramref name="tag"/> 가 띄운 말풍선이면 내린다(서서히). null 이면 무엇이든.</summary>
-    public void Hide(string? tag = null)
+    /// <summary>
+    /// <paramref name="tag"/> 가 띄운 말풍선이면 내린다(서서히). null 이면 무엇이든. <paramref name="immediate"/> 면 페이드 없이 바로
+    /// (포커스가 경고의 자리를 벗어났을 때: 이미 떠난 칸에 대한 경고가 남아 보이지 않게).
+    /// </summary>
+    public void Hide(string? tag = null, bool immediate = false)
     {
         if (Tag is null || (tag is not null && tag != Tag)) return;
         long now = Environment.TickCount64;
-        if (!_animate) { Stop(); return; }
+        if (!_animate || immediate) { Stop(); return; }
         if (_hideAt > now) _hideAt = now;
         _timer.Start();   // 내릴 때까지 그대로였으면 쉬고 있었다
     }
