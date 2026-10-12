@@ -114,7 +114,12 @@ static class Theme
     public static void Apply(Form form)
     {
         if (SystemInformation.HighContrast) return;
-        var p = Current;
+        Apply(form, Current);
+    }
+
+    /// <summary>정한 팔레트로 칠한다(확인 시트가 밝게/어둡게를 나란히 그릴 때). 고대비 판단은 부르는 쪽이 한다.</summary>
+    public static void Apply(Form form, Palette p)
+    {
         form.BackColor = p.Window;
         form.ForeColor = p.Text;
         foreach (Control c in form.Controls) Walk(c, p, p.Window);

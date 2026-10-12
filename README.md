@@ -198,7 +198,8 @@ src/ImeBadge/           Windows 앱
   App/UpdateProgressForm.cs  내려받기·적용 진행 창(진행 막대)
   App/Icons.cs          포함 아이콘 로드
   App/TrayIcons.cs      상태별 트레이 아이콘("한"/"A"/일시 중지)을 GDI+ 로 그려 캐시
-  App/Dialogs.cs        TaskDialog 래퍼 (실패하면 MessageBox 로 대체)
+  App/Dialogs.cs        대화상자: 테마를 입힌 ThemedDialog → (고대비·실패 시) TaskDialog → MessageBox
+App/ThemedDialog.cs   설정 창 테마를 입힌 대화상자(아이콘·제목·본문·명령 링크·자세히 펼침)
   App/Labels.cs         트레이 메뉴·설정 창이 함께 쓰는 문구·프리셋
   App/Theme.cs          밝게/어둡게 테마 감지·적용(디자인 토큰), 아이콘 글꼴, 평면 메뉴 렌더러, 메뉴 글리프 아이콘
   App/Controls.cs       직접 그리는 컨트롤: 토글 스위치, 강조색 슬라이더, 기본/보조 버튼, 타일 선택기, 색 견본 팔레트
@@ -373,6 +374,8 @@ caret 좌표와 배지 위치가 어긋납니다.
 `DwmSetWindowAttribute(DWMWA_USE_IMMERSIVE_DARK_MODE)` 로 요청합니다. 설정 창의 카드(`SettingsCard`)는 Windows 11 설정 카드 모양
 (아이콘·제목·설명 + 둥근 테두리)으로 직접 그리고, 어두운 테마에서는 페이지 스크롤바도 `SetWindowTheme("DarkMode_Explorer")` 로 어둡게 합니다.
 트레이 메뉴와 고르기 상자의 목록은 `FlatMenuRenderer` 가 그라데이션 없는 평면으로 그리고, Windows 11 에서는 `DWMWA_WINDOW_CORNER_PREFERENCE` 로 모서리를 둥글게 합니다.
+단축키 등록 실패·업데이트 결과·설정 가져오기 같은 대화상자도 같은 테마를 입힌 `ThemedDialog`(TaskDialog 와 같은 구성: 아이콘·굵은 제목·본문·명령 링크·"자세히" 펼침)로 띄웁니다.
+고대비 모드에서는 시스템이 그리는 TaskDialog 를 그대로 쓰고, 프로그램이 끝나는 치명적 오류 안내는 늘 TaskDialog 입니다.
 고대비 모드에서는 아무 색도 입히지 않고 시스템 색을 그대로 씁니다.
 
 설정 창의 토글·슬라이더·버튼·타일·색 견본·고르기 상자는 `ThemedControl` 자손이 직접 그리고(`App/Controls.cs`, `App/SettingsControls.cs`),

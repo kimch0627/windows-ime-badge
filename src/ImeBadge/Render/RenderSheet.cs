@@ -314,7 +314,52 @@ static class RenderSheet
             });
         }
 
+        // 13. 대화상자 (VW-12)
+        s.Section("13. 대화상자",
+            "설정 창과 같은 테마를 입힌 대화상자. 화면 밖에 띄워 그린 것이라 제목 표시줄은 실제와 다를 수 있다. 고대비 모드는 Windows 의 TaskDialog 를 그대로 쓴다.");
+        var dialogs = new (string Name, Func<bool, ThemedDialog> Make)[]
+        {
+            ("정보", d => new ThemedDialog(Strings.Get("update.latest"), Strings.Format("update.currentLatest", "1.15.1", "v1.15.1"), DialogKind.Info, dark: d)),
+            ("주의 · 자세히 펼침", d =>
+            {
+                var dialog = new ThemedDialog(Strings.Format("hotkey.failed", "Ctrl+Alt+J"), Strings.Get("hotkey.failed.text"), DialogKind.Warning,
+                    "System.ComponentModel.Win32Exception: 핫 키가 이미 등록되어 있습니다.", dark: d);
+                dialog.ExpandDetails();
+                return dialog;
+            }),
+            ("고르기(명령 링크)", d => new ThemedDialog(Strings.Format("update.offer.heading", "v1.16.0"), Strings.Format("update.offer.text", "1.15.1"), DialogKind.Info,
+                commands: new (string, string?)[]
+                {
+                    (Strings.Get("update.upgrade"), Strings.Get("update.upgrade.note")), (Strings.Get("update.open"), Strings.Get("update.open.note")),
+                    (Strings.Get("update.later"), Strings.Get("update.later.note")), (Strings.Get("update.skip"), Strings.Format("update.skip.note", "v1.16.0")),
+                }, dark: d)),
+        };
+        foreach (var (name, make) in dialogs)
+        {
+            var cells = new[] { false, true }.Select(d => DialogCell(make(d))).ToList();
+            float w = cells.Max(c => c.Width) + 4;
+            s.Headers(new[] { ("밝게", new[] { "" }, w), ("어둡게", new[] { "" }, w) });
+            s.Row(name, cells.Select((c, i) => new SheetPanel(Color.FromArgb(0xE0, 0xE0, 0xE0), w, new List<Bitmap> { c })).ToList());
+        }
+
         return s.Finish();
+    }
+
+    /// <summary>대화상자를 화면 밖에 띄워 그림으로 뜬다(WM_PRINT). 창을 보이지 않는 곳에 잠깐 만들었다 닫는다.</summary>
+    static Bitmap DialogCell(ThemedDialog dialog)
+    {
+        using (dialog)
+        {
+            dialog.StartPosition = System.Windows.Forms.FormStartPosition.Manual;
+            dialog.Location = new Point(-32000, -32000);
+            dialog.ShowInTaskbar = false;
+            dialog.Show();
+            dialog.PerformLayout();
+            var bmp = new Bitmap(dialog.Width, dialog.Height, PixelFormat.Format32bppArgb);
+            dialog.DrawToBitmap(bmp, new Rectangle(Point.Empty, bmp.Size));
+            dialog.Close();
+            return bmp;
+        }
     }
 
     static Size SonarCellSize(float scale)
