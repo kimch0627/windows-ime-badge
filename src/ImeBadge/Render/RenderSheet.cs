@@ -336,7 +336,7 @@ static class RenderSheet
         };
         foreach (var (name, make) in dialogs)
         {
-            var cells = new[] { false, true }.Select(d => DialogCell(make(d))).ToList();
+            var cells = new[] { false, true }.Select(d => DialogCellOrNote(() => make(d))).ToList();
             float w = cells.Max(c => c.Width) + 4;
             s.Headers(new[] { ("밝게", new[] { "" }, w), ("어둡게", new[] { "" }, w) });
             s.Row(name, cells.Select((c, i) => new SheetPanel(Color.FromArgb(0xE0, 0xE0, 0xE0), w, new List<Bitmap> { c })).ToList());
@@ -358,6 +358,25 @@ static class RenderSheet
             var bmp = new Bitmap(dialog.Width, dialog.Height, PixelFormat.Format32bppArgb);
             dialog.DrawToBitmap(bmp, new Rectangle(Point.Empty, bmp.Size));
             dialog.Close();
+            return bmp;
+        }
+    }
+
+    /// <summary>
+    /// 대화상자 칸. 창을 만들 수 없는 환경(데스크톱이 없는 CI 세션 등)이면 시트 전체를 실패시키지 않고 그 사실을 적은 칸으로 대신한다.
+    /// </summary>
+    static Bitmap DialogCellOrNote(Func<ThemedDialog> make)
+    {
+        try { return DialogCell(make()); }
+        catch (Exception ex)
+        {
+            Log.Error("render-sheet: dialog cell failed", ex);
+            var bmp = new Bitmap(360, 60, PixelFormat.Format32bppArgb);
+            using var g = Graphics.FromImage(bmp);
+            g.Clear(Color.White);
+            g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+            using var font = new Font(BadgeRenderer.FontFamily, 12, GraphicsUnit.Pixel);
+            g.DrawString("대화상자를 그리지 못함: " + ex.GetType().Name, font, Brushes.DarkRed, new RectangleF(8, 8, 344, 44));
             return bmp;
         }
     }
