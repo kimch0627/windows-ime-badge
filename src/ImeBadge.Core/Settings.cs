@@ -479,4 +479,29 @@ public static class ColorHex
             if (ContrastRatio(Over(White, a, DarkEditorBackground), DarkEditorBackground) >= OutlineContrast) return a;
         return 255;
     }
+
+    /// <summary>밝은 문서 바탕(흰 문서·웹 페이지). 배지 윤곽이 이 위에서도 보여야 한다.</summary>
+    public const int LightDocumentBackground = unchecked((int)0xFFFFFFFF);
+
+    /// <summary>
+    /// 배지 바깥 어두운 림의 색: 배지색을 같은 색조로 진하게 한 색(금색 → 짙은 갈색, 민트 → 짙은 청록). 검정 선보다 배지와 어울린다.
+    /// </summary>
+    public static int OuterShadeColor(int fill) => Darken(fill | unchecked((int)0xFF000000), 0.35);
+
+    /// <summary>
+    /// 배지 바깥 어두운 림의 알파(0 = 림 없음, VW-07). <see cref="OuterRimAlpha"/>(UX-01)의 거울상이다: 배지색이 흰 문서
+    /// (<see cref="LightDocumentBackground"/>)와 <see cref="OutlineContrast"/> 에 못 미치면(금색·민트·파스텔 배지) 윤곽 바깥에
+    /// <see cref="OuterShadeColor"/> 선을 둘러 흰 바탕에서도 모양이 보이게 한다. 알파는 그 선이 흰 바탕 위에서 3:1 이 되는 가장 낮은 값이라
+    /// 어두운 편집기 위에서는 거의 보이지 않는다. 흰 림과 어두운 림이 함께 필요한 색은 없다(흰 바탕과 3:1 이 안 되는 밝은 색은
+    /// 어두운 편집기와는 3:1 이 넘는다).
+    /// </summary>
+    public static int OuterShadeAlpha(int fill)
+    {
+        int c = fill | unchecked((int)0xFF000000);
+        if (ContrastRatio(c, LightDocumentBackground) >= OutlineContrast) return 0;
+        int ink = OuterShadeColor(c);
+        for (int a = 1; a < 255; a++)
+            if (ContrastRatio(Over(ink, a, LightDocumentBackground), LightDocumentBackground) >= OutlineContrast) return a;
+        return 255;
+    }
 }

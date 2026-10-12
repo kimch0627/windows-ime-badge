@@ -4,17 +4,24 @@ using System.Windows.Forms;
 namespace ImeBadge;
 
 /// <summary>
-/// 사용자에게 보여 주는 대화상자. Windows Vista 이후의 <see cref="TaskDialog"/>(제목 줄 + 본문 + 명령 링크 + "자세히" 펼침)를 쓰고,
-/// 어떤 이유로든 실패하면(비 UI 스레드, 시각 스타일 없음) 예전 <see cref="MessageBox"/> 로 물러난다.
+/// 사용자에게 보여 주는 대화상자. 설정 창과 같은 테마를 입힌 <see cref="ThemedDialog"/>(VW-12)를 쓰고, 고대비 모드이거나 실패하면
+/// Windows 의 <see cref="TaskDialog"/>(제목 줄 + 본문 + 명령 링크 + "자세히" 펼침), 그것도 실패하면(비 UI 스레드, 시각 스타일 없음)
+/// 예전 <see cref="MessageBox"/> 로 물러난다. 치명적 오류(<see cref="Fatal"/>)는 앱이 망가진 상태일 수 있어 늘 TaskDialog 부터.
 /// 비유하면 MessageBox 는 쪽지, TaskDialog 는 제목이 있는 편지다.
 /// </summary>
 static class Dialogs
 {
     public static void Info(string heading, string? text = null) =>
-        Show(heading, text, TaskDialogIcon.Information, MessageBoxIcon.Information);
+        Show(heading, text, DialogKind.Info, TaskDialogIcon.Information, MessageBoxIcon.Information);
 
     public static void Warning(string heading, string? text = null, string? details = null) =>
-        Show(heading, text, TaskDialogIcon.Warning, MessageBoxIcon.Warning, details);
+        Show(heading, text, DialogKind.Warning, TaskDialogIcon.Warning, MessageBoxIcon.Warning, details);
+
+    /// <summary>테마를 입힌 대화상자를 쓸까. 고대비 모드는 시스템이 그리는 TaskDialog 가 사용자가 고른 대비를 정확히 따른다.</summary>
+    static bool UseThemed => !SystemInformation.HighContrast;
+
+    static DialogKind KindOf(TaskDialogIcon icon) =>
+        icon == TaskDialogIcon.Warning ? DialogKind.Warning : icon == TaskDialogIcon.Error ? DialogKind.Error : DialogKind.Info;
 
     /// <summary>
     /// 명령 링크(command link) 중 하나를 고르게 한다. 돌려주는 값은 눌린 항목의 인덱스, 닫거나 취소하면 -1.
@@ -22,6 +29,15 @@ static class Dialogs
     /// </summary>
     public static int Choose(string heading, string? text, TaskDialogIcon icon, params (string title, string? note)[] commands)
     {
+        if (UseThemed)
+        {
+            try
+            {
+                using var dialog = new ThemedDialog(heading, text, KindOf(icon), commands: commands);
+                return dialog.ShowModal();
+            }
+            catch (Exception ex) { Log.Error("themed dialog failed; falling back to TaskDialog", ex); }
+        }
         try
         {
             var page = NewPage(heading, text, icon);
@@ -69,8 +85,18 @@ static class Dialogs
         }
     }
 
-    static void Show(string heading, string? text, TaskDialogIcon icon, MessageBoxIcon fallbackIcon, string? details = null)
+    static void Show(string heading, string? text, DialogKind kind, TaskDialogIcon icon, MessageBoxIcon fallbackIcon, string? details = null)
     {
+        if (UseThemed)
+        {
+            try
+            {
+                using var dialog = new ThemedDialog(heading, text, kind, details);
+                dialog.ShowModal();
+                return;
+            }
+            catch (Exception ex) { Log.Error("themed dialog failed; falling back to TaskDialog", ex); }
+        }
         try
         {
             TaskDialog.ShowDialog(NewPage(heading, text, icon, details), TaskDialogStartupLocation.CenterScreen);

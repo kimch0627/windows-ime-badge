@@ -74,7 +74,7 @@ public sealed class StringsTests
         AssertUniqueMnemonics(t, "exclude.add");
         // 실험 기능
         AssertUniqueMnemonics(t, "exp.sonar", "exp.sonar.preview", "exp.sonarHotkey", "exp.sonarOnSwitch", "exp.keepMode",
-            "exp.focusSteal", "exp.selection", "exp.password");
+            "exp.focusSteal", "exp.focusSteal.preview", "exp.selection", "exp.password", "exp.password.preview");
     }
 
     static void AssertUniqueMnemonics(IReadOnlyDictionary<string, string> table, params string[] keys)

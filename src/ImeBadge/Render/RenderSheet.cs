@@ -249,21 +249,28 @@ static class RenderSheet
 
         // 10. 실험 기능
         s.Section("10. 실험 기능 — 커서 소나",
-            "칸마다 같은 caret(선)에 시각 t 의 한 장면을 그렸다(배율 100%). 원 두 개가 커서로 좁혀 들고 끝에 커서 자리가 빛난다. " +
-            "마지막 칸은 애니메이션 효과를 끈 사용자에게 보이는 멈춘 한 장.");
+            "칸마다 같은 caret(선)에 시각 t 의 한 장면을 그렸다(배율 100%). 원 두 개가 커서로 좁혀 들고 끝에 커서를 감싸는 윤곽이 켜진다. " +
+            "원 둘레의 짝 색은 밝은 배지색이면 진한 색, 아니면 흰색. 마지막 칸은 애니메이션 효과를 끈 사용자에게 보이는 멈춘 한 장.");
         var sonarTimes = new[] { 0.04f, 0.15f, 0.3f, 0.45f, 0.6f, 0.72f, 0.85f, 0.95f, Sonar.StillT };
         var sonarSlots = sonarTimes.Select((t, i) => i == sonarTimes.Length - 1 ? "멈춤" : $"t={t:0.00}").ToArray();
         float sonarSlot = SonarCellSize(1f).Width + 4;
         s.Headers(new[] { ("장면", sonarSlots, sonarSlot) });
-        foreach (var (name, state, bg) in new[] { ("한 · 밝은 배경", ImeState.Hangul, Light), ("a · 밝은 배경", ImeState.English, Light),
-                                                   ("한 · 어두운 배경", ImeState.Hangul, Dark), ("a · 어두운 배경", ImeState.English, Dark) })
+        var midnight = BadgeTheme.Of(DesignThemes.Midnight);
+        var blossom = BadgeTheme.Of(DesignThemes.Blossom);
+        foreach (var (name, color, bg) in new[]
         {
-            var color = state == ImeState.Hangul ? classic.Hangul : classic.English;
-            s.Row(name, new[] { new SheetPanel(bg, sonarSlot, sonarTimes.Select(t => SonarCell(t, color, bg, 1f)).ToList()) });
+            ("한 · 밝은 배경", classic.Hangul, Light), ("a · 밝은 배경", classic.English, Light),
+            ("한 · 어두운 배경", classic.Hangul, Dark), ("a · 어두운 배경", classic.English, Dark),
+            ("미드나잇 한 · 밝은 배경", midnight.Hangul, Light), ("미드나잇 한 · 어두운 배경", midnight.Hangul, Dark),
+            ("벚꽃 한 · 밝은 배경", blossom.Hangul, Light),
+        })
+        {
+            s.Row(name, new[] { new SheetPanel(bg, sonarSlot, sonarTimes.Select((t, i) => SonarCell(t, color, bg, 1f, still: i == sonarTimes.Length - 1)).ToList()) });
         }
 
         s.Section("11. 실험 기능 — 커서 옆 말풍선",
-            "배율 150%. caret(선) 아래(꼬리가 위)와 위(꼬리가 아래). 정보는 테마 카드색, 주의는 Windows 11 InfoBar 의 주의 색.");
+            "caret(선) 아래(꼬리가 위)와 위(꼬리가 아래). 정보는 테마 카드색, 주의는 Windows 11 InfoBar 의 주의 색. " +
+            "100% 줄은 가장 흔한 배율에서 글자가 또렷한지 보려고 실제 픽셀 그대로 그렸다.");
         var calloutCases = new (string Name, CalloutContent Content)[]
         {
             ("소나: 커서 못 찾음", new(CalloutKind.Info, Strings.Get("sonar.notFound"), Strings.Get("sonar.notFound.detail"), Glyphs.Sonar)),
@@ -273,11 +280,18 @@ static class RenderSheet
         };
         foreach (var (name, content) in calloutCases)
         {
-            var cells = new[] { (false, true), (false, false), (true, true), (true, false) }
-                .Select(c => CalloutCell(content, Main, c.Item1, c.Item2)).ToList();
-            float w = cells.Max(c => c.Width) + 4;
-            s.Headers(new[] { ("밝게 · 아래", new[] { "" }, w), ("밝게 · 위", new[] { "" }, w), ("어둡게 · 아래", new[] { "" }, w), ("어둡게 · 위", new[] { "" }, w) });
-            s.Row(name, cells.Select((c, i) => new SheetPanel(i < 2 ? Light : Dark, w, new List<Bitmap> { c })).ToList());
+            // 100%: 밝게·어둡게 × 아래·위 네 칸. 150%: 칸이 넓어 시트 폭을 넘지 않게 밝게·아래와 어둡게·위 두 칸.
+            foreach (var (scale, label, cases) in new[]
+            {
+                (1f, "100%", new[] { (false, true), (false, false), (true, true), (true, false) }),
+                (Main, "150%", new[] { (false, true), (true, false) }),
+            })
+            {
+                var cells = cases.Select(c => CalloutCell(content, scale, c.Item1, c.Item2)).ToList();
+                float w = cells.Max(c => c.Width) + 4;
+                s.Headers(cases.Select(c => ((c.Item1 ? "어둡게" : "밝게") + (c.Item2 ? " · 아래" : " · 위"), new[] { "" }, w)).ToArray());
+                s.Row($"{name} · {label}", cells.Select((c, i) => new SheetPanel(cases[i].Item1 ? Dark : Light, w, new List<Bitmap> { c })).ToList());
+            }
         }
 
         s.Section("12. 실험 기능 — 선택 영역 덮어쓰기 표시",
@@ -300,7 +314,71 @@ static class RenderSheet
             });
         }
 
+        // 13. 대화상자 (VW-12)
+        s.Section("13. 대화상자",
+            "설정 창과 같은 테마를 입힌 대화상자. 화면 밖에 띄워 그린 것이라 제목 표시줄은 실제와 다를 수 있다. 고대비 모드는 Windows 의 TaskDialog 를 그대로 쓴다.");
+        var dialogs = new (string Name, Func<bool, ThemedDialog> Make)[]
+        {
+            ("정보", d => new ThemedDialog(Strings.Get("update.latest"), Strings.Format("update.currentLatest", "1.15.1", "v1.15.1"), DialogKind.Info, dark: d)),
+            ("주의 · 자세히 펼침", d =>
+            {
+                var dialog = new ThemedDialog(Strings.Format("hotkey.failed", "Ctrl+Alt+J"), Strings.Get("hotkey.failed.text"), DialogKind.Warning,
+                    "System.ComponentModel.Win32Exception: 핫 키가 이미 등록되어 있습니다.", dark: d);
+                dialog.ExpandDetails();
+                return dialog;
+            }),
+            ("고르기(명령 링크)", d => new ThemedDialog(Strings.Format("update.offer.heading", "v1.16.0"), Strings.Format("update.offer.text", "1.15.1"), DialogKind.Info,
+                commands: new (string, string?)[]
+                {
+                    (Strings.Get("update.upgrade"), Strings.Get("update.upgrade.note")), (Strings.Get("update.open"), Strings.Get("update.open.note")),
+                    (Strings.Get("update.later"), Strings.Get("update.later.note")), (Strings.Get("update.skip"), Strings.Format("update.skip.note", "v1.16.0")),
+                }, dark: d)),
+        };
+        foreach (var (name, make) in dialogs)
+        {
+            var cells = new[] { false, true }.Select(d => DialogCellOrNote(() => make(d))).ToList();
+            float w = cells.Max(c => c.Width) + 4;
+            s.Headers(new[] { ("밝게", new[] { "" }, w), ("어둡게", new[] { "" }, w) });
+            s.Row(name, cells.Select((c, i) => new SheetPanel(Color.FromArgb(0xE0, 0xE0, 0xE0), w, new List<Bitmap> { c })).ToList());
+        }
+
         return s.Finish();
+    }
+
+    /// <summary>대화상자를 화면 밖에 띄워 그림으로 뜬다(WM_PRINT). 창을 보이지 않는 곳에 잠깐 만들었다 닫는다.</summary>
+    static Bitmap DialogCell(ThemedDialog dialog)
+    {
+        using (dialog)
+        {
+            dialog.StartPosition = System.Windows.Forms.FormStartPosition.Manual;
+            dialog.Location = new Point(-32000, -32000);
+            dialog.ShowInTaskbar = false;
+            dialog.Show();
+            dialog.PerformLayout();
+            var bmp = new Bitmap(dialog.Width, dialog.Height, PixelFormat.Format32bppArgb);
+            dialog.DrawToBitmap(bmp, new Rectangle(Point.Empty, bmp.Size));
+            dialog.Close();
+            return bmp;
+        }
+    }
+
+    /// <summary>
+    /// 대화상자 칸. 창을 만들 수 없는 환경(데스크톱이 없는 CI 세션 등)이면 시트 전체를 실패시키지 않고 그 사실을 적은 칸으로 대신한다.
+    /// </summary>
+    static Bitmap DialogCellOrNote(Func<ThemedDialog> make)
+    {
+        try { return DialogCell(make()); }
+        catch (Exception ex)
+        {
+            Log.Error("render-sheet: dialog cell failed", ex);
+            var bmp = new Bitmap(360, 60, PixelFormat.Format32bppArgb);
+            using var g = Graphics.FromImage(bmp);
+            g.Clear(Color.White);
+            g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+            using var font = new Font(BadgeRenderer.FontFamily, 12, GraphicsUnit.Pixel);
+            g.DrawString("대화상자를 그리지 못함: " + ex.GetType().Name, font, Brushes.DarkRed, new RectangleF(8, 8, 344, 44));
+            return bmp;
+        }
     }
 
     static Size SonarCellSize(float scale)
@@ -310,7 +388,7 @@ static class RenderSheet
     }
 
     /// <summary>글 한 줄 끝의 caret 과 그 둘레의 소나 한 장면(앱과 같은 렌더러, 같은 좌표 계산).</summary>
-    static Bitmap SonarCell(float t, Color color, Color bg, float scale)
+    static Bitmap SonarCell(float t, Color color, Color bg, float scale, bool still = false)
     {
         var size = SonarCellSize(scale);
         var cell = new Bitmap(size.Width, size.Height, PixelFormat.Format32bppArgb);
@@ -327,7 +405,7 @@ static class RenderSheet
             g.DrawString(line, font, brush, caret.Left - w, caret.Top);
         }
         using (var brush = new SolidBrush(ink)) g.FillRectangle(brush, caret);
-        using var sonar = OverlayRenderer.Sonar(t, caret, scale, color, Color.White, out var origin);
+        using var sonar = OverlayRenderer.Sonar(t, caret, scale, color, OverlayRenderer.SonarPartner(color), out var origin, still);
         g.DrawImage(sonar, new Rectangle(origin, sonar.Size));
         return cell;
     }
@@ -494,6 +572,7 @@ static class RenderSheet
         public void Section(string title, string note)
         {
             _y += 26;
+            Log.Write($"render-sheet section y={_y:0} '{title}'");   // --debug 일 때 자리를 남겨 전후 비교 그림을 잘라 내기 쉽게
             Text(title, _section, Ink, Margin, _y);
             _y += 26;
             Text(note, _label, Subtle, Margin, _y);
@@ -523,6 +602,7 @@ static class RenderSheet
         {
             float itemsH = panels.SelectMany(p => p.Items).Select(b => (float)b.Height).DefaultIfEmpty(20).Max();
             float h = itemsH + 2 * PanelPad;
+            Log.Write($"render-sheet row y={_y:0} h={h:0} w={panels.Sum(p => p.Width + PanelGap):0} '{label}'");
             var labelSize = _g.MeasureString(label, _label);
             Text(label, _label, Ink, Margin, _y + (h - labelSize.Height) / 2);
 

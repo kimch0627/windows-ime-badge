@@ -83,15 +83,17 @@ sealed class TrayIcons : IDisposable
                 using var edge = new Pen(hc.Edge, 1f);
                 g.DrawPath(edge, path);
             }
-            else if (ColorHex.OuterRimAlpha(color.ToArgb()) is > 0 and int rim)
+            else if (BadgeRenderer.OuterRimColor(color, theme) is { } rim)
             {
-                // 어두운 배지색(진회색·네이비)은 어두운 작업 표시줄에 묻힌다. 배지의 바깥 흰 림과 같은 기준으로, 칸 안쪽 가장자리에 옅은 흰 선.
-                using var edge = new Pen(Color.FromArgb(rim, Color.White), 1f);
+                // 어두운 배지색(진회색·네이비)은 어두운 작업 표시줄에, 밝은 배지색(금색·민트)은 밝은 작업 표시줄에 묻힌다. 배지의 바깥 림과
+                // 같은 기준으로(흰 선 또는 같은 색조의 진한 선, VW-07), 칸 안쪽 가장자리에 1px.
+                using var edge = new Pen(rim, 1f);
                 g.DrawPath(edge, path);
             }
 
-            // 글자는 상자의 약 70%. "한"은 획이 많아 "A"보다 조금 작게 그려야 16px 에서 뭉개지지 않는다.
-            float px = size * (text == "A" ? 0.78f : 0.68f);
+            // 글자는 상자의 약 70%. "한"은 획이 많아 "A"보다 조금 작게 그린다. 다만 16px(100% 배율)에서 0.68(약 11px)은 ㅎ 이 뭉개져
+            // 0.74(약 12px)로 키운다(VW-10: 0.68·0.74·0.80 × Bold·Regular 를 8배로 비교해 고름. Regular 는 획이 회색으로 옅어졌다).
+            float px = size * (text == "A" ? 0.78f : size <= 16 ? 0.74f : 0.68f);
             using var textBrush = new SolidBrush(BadgeRenderer.InkFor(state, color, theme));
             using var font = new Font(BadgeFonts.For(text), px, FontStyle.Bold, GraphicsUnit.Pixel);
             using var glyph = BadgeRenderer.TextPath(text, font);
