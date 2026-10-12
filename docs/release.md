@@ -103,6 +103,14 @@ SmartScreen 평판은 서명 후에도 다운로드 횟수가 쌓여야 경고�
 
 토큰이 없으면 워크플로는 매니페스트만 만들고 `winget submit: false` 를 남기고 끝납니다.
 
+**첫 등록이 심사 중이면 새 버전을 내지 않습니다.** 패키지가 아직 winget-pkgs 에 없고(`manifests/k/kimch0627/ImeBadge` 가 없음) 이 패키지의
+제출 PR 이 열려 있으면, 워크플로는 `::notice::첫 등록 제출(…)이 심사 중` 을 남기고 제출을 건너뜁니다(실패가 아닙니다).
+새 패키지 제출은 사람이 검토해 며칠이 걸리는데, 1.16.0 까지는 새 버전이 나올 때마다 앞의 제출을 닫고 다시 내서 심사가 매번 처음부터
+시작됐고 한 번도 머지되지 않았습니다. 첫 등록이 머지되면 Actions 탭 → **winget** → Run workflow(version 은 그때의 최신 릴리스)로
+최신 버전을 냅니다. 그 뒤로는 릴리스마다 워크플로가 버전 갱신 PR 을 냅니다(포크 동기화 실패는 아래).
+
+제출한 PR 에 `Needs-CLA` 라벨이 붙으면 워크플로가 이어서 CLA 동의 댓글을 답니다(아래 "CLA 동의 댓글").
+
 제출이 `The forked repository could not be synced with the upstream commits` 로 실패하면, 원본 winget-pkgs 가 GitHub Actions 워크플로
 파일을 바꾼 뒤라 `public_repo` 토큰으로는 내 포크(`kimch0627/winget-pkgs`)를 동기화할 수 없는 것입니다(`gh repo sync` 도 `workflow` 권한을 요구).
 둘 중 하나로 다시 제출합니다.
@@ -111,11 +119,34 @@ SmartScreen 평판은 서명 후에도 다운로드 횟수가 쌓여야 경고�
 - 동기화 없이 제출: 포크의 지금 `master` 에서 브랜치를 만들어 `manifests/k/kimch0627/ImeBadge/<버전>/` 에 매니페스트 4개만 커밋하고
   `microsoft/winget-pkgs` 의 `master` 로 PR 을 엽니다(제목 `New version: kimch0627.ImeBadge version <버전>`). PR 의 변경은 매니페스트 파일뿐이라
   포크가 뒤처져 있어도 됩니다. 1.15.0(microsoft/winget-pkgs#448540)·1.15.1(#448648)·1.16.0(#450924)은 이렇게 제출했습니다.
+  PR 을 연 뒤 `pwsh tools/winget/Send-WingetClaAgreement.ps1 -Pr <번호>` 를 돌려 CLA 동의 댓글을 답니다.
 
 직접 제출할 때는 파일 형식에 주의합니다. `New-WingetManifest.ps1` 의 결과(따옴표 친 값, 한국어 주석, LF)를 그대로 올리면 로컬
 `winget validate` 는 통과해도 winget-pkgs 의 **02. Manifest Validation** 에서 떨어집니다(자세한 오류는 공개되지 않음).
 wingetcreate 가 다시 쓴 형식(머리 주석 `# Created using wingetcreate …`, 따옴표 없는 값, CRLF, 한국어 주석 없음)이면 통과하므로,
 직전 버전의 제출 PR 파일을 받아 버전·날짜·설치 파일 주소·해시·릴리스 노트 주소만 바꿔 올립니다. 자동 제출은 wingetcreate 가 다시 쓰므로 상관없습니다.
+
+### CLA 동의 댓글 (`Needs-CLA` 라벨)
+
+winget-pkgs 는 그 저장소에 머지된 기여가 없는 계정이 PR 을 열면, 실제 CLA 서명 여부와 상관없이 `Needs-CLA` 라벨을 붙이고
+"This PR cannot be merged until you sign the Contributor License Agreement" 라고 답합니다
+([labelManagement.issueOpened.yml](https://github.com/microsoft/winget-pkgs/blob/master/.github/policies/labelManagement.issueOpened.yml)).
+라벨은 PR 작성자가 `@microsoft-github-policy-service agree` 라고 댓글을 달거나 모더레이터가 `[Policy] CLA Signed` 라고 달아야 떨어지고,
+붙어 있는 동안은 머지되지 않습니다. CLA 서명 자체는 1.15.1 제출(#448648)에서 끝나 `license/cla` 검사는 통과하지만, 라벨은 PR 마다 다시 붙습니다.
+
+`tools/winget/Send-WingetClaAgreement.ps1` 가 이 댓글을 대신 답니다. 저장소 소유자(kimch0627)가 CLA 에 동의했고 제출 PR 마다 자동으로
+다는 것을 허락했기 때문에(2026-10-13), **토큰 계정이 kimch0627 이고 그 계정이 연 PR 일 때만** 답니다.
+
+- PR 을 열고 30초쯤 뒤에 라벨이 붙으므로 연 때부터 3분까지 기다립니다. 라벨이 없으면 아무것도 하지 않습니다.
+- 이미 동의 댓글이 있으면 다시 달지 않습니다. 닫힌 PR, 다른 계정의 PR, 찾지 못한 PR 은 경고만 남깁니다.
+- `-DryRun` 은 댓글을 달지 않고 판단만 보여 줍니다.
+
+```powershell
+pwsh tools/winget/Send-WingetClaAgreement.ps1 -Pr 450924            # PR 번호로
+pwsh tools/winget/Send-WingetClaAgreement.ps1 -Version 1.16.1       # 그 버전의 열린 제출 PR 을 찾아서 (winget.yml 이 이렇게 부른다)
+```
+
+첫 등록이 머지되면 계정이 기여자(CONTRIBUTOR)가 되어 라벨이 더는 붙지 않으므로, 스크립트는 "라벨이 없다" 고 남기고 끝납니다.
 
 ### 수동 제출
 

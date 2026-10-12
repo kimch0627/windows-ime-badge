@@ -6,6 +6,10 @@
 # 2. 저장소 시크릿 WINGET_TOKEN(public_repo 권한 PAT)이 있으면 wingetcreate(버전·SHA256 고정)로 microsoft/winget-pkgs 에 PR 을 낸다.
 #    (wingetcreate 가 토큰 계정에 winget-pkgs 포크를 만들고 브랜치를 밀어 PR 을 연다.)
 #    없으면 매니페스트만 만들고 끝낸다. 절차는 docs/release.md.
+#    단, 첫 등록이 아직 심사 중이면(패키지가 winget-pkgs 에 없고 그 제출 PR 이 열려 있음) 새 버전은 내지 않는다. 새 패키지 제출을 닫고
+#    다시 내면 심사가 처음부터 다시 시작되기 때문이다. 첫 등록이 머지되면 이 워크플로를 수동으로 돌려 그때의 최신 버전을 낸다.
+# 3. 낸 PR 에 Needs-CLA 라벨이 붙으면 PR 을 연 계정(WINGET_TOKEN)으로 CLA 동의 댓글을 단다(tools/winget/Send-WingetClaAgreement.ps1).
+#    winget-pkgs 는 머지된 기여가 없는 계정의 PR 마다 이 라벨을 붙인다. 첫 등록이 머지되면 더는 붙지 않는다.
 #
 # 주의: winget 은 설치 프로그램 URL 이 인증 없이 내려받아져야 한다. 저장소가 비공개(private)이면 매니페스트는 만들어져도
 #       winget-pkgs 검증에서 거부되므로, 등록하려면 저장소를 공개로 바꿔야 한다.
@@ -51,6 +55,17 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
+      - name: Check winget scripts parse
+        shell: pwsh
+        run: |
+          # 제출 때만 도는 스크립트(Send-WingetClaAgreement.ps1)도 브랜치 푸시에서 문법 오류를 잡는다.
+          foreach ($f in Get-ChildItem tools/winget -Filter *.ps1) {
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref] $null, [ref] $errors) | Out-Null
+            if ($errors) { throw "$($f.Name): $($errors -join '; ')" }
+            "parsed: $($f.Name)"
+          }
+
       - name: Generate manifests
         id: gen
         shell: pwsh
@@ -67,12 +82,26 @@ jobs:
         shell: pwsh
         env:
           T: ${{ secrets.WINGET_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           # 제출은 명시적 입력(submit=true)일 때만. 브랜치 푸시(검증용)에는 입력이 없어 제출하지 않는다.
           # (github.event_name 으로 구분하면 안 된다: build.yml 이 workflow_call 로 부를 때도 호출자의 이벤트 이름 "push" 가 보인다.)
           $ok = ($env:T -and "${{ inputs.submit }}" -eq "true") ? "true" : "false"
+          # 첫 등록이 심사 중이면(패키지가 winget-pkgs 에 없고, 이 패키지의 제출 PR 이 열려 있음) 이 버전은 내지 않는다.
+          if ($ok -eq "true") {
+            gh api repos/microsoft/winget-pkgs/contents/manifests/k/kimch0627/ImeBadge --silent 2>$null
+            if ($LASTEXITCODE -ne 0) {
+              $pending = @(gh pr list -R microsoft/winget-pkgs --state open --search "kimch0627.ImeBadge in:title" --json number --jq '.[].number')
+              if ($LASTEXITCODE -ne 0) { throw "winget-pkgs 의 열린 제출 PR 조회 실패" }
+              if ($pending) {
+                $ok = "false"
+                "::notice::첫 등록 제출(microsoft/winget-pkgs#$($pending -join ', #'))이 심사 중이라 이 버전은 제출하지 않는다. 머지되면 winget 워크플로를 수동으로 돌린다(docs/release.md)."
+              }
+            }
+          }
           "enabled=$ok" >> $env:GITHUB_OUTPUT
           "winget submit: $ok (event: ${{ github.event_name }}, submit input: '${{ inputs.submit }}', token: $(if ($env:T) { 'set' } else { 'missing' }))"
+          exit 0
 
       - name: Submit to microsoft/winget-pkgs (wingetcreate)
         if: steps.tok.outputs.enabled == 'true'
@@ -90,3 +119,10 @@ jobs:
           $dir = "out/winget/k/kimch0627/ImeBadge/$ver"
           & .\wingetcreate.exe submit --token $env:WINGET_TOKEN --prtitle "New version: kimch0627.ImeBadge version $ver" $dir
           if ($LASTEXITCODE -ne 0) { throw "wingetcreate submit failed ($LASTEXITCODE)" }
+
+      - name: Agree to CLA on the submission PR (Needs-CLA 라벨이 붙으면)
+        if: steps.tok.outputs.enabled == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: ./tools/winget/Send-WingetClaAgreement.ps1 -Version "${{ steps.gen.outputs.version }}"
