@@ -319,6 +319,8 @@ static class MenuIcons
 {
     /// <summary>테마(팔레트) 아이콘. 두 글꼴 모두 같은 코드 포인트(E790, Color).</summary>
     public const string Theme = "\uE790";
+    /// <summary>표시 방식(눈, E7B3 RedEye)·일정 시간 일시 중지(초시계, E916 Stopwatch).</summary>
+    public const string Visibility = "\uE7B3", Snooze = "\uE916";
     public const string Pause = "", Play = "", Settings = "", Shape = "", Place = "", Size = "",
         Opacity = "", Autostart = "", Update = "", Info = "", Exit = "";
 

@@ -66,6 +66,9 @@ sealed class BadgeForm : Form, IExperimentHost
     bool _allowShow;
 
     bool _paused, _sessionLocked, _polling, _hotkeyRegistered, _startupScheduled;
+    /// <summary>"일정 시간 일시 중지"(UX-16)로 멈췄으면 다시 켤 시각. 그냥 일시 중지면 null(다시 켤 때까지). 저장하지 않는다(다시 시작하면 켜져 있다).</summary>
+    DateTime? _pausedUntil;
+    readonly System.Windows.Forms.Timer _snoozeTimer = new();
     bool _sonarHotkeyRegistered;
     long _hiddenSince = Environment.TickCount64;
     int _pollErrors;
@@ -143,6 +146,7 @@ sealed class BadgeForm : Form, IExperimentHost
         _timer.Tick += (_, _) => Poll();
         _timer.Start();
         _animTimer.Tick += (_, _) => AnimTick();
+        _snoozeTimer.Tick += (_, _) => { _snoozeTimer.Stop(); if (_paused) TogglePause(); };   // 정한 시간이 지나면 저절로 다시 켠다
 
         // OS 이벤트가 오면 타이머를 기다리지 않고 바로 다시 읽는다.
         _eventProc = OnWinEvent;
@@ -263,6 +267,12 @@ sealed class BadgeForm : Form, IExperimentHost
         _pauseItem = new ToolStripMenuItem(Strings.Get("menu.pause"), null, (_, _) => TogglePause()) { ShortcutKeyDisplayString = _settings.HotkeyEnabled ? _settings.Hotkey : null };
         _glyphs[_pauseItem] = MenuIcons.Pause;
         menu.Items.Add(_pauseItem);
+        // 일정 시간만 일시 중지(화면 공유·발표 중에 끄고 다시 켜는 것을 잊지 않게). 시간이 지나면 저절로 다시 켠다.
+        var snooze = new ToolStripMenuItem(Strings.Get("menu.snooze"));
+        foreach (var (key, minutes) in new[] { ("menu.snooze.30", 30), ("menu.snooze.60", 60) })
+            snooze.DropDownItems.Add(new ToolStripMenuItem(Strings.Get(key), null, (_, _) => PauseFor(TimeSpan.FromMinutes(minutes))));
+        _glyphs[snooze] = MenuIcons.Snooze;
+        menu.Items.Add(snooze);
         // 더블클릭과 같은 동작인 "설정"을 굵게: Windows 관행에서 굵은 항목이 기본 동작이다.
         var settingsItem = new ToolStripMenuItem(Strings.Get("menu.settings"), null, (_, _) => OpenSettings());
         settingsItem.Font = new Font(settingsItem.Font, FontStyle.Bold);
@@ -315,6 +325,12 @@ sealed class BadgeForm : Form, IExperimentHost
         var opacity = PresetMenu(Strings.Get("menu.opacity"), Labels.OpacityPresets, () => _settings.OpacityPercent, v => _settings.OpacityPercent = v);
         _glyphs[opacity] = MenuIcons.Opacity;
         menu.Items.Add(opacity);
+        // 표시 방식(UX-13): "배지가 글자를 가려요" 의 답이라 설정 창까지 가지 않고 바로 바꿀 수 있게.
+        var visibility = new ToolStripMenuItem(Strings.Get("menu.visibility"));
+        foreach (var (label, value) in Labels.Visibilities)
+            AddRadio(visibility, label, () => _settings.Visibility == value, () => _settings.Visibility = value);
+        _glyphs[visibility] = MenuIcons.Visibility;
+        menu.Items.Add(visibility);
 
         menu.Items.Add(new ToolStripSeparator());
         _autostartItem = new ToolStripMenuItem(Strings.Get("menu.autostart"), null, (_, _) =>
@@ -540,6 +556,7 @@ sealed class BadgeForm : Form, IExperimentHost
     // ── 트레이 아이콘·툴팁 ──
     string StateText(ImeState state, bool caps = false, bool insert = false)
     {
+        if (_paused && _pausedUntil is { } until) return Strings.Format("state.pausedUntil", until.ToString("t", System.Globalization.CultureInfo.CurrentCulture));
         string text = Strings.Get(_paused ? "state.paused" : state switch
         {
             ImeState.Hangul => caps ? "state.hangulCaps" : "state.hangul",
@@ -677,12 +694,26 @@ sealed class BadgeForm : Form, IExperimentHost
     void TogglePause()
     {
         _paused = !_paused;
+        // 손으로 켜고 끄면 정해 둔 시간은 잊는다(일정 시간 일시 중지 중에 단축키를 누르면 바로 다시 켜진다).
+        _snoozeTimer.Stop();
+        _pausedUntil = null;
         Log.Write(_paused ? "paused" : "resumed");
         _callout?.Hide();
         _stealGuard.Disarm();
         _passwordGuard.Reset();
         UpdateTray(ImeState.Unknown, force: true);
         Poll();
+    }
+
+    /// <summary>정한 시간 동안만 일시 중지한다. 이미 일시 중지 중이면 남은 시간을 새로 정한다.</summary>
+    void PauseFor(TimeSpan duration)
+    {
+        if (!_paused) TogglePause();
+        _pausedUntil = DateTime.Now + duration;
+        _snoozeTimer.Interval = (int)Math.Min(int.MaxValue, duration.TotalMilliseconds);
+        _snoozeTimer.Start();
+        Log.Write($"paused for {duration.TotalMinutes:0} min");
+        UpdateTray(ImeState.Unknown, force: true);
     }
 
     /// <summary>설정 창을 연다. 이미 열려 있으면 앞으로 가져오고, 페이지를 정했으면(트레이 메뉴의 "정보") 그 페이지로 옮긴다.</summary>
@@ -1422,6 +1453,7 @@ sealed class BadgeForm : Form, IExperimentHost
                 if (_hooks[i] != IntPtr.Zero) { Native.UnhookWinEvent(_hooks[i]); _hooks[i] = IntPtr.Zero; }
             _timer.Dispose();
             _animTimer.Dispose();
+            _snoozeTimer.Dispose();
             _lastBmp?.Dispose();
             _pulseBase?.Dispose();
             _sonar?.Dispose();

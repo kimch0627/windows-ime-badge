@@ -48,8 +48,8 @@ public sealed class StringsTests
     [InlineData(UiLanguage.English)]
     public void TrayMenu_MnemonicsAreUnique(UiLanguage lang)
     {
-        AssertUniqueMnemonics(Strings.Table(lang), "menu.pause", "menu.settings", "menu.theme", "menu.style", "menu.placement", "menu.size",
-            "menu.opacity", "menu.autostart", "menu.checkUpdates", "menu.about", "menu.exit");
+        AssertUniqueMnemonics(Strings.Table(lang), "menu.pause", "menu.snooze", "menu.settings", "menu.theme", "menu.style", "menu.placement", "menu.size",
+            "menu.opacity", "menu.visibility", "menu.autostart", "menu.checkUpdates", "menu.about", "menu.exit");
     }
 
     /// <summary>

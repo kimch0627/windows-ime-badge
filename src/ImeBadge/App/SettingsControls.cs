@@ -767,6 +767,46 @@ sealed class ChevronButton : ThemedControl
     }
 }
 
+/// <summary>
+/// 왼쪽에서 오른쪽으로 놓다가 폭이 모자라면 다음 줄로 넘기는 묶음(제외 앱 페이지의 추천 칩). 자식은 AutoSize 컨트롤이고 간격은 8px(96 DPI).
+/// FlowLayoutPanel 은 카드가 주는 폭을 모르고 한 줄 크기를 알려 줘서 따로 둔다(<see cref="IWidthAware"/>).
+/// </summary>
+sealed class WrapRow : Panel, IWidthAware
+{
+    const int Gap = 8;
+
+    public WrapRow() { TabStop = false; }
+
+    float DpiScale => DeviceDpi / 96f;
+    int Px(int logical) => (int)Math.Round(logical * DpiScale);
+
+    /// <summary>폭 <paramref name="maxWidth"/> 에서 각 자식의 자리. 높이는 마지막 줄 아래까지.</summary>
+    (List<Rectangle> places, Size size) Arrange(int maxWidth)
+    {
+        var places = new List<Rectangle>();
+        int x = 0, y = 0, rowH = 0, w = 0;
+        foreach (Control c in Controls)
+        {
+            var s = c.GetPreferredSize(Size.Empty);
+            if (x > 0 && x + s.Width > maxWidth) { x = 0; y += rowH + Px(Gap); rowH = 0; }
+            places.Add(new Rectangle(x, y, s.Width, s.Height));
+            x += s.Width + Px(Gap);
+            rowH = Math.Max(rowH, s.Height);
+            w = Math.Max(w, x - Px(Gap));
+        }
+        return (places, new Size(Math.Max(0, w), places.Count == 0 ? 0 : y + rowH));
+    }
+
+    public Size SizeFor(int maxWidth) => Arrange(Math.Max(1, maxWidth)).size;
+
+    protected override void OnLayout(LayoutEventArgs levent)
+    {
+        base.OnLayout(levent);
+        var (places, _) = Arrange(Math.Max(1, Width));
+        for (int i = 0; i < places.Count; i++) Controls[i].Bounds = places[i];
+    }
+}
+
 /// <summary>카드 사이의 짧은 안내문(보조색). 폭에 맞춰 줄바꿈한다.</summary>
 sealed class NoteLabel : Label
 {

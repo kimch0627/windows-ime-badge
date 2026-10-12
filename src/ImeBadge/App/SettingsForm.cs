@@ -43,8 +43,11 @@ sealed class SettingsForm : Form
     readonly System.Windows.Forms.Timer _saveTimer = new() { Interval = SaveDelayMs };
 
     TilePicker _theme = null!, _style = null!, _character = null!, _placement = null!;
-    AccentSlider _size = null!, _opacity = null!, _poll = null!;
-    ThemedComboBox _language = null!;
+    AccentSlider _size = null!, _opacity = null!;
+    ThemedComboBox _language = null!, _poll = null!;
+    SettingsCard _suggestCard = null!;
+    readonly WrapRow _suggestRow = new();
+    readonly List<AccentButton> _suggestChips = new();
     TilePicker _visibility = null!;
     SettingsCard _keysCard = null!;
     InputTextBox _excludeInput = null!;
@@ -97,6 +100,8 @@ sealed class SettingsForm : Form
     // 창 크기(96 DPI 기준 논리 픽셀). 처음에는 DefaultClient 로 열되 작업 영역보다 크면 줄이고, MinClient 보다 작게는 줄일 수 없다.
     // 최소 폭은 타일 다섯 개(테마·모양)가 카드 안에 잘리지 않고 들어가는 폭이다.
     static readonly Size DefaultClient = new(1040, 760), MinClient = new(800, 540);
+    /// <summary>처음 열 때 작업 영역에서 차지할 수 있는 최대 비율(1366×768 노트북처럼 작은 화면에서 거의 전체 화면이 되지 않게).</summary>
+    const float MaxAreaShare = 0.85f;
     const int NavWidth = 264, CommandHeight = 64;
 
     /// <summary>편집 중 값이 바뀔 때마다 발생. 실제 설정에는 이미 복사되어 있으니 다시 그리기만 하면 된다(저장은 <see cref="Applied"/>).</summary>
@@ -247,7 +252,10 @@ sealed class SettingsForm : Form
         else
         {
             int gap = LogicalToDeviceUnits(8);
+            // 작은 화면에서 창이 화면을 다 덮지 않게 작업 영역의 85% 까지만(UX-17). 그래도 최소 크기보다 작게는 하지 않는다.
             var want = new Size(LogicalToDeviceUnits(DefaultClient.Width), LogicalToDeviceUnits(DefaultClient.Height)) + frame;
+            var cap = new Size((int)(area.Width * MaxAreaShare), (int)(area.Height * MaxAreaShare));
+            want = new Size(Math.Max(MinimumSize.Width, Math.Min(want.Width, cap.Width)), Math.Max(MinimumSize.Height, Math.Min(want.Height, cap.Height)));
             var size = new Size(Math.Min(want.Width, area.Width - 2 * gap), Math.Min(want.Height, area.Height - 2 * gap));
             bounds = new Rectangle(area.Left + (area.Width - size.Width) / 2, area.Top + (area.Height - size.Height) / 2, size.Width, size.Height);
         }
@@ -483,7 +491,9 @@ sealed class SettingsForm : Form
         page.Controls.Add(Card(Glyphs.Language, "behavior.language", action: _language));
 
         page.Controls.Add(Section("section.advanced"));
-        page.Controls.Add(Card(Glyphs.Clock, "behavior.poll", action: Slider(out _poll, 50, 1000, 50, 100, " ms", v => { _draft.PollIntervalMs = v; Touch(); })));
+        // 반응 속도(UX-14): ms 슬라이더 대신 세 단계. 설정 파일에 다른 값이 있으면 "사용자 지정 (N ms)" 로 보이고 그대로 둔다.
+        _poll = Combo(220, Array.Empty<string>(), i => { if (i < PollPresets.Length && _draft.PollIntervalMs != PollPresets[i]) { _draft.PollIntervalMs = PollPresets[i]; Touch(); } });
+        page.Controls.Add(Card(Glyphs.Clock, "behavior.poll", action: _poll));
 
         page.Controls.Add(Section("section.manage"));
         // 내보내기·가져오기: 다른 PC 로 설정을 옮긴다. 가져온 값은 초안에만 채우므로 [확인] 해야 저장되고 [취소] 하면 되돌아간다.
@@ -521,6 +531,18 @@ sealed class SettingsForm : Form
         var add = Button("exclude.add", AddExcluded);
         add.Margin = Padding.Empty;
         page.Controls.Add(Card(Glyphs.Add, "exclude.addTitle", body: Row(_excludeFrame, add)));
+
+        // 자주 제외하는 앱(UX-15): 원격 데스크톱·가상 머신은 안쪽 Windows 가 따로 배지를 띄우므로 바깥 배지와 겹친다. 누르면 바로 넣는다.
+        foreach (var (name, key) in Suggestions)
+        {
+            string app = name;
+            var chip = new AccentButton { Text = app, AutoSize = true, AccessibleName = Strings.Format("exclude.suggest.name", app, Strings.Get(key)) };
+            chip.Click += (_, _) => { _excludeInput.Text = app; AddExcluded(); };
+            _tips.SetToolTip(chip, Strings.Get(key));
+            _suggestChips.Add(chip);
+        }
+        _suggestCard = Card(Glyphs.Apps, "exclude.suggest", body: _suggestRow);
+        page.Controls.Add(_suggestCard);
 
         // 제외한 앱: 하나에 카드 하나, 오른쪽에 [삭제]. 목록은 ReloadExcluded 가 다시 만든다.
         _excludeHeader = Section("exclude.listHeader");
@@ -689,6 +711,12 @@ sealed class SettingsForm : Form
         _excludeRows.Clear();
         var items = _draft.ExcludedProcesses;
         _excludeHeader.Text = Strings.Format("exclude.listHeader", items.Count);
+        // 추천 칩: 이미 넣은 앱은 빼고, 다 넣었으면 카드째 숨긴다.
+        _suggestRow.Controls.Clear();
+        foreach (var chip in _suggestChips)
+            if (!items.Any(x => string.Equals(ProcessFilter.Normalize(x), ProcessFilter.Normalize(chip.Text), StringComparison.OrdinalIgnoreCase)))
+                _suggestRow.Controls.Add(chip);
+        _suggestCard.Visible = _suggestRow.Controls.Count > 0;
         if (items.Count == 0) _excludeRows.Add(Note(Strings.Get("exclude.empty")));
         foreach (var name in items)
         {
@@ -735,6 +763,30 @@ sealed class SettingsForm : Form
         // 키보드로 지우던 사람이 이어서 지울 수 있게 같은 자리의 다음 항목으로, 없으면 입력칸으로.
         var next = _excludeRows.OfType<SettingsCard>().ElementAtOrDefault(Math.Min(i, items.Count - 1))?.Action;
         (next ?? _excludeInput).Focus();
+    }
+
+    /// <summary>
+    /// 추천 칩: 안쪽에서 따로 배지가 뜨는 원격 데스크톱·가상 머신 창(프로세스 이름, 설명 문구 키).
+    /// </summary>
+    static readonly (string name, string key)[] Suggestions =
+    {
+        ("mstsc", "exclude.suggest.mstsc"), ("msrdc", "exclude.suggest.msrdc"), ("vmconnect", "exclude.suggest.vmconnect"),
+        ("vmware-vmx", "exclude.suggest.vmware"), ("VirtualBoxVM", "exclude.suggest.virtualbox"),
+    };
+
+    /// <summary>반응 속도 세 단계(ms)와 문구 키. 순서가 고르기 상자의 순서다.</summary>
+    static readonly int[] PollPresets = { 50, 100, 250 };
+    static readonly string[] PollKeys = { "poll.fast", "poll.normal", "poll.saver" };
+
+    /// <summary>반응 속도 고르기 상자를 채운다. 세 단계에 없는 값(설정 파일에서 고친 값)이면 맨 끝에 "사용자 지정 (N ms)" 을 더해 고른다.</summary>
+    void FillPoll()
+    {
+        var items = PollKeys.Select(Strings.Get).ToList();
+        int i = Array.IndexOf(PollPresets, _draft.PollIntervalMs);
+        if (i < 0) { items.Add(Strings.Format("poll.custom", _draft.PollIntervalMs)); i = items.Count - 1; }
+        _poll.SetItems(items);
+        _poll.SelectedIndex = i;
+        _poll.Invalidate();
     }
 
     /// <summary>실행 중인 앱 목록을 펼친다. 고르면 바로 제외 목록에 넣는다.</summary>
@@ -1138,7 +1190,7 @@ sealed class SettingsForm : Form
         SyncPlacementEnabled();
         _size.Value = _draft.SizePercent;
         _opacity.Value = _draft.OpacityPercent;
-        _poll.Value = Math.Clamp(_draft.PollIntervalMs, _poll.Minimum, _poll.Maximum);
+        FillPoll();
         _hangulColor.Hex = _draft.HangulColor; _hangulHex.Text = _hangulColor.Hex;
         _englishColor.Hex = _draft.EnglishColor; _englishHex.Text = _englishColor.Hex;
         _animate.Checked = _draft.Animate;
