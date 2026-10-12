@@ -91,7 +91,7 @@ sealed class SonarPlayer : IDisposable
 
     /// <param name="caret">커서 사각형(화면 좌표).</param>
     /// <param name="color">원의 색(지금 한/영 배지 색).</param>
-    /// <param name="halo">원 둘레 테두리 색. 보통 흰색이라 어두운 화면에서도 원이 보인다.</param>
+    /// <param name="halo">원 둘레 짝 색(<see cref="OverlayRenderer.SonarPartner"/>). 흰색이면 어두운 화면에서, 진한 색이면 흰 문서에서 원이 보인다.</param>
     public void Play(Rectangle caret, Color color, Color halo, bool animate)
     {
         _caret = caret; _color = color; _halo = halo; _animate = animate; _stillShown = false;
@@ -108,7 +108,9 @@ sealed class SonarPlayer : IDisposable
         if (!_animate && _stillShown) return;
         try
         {
-            using var bmp = OverlayRenderer.Sonar(_animate ? elapsed / (float)Sonar.DurationMs : Sonar.StillT, _caret, _scale, _color, _halo, out var origin);
+            using var bmp = _animate
+                ? OverlayRenderer.Sonar(elapsed / (float)Sonar.DurationMs, _caret, _scale, _color, _halo, out var origin)
+                : OverlayRenderer.Sonar(Sonar.StillT, _caret, _scale, _color, _halo, out origin, still: true);
             _win.Present(bmp, origin, 255);
             _stillShown = true;
         }

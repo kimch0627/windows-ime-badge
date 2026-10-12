@@ -20,19 +20,34 @@ sealed record CalloutContent(CalloutKind Kind, string Title, string? Detail = nu
 static class OverlayRenderer
 {
     // ── 소나 ──
-    /// <summary>원의 굵기와 원 둘레의 흰 테두리 굵기(배율 1 기준 px). 흰 테두리가 어두운 화면에서, 색 원이 밝은 화면에서 보인다.</summary>
+    /// <summary>원의 굵기와 원 둘레 윤곽(짝 색) 굵기(배율 1 기준 px). 짝 색이 한쪽 바탕에서, 배지색이 다른 쪽 바탕에서 원을 보이게 한다.</summary>
     const float RingWidth = 3f, RingHalo = 1.5f;
 
     /// <summary>
-    /// 소나 한 장면. <paramref name="caret"/> 은 화면 좌표이고, 그림을 놓을 화면 좌표(<paramref name="origin"/>)를 함께 돌려준다.
-    /// 원은 커서 막대의 가운데로 좁혀 들고, 끝에는 커서 막대 둘레의 둥근 빛이 잠깐 켜진다.
+    /// 원·빛 둘레에 깔 짝 색(VW-03). 마우스 포인터의 흰·검 이중 윤곽처럼, 배지색이 잘 안 보이는 바탕 쪽을 짝 색이 맡는다:
+    /// 밝은 배지색(금색·민트·파스텔)은 흰 문서에서 묻히므로 같은 색조의 진한 색(<see cref="ColorHex.OuterShadeColor"/>, 배지의 바깥 림과 같은 규칙),
+    /// 그 밖의 색은 어두운 편집기에서 보이게 흰색. 고대비는 부르는 쪽이 시스템 색을 쓴다.
     /// </summary>
-    public static Bitmap Sonar(float t, Rectangle caret, float scale, Color color, Color halo, out Point origin)
+    public static Color SonarPartner(Color color)
+    {
+        int argb = color.ToArgb() | unchecked((int)0xFF000000);
+        return ColorHex.OuterShadeAlpha(argb) > 0 ? Color.FromArgb(ColorHex.OuterShadeColor(argb)) : Color.White;
+    }
+
+    /// <summary>
+    /// 소나 한 장면. <paramref name="caret"/> 은 화면 좌표이고, 그림을 놓을 화면 좌표(<paramref name="origin"/>)를 함께 돌려준다.
+    /// 원은 커서 막대의 가운데로 좁혀 들고, 끝에는 커서 막대를 감싸는 캡슐 윤곽이 잠깐 켜진다. 캡슐은 속을 칠하지 않아 커서와 옆 글자를
+    /// 덮지 않는다(예전의 반투명 채움은 커서 위 얼룩처럼 보였다). <paramref name="partner"/> 는 원·윤곽 둘레의 짝 색(<see cref="SonarPartner"/>).
+    /// <paramref name="still"/> 이면 애니메이션을 끈 사용자용 멈춘 한 장(<see cref="ImeBadge.Sonar.StillT"/>, 반투명 없음).
+    /// </summary>
+    public static Bitmap Sonar(float t, Rectangle caret, float scale, Color color, Color partner, out Point origin, bool still = false)
     {
         float start = ImeBadge.Sonar.StartRadius * scale;
         float height = Math.Max(caret.Height, 14 * scale);
-        float end = Math.Max(height * 0.75f, 10 * scale);
         float stroke = RingWidth * scale, haloWidth = stroke + 2 * RingHalo * scale;
+        // 끝의 캡슐 윤곽(반높이 = height/2 + 5, 굵기 포함 바깥 끝 +2.5)과 원(안쪽 끝 = 반지름 − 3)이 겹치지 않게, 원은 캡슐 바로 바깥까지만 좁혀 든다.
+        // 겹치면 사라져 가는 반투명 원과 윤곽이 포개져 커서 위에 얼룩이 생긴다.
+        float end = height / 2 + 11 * scale;
         int half = (int)Math.Ceiling(start + haloWidth);
         float cx = caret.Left + caret.Width / 2f, cy = caret.Top + caret.Height / 2f;
         origin = new Point((int)Math.Floor(cx) - half, (int)Math.Floor(cy) - half);
@@ -46,36 +61,26 @@ static class OverlayRenderer
 
         for (int i = 0; i < ImeBadge.Sonar.Rings; i++)
         {
-            var (r, a) = ImeBadge.Sonar.Ring(i, t, start, end);
+            var (r, a) = ImeBadge.Sonar.Ring(i, t, start, end, still);
             if (a <= 0f) continue;
-            using var under = new Pen(Color.FromArgb((int)(220 * a), halo), haloWidth);
+            using var under = new Pen(Color.FromArgb((int)(ImeBadge.Sonar.PartnerAlpha * a), partner), haloWidth);
             using var over = new Pen(Color.FromArgb((int)(255 * a), color), stroke);
             g.DrawEllipse(under, x - r, y - r, 2 * r, 2 * r);
             g.DrawEllipse(over, x - r, y - r, 2 * r, 2 * r);
         }
 
-        float glow = ImeBadge.Sonar.Glow(t);
+        float glow = ImeBadge.Sonar.Glow(t, still);
         if (glow > 0f)
         {
-            // 커서 막대를 감싸는 세로 캡슐. 가운데는 비쳐서 커서와 그 옆 글자가 그대로 보인다.
-            float w = 8 * scale, h = height + 8 * scale;
+            // 커서 막대를 감싸는 세로 캡슐의 윤곽만: 짝 색 굵은 선 위에 배지색 선. 속은 비어 커서와 그 옆 글자가 그대로 보인다.
+            float line = 2 * scale;
+            float w = Math.Max(8 * scale, caret.Width + 6 * scale) + line, h = height + 8 * scale + line;
             var rect = new RectangleF(x - w / 2, y - h / 2, w, h);
             using var path = Capsule(rect);
-            using var fill = new SolidBrush(Color.FromArgb((int)(110 * glow), color));
-            using var edge = new Pen(Color.FromArgb((int)(230 * glow), halo), 1.5f * scale);
-            using var ring = new Pen(Color.FromArgb((int)(255 * glow), color), 1.5f * scale);
-            g.FillPath(fill, path);
-            g.DrawPath(edge, path);
-            using var outer = (GraphicsPath)path.Clone();
-            using (var m = new Matrix())
-            {
-                float k = 1.5f * scale;
-                m.Translate(x, y);
-                m.Scale((w + 2 * k) / w, (h + 2 * k) / h);
-                m.Translate(-x, -y);
-                outer.Transform(m);
-            }
-            g.DrawPath(ring, outer);
+            using var under = new Pen(Color.FromArgb((int)(ImeBadge.Sonar.PartnerAlpha * glow), partner), line + 2 * RingHalo * scale);
+            using var over = new Pen(Color.FromArgb((int)(255 * glow), color), line);
+            g.DrawPath(under, path);
+            g.DrawPath(over, path);
         }
         return bmp;
     }

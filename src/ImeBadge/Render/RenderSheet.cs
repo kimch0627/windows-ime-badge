@@ -249,17 +249,23 @@ static class RenderSheet
 
         // 10. 실험 기능
         s.Section("10. 실험 기능 — 커서 소나",
-            "칸마다 같은 caret(선)에 시각 t 의 한 장면을 그렸다(배율 100%). 원 두 개가 커서로 좁혀 들고 끝에 커서 자리가 빛난다. " +
-            "마지막 칸은 애니메이션 효과를 끈 사용자에게 보이는 멈춘 한 장.");
+            "칸마다 같은 caret(선)에 시각 t 의 한 장면을 그렸다(배율 100%). 원 두 개가 커서로 좁혀 들고 끝에 커서를 감싸는 윤곽이 켜진다. " +
+            "원 둘레의 짝 색은 밝은 배지색이면 진한 색, 아니면 흰색. 마지막 칸은 애니메이션 효과를 끈 사용자에게 보이는 멈춘 한 장.");
         var sonarTimes = new[] { 0.04f, 0.15f, 0.3f, 0.45f, 0.6f, 0.72f, 0.85f, 0.95f, Sonar.StillT };
         var sonarSlots = sonarTimes.Select((t, i) => i == sonarTimes.Length - 1 ? "멈춤" : $"t={t:0.00}").ToArray();
         float sonarSlot = SonarCellSize(1f).Width + 4;
         s.Headers(new[] { ("장면", sonarSlots, sonarSlot) });
-        foreach (var (name, state, bg) in new[] { ("한 · 밝은 배경", ImeState.Hangul, Light), ("a · 밝은 배경", ImeState.English, Light),
-                                                   ("한 · 어두운 배경", ImeState.Hangul, Dark), ("a · 어두운 배경", ImeState.English, Dark) })
+        var midnight = BadgeTheme.Of(DesignThemes.Midnight);
+        var blossom = BadgeTheme.Of(DesignThemes.Blossom);
+        foreach (var (name, color, bg) in new[]
         {
-            var color = state == ImeState.Hangul ? classic.Hangul : classic.English;
-            s.Row(name, new[] { new SheetPanel(bg, sonarSlot, sonarTimes.Select(t => SonarCell(t, color, bg, 1f)).ToList()) });
+            ("한 · 밝은 배경", classic.Hangul, Light), ("a · 밝은 배경", classic.English, Light),
+            ("한 · 어두운 배경", classic.Hangul, Dark), ("a · 어두운 배경", classic.English, Dark),
+            ("미드나잇 한 · 밝은 배경", midnight.Hangul, Light), ("미드나잇 한 · 어두운 배경", midnight.Hangul, Dark),
+            ("벚꽃 한 · 밝은 배경", blossom.Hangul, Light),
+        })
+        {
+            s.Row(name, new[] { new SheetPanel(bg, sonarSlot, sonarTimes.Select((t, i) => SonarCell(t, color, bg, 1f, still: i == sonarTimes.Length - 1)).ToList()) });
         }
 
         s.Section("11. 실험 기능 — 커서 옆 말풍선",
@@ -318,7 +324,7 @@ static class RenderSheet
     }
 
     /// <summary>글 한 줄 끝의 caret 과 그 둘레의 소나 한 장면(앱과 같은 렌더러, 같은 좌표 계산).</summary>
-    static Bitmap SonarCell(float t, Color color, Color bg, float scale)
+    static Bitmap SonarCell(float t, Color color, Color bg, float scale, bool still = false)
     {
         var size = SonarCellSize(scale);
         var cell = new Bitmap(size.Width, size.Height, PixelFormat.Format32bppArgb);
@@ -335,7 +341,7 @@ static class RenderSheet
             g.DrawString(line, font, brush, caret.Left - w, caret.Top);
         }
         using (var brush = new SolidBrush(ink)) g.FillRectangle(brush, caret);
-        using var sonar = OverlayRenderer.Sonar(t, caret, scale, color, Color.White, out var origin);
+        using var sonar = OverlayRenderer.Sonar(t, caret, scale, color, OverlayRenderer.SonarPartner(color), out var origin, still);
         g.DrawImage(sonar, new Rectangle(origin, sonar.Size));
         return cell;
     }

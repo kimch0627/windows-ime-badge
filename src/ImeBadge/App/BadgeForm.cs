@@ -1219,13 +1219,16 @@ sealed class BadgeForm : Form, IExperimentHost
         PlaySonar(new Rectangle(screen.Left + screen.Width / 2, screen.Top + (screen.Height - h) / 2, 1, h), ImeState.Hangul);
     }
 
-    /// <summary>소나 재생. 원의 색은 그 상태의 배지 색, 고대비 모드면 강조색(영문 배지는 창 바탕색이라 원이 보이지 않는다).</summary>
+    /// <summary>
+    /// 소나 재생. 원의 색은 그 상태의 배지 색, 고대비 모드면 강조색(영문 배지는 창 바탕색이라 원이 보이지 않는다).
+    /// 원 둘레의 짝 색은 배지색이 밝으면 같은 색조의 진한 색, 아니면 흰색(<see cref="OverlayRenderer.SonarPartner"/>).
+    /// </summary>
     void PlaySonar(Rectangle caret, ImeState state)
     {
         var theme = BadgeTheme.From(_settings);
         bool hc = SystemInformation.HighContrast;
         var color = hc ? SystemColors.Highlight : state switch { ImeState.Hangul => theme.Hangul, ImeState.English => theme.English, _ => theme.Other };
-        var halo = hc ? SystemColors.HighlightText : Color.White;
+        var halo = hc ? SystemColors.HighlightText : OverlayRenderer.SonarPartner(color);
         try { (_sonar ??= new SonarPlayer()).Play(caret, color, halo, AnimationsOn); }
         catch (Exception ex) { Log.Error("sonar failed", ex); }
     }
