@@ -1313,6 +1313,9 @@ sealed class SettingsForm : Form
     static readonly Color LightBg = Color.White, LightText = Color.FromArgb(0x1B, 0x1B, 0x1B), LightCaption = Color.FromArgb(0x8A, 0x8A, 0x8A);
     static readonly Color DarkBg = Color.FromArgb(0x1E, 0x1E, 0x1E), DarkText = Color.FromArgb(0xD4, 0xD4, 0xD4), DarkCaption = Color.FromArgb(0x7A, 0x7A, 0x7A);
 
+    /// <summary>미리보기의 선택 영역 바탕: 밝은 쪽은 Windows 기본 입력칸(파랑 + 흰 글자), 어두운 쪽은 VS Code 어두운 테마.</summary>
+    static readonly Color LightSelection = Color.FromArgb(0x00, 0x78, 0xD7), DarkSelection = Color.FromArgb(0x26, 0x4F, 0x78);
+
     /// <summary>미리보기에 그릴 모양. DotFlash 는 바뀐 직후엔 글자 배지, 1.5초 뒤엔 점(<see cref="_flashing"/>).</summary>
     BadgeStyle PreviewStyle => _draft.Style == BadgeStyle.DotFlash ? (_flashing ? BadgeStyle.Pill : BadgeStyle.Dot) : _draft.Style;
 
@@ -1373,6 +1376,8 @@ sealed class SettingsForm : Form
         var lines = new string[PreviewRows.Length];
         var widths = new float[PreviewRows.Length];
         var carets = new List<(ImeState state, Rectangle caret)>();
+        // 실험 기능 "선택 영역 덮어쓰기 표시"를 켰으면 한글 줄을 선택한 모습으로(선택 바탕 + 점선 배지) 보여 준다(VW-13).
+        int selectedRow = _draft.ShowSelection ? Array.FindIndex(PreviewRows, p => p.state == ImeState.Hangul) : -1;
         for (int r = 0; r < PreviewRows.Length; r++)
         {
             var (text, state) = PreviewRows[r];
@@ -1396,7 +1401,8 @@ sealed class SettingsForm : Form
         {
             foreach (var (state, caret) in carets)
             {
-                var bmp = BadgeRenderer.Render(state, style, scale, theme, _draft.OpacityPercent);
+                bool selected = selectedRow >= 0 && state == PreviewRows[selectedRow].state;
+                var bmp = BadgeRenderer.Render(state, style, scale, theme, _draft.OpacityPercent, selection: selected);
                 var pos = BadgeLayout.Compute(new LayoutInput(caret, bmp.Size, style, _draft.Placement, scale, room));
                 badges.Add((bmp, new Rectangle(pos, bmp.Size)));
             }
@@ -1406,13 +1412,13 @@ sealed class SettingsForm : Form
             var saved = g.Save();
             g.SetClip(clip);
             int half = client.Width / 2;
-            PaintHalf(new Rectangle(client.Left, client.Top, half, client.Height), LightBg, LightText, LightCaption, Strings.Get("preview.light"));
-            PaintHalf(new Rectangle(client.Left + half, client.Top, client.Width - half, client.Height), DarkBg, DarkText, DarkCaption, Strings.Get("preview.dark"));
+            PaintHalf(new Rectangle(client.Left, client.Top, half, client.Height), LightBg, LightText, LightCaption, LightSelection, Color.White, Strings.Get("preview.light"));
+            PaintHalf(new Rectangle(client.Left + half, client.Top, client.Width - half, client.Height), DarkBg, DarkText, DarkCaption, DarkSelection, DarkText, Strings.Get("preview.dark"));
             g.Restore(saved);
             using var border = new Pen(Theme.Current.Border);
             g.DrawPath(border, clip);
 
-            void PaintHalf(Rectangle area, Color bg, Color fg, Color caption, string title)
+            void PaintHalf(Rectangle area, Color bg, Color fg, Color caption, Color selectionBg, Color selectionFg, string title)
             {
                 var state = g.Save();
                 g.SetClip(area, CombineMode.Intersect);   // 큰 배지가 반대쪽 배경으로 넘어가지 않게
@@ -1421,6 +1427,8 @@ sealed class SettingsForm : Form
                 // 글과 caret 을 먼저 모두 그린다. 배지는 그 위에 얹혀야 하므로(실제로도 배지는 최상위 창이다) 나중에 그린다.
                 using var textBrush = new SolidBrush(fg);
                 using var fillerBrush = new SolidBrush(Mix(fg, bg, 0.55f));
+                using var selectionBrush = new SolidBrush(selectionBg);
+                using var selectedTextBrush = new SolidBrush(selectionFg);
                 using var caretPen = new Pen(fg, Math.Max(1f, (float)Math.Round(dpi)));
                 int top = area.Top + dy;
                 var taken = new List<Rectangle>();   // 글·배지가 차지한 곳. 캡션은 여기와 겹치지 않게 놓는다
@@ -1430,7 +1438,9 @@ sealed class SettingsForm : Form
                 {
                     float y = top + r * pitch;
                     if (!Shown(y)) continue;
-                    g.DrawString(lines[r], font, PreviewRows[r].state is null ? fillerBrush : textBrush, area.Left + left, y, fmt);
+                    if (r == selectedRow)
+                        g.FillRectangle(selectionBrush, area.Left + left, y, widths[r] + dpi, lineH);
+                    g.DrawString(lines[r], font, r == selectedRow ? selectedTextBrush : PreviewRows[r].state is null ? fillerBrush : textBrush, area.Left + left, y, fmt);
                     taken.Add(new Rectangle((int)(area.Left + left), (int)y, (int)Math.Ceiling(widths[r] + 3 * dpi), lineH));
                 }
                 foreach (var (_, caret) in carets)

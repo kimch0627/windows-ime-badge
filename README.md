@@ -142,7 +142,7 @@ dotnet run --project src/ImeBadge            # 실행
 dotnet run --project src/ImeBadge -- --debug # 디버그 로그 켜고 실행
 dotnet run --project src/ImeBadge -- --render-sheet sheet.png   # 모든 테마·모양의 배지와 실험 기능 그림(소나·말풍선·선택 영역)을 한 장의 PNG 로(창 없이)
 dotnet run --project src/ImeBadge -- --render-hero hero.png     # README 소개 그림(docs/images/hero.png)
-dotnet run --project src/ImeBadge -- --render-settings pages     # 설정 창 페이지마다 PNG(화면 밖에 그림, 기본 설정·저장 안 함). 개발 빌드는 IMEBADGE_THEME=light|dark, --lang en
+dotnet run --project src/ImeBadge -- --render-settings pages     # 설정 창 페이지마다 PNG(화면 밖에 그림, 기본 설정·저장 안 함). 개발 빌드는 IMEBADGE_THEME=light|dark, --lang en, --set ShowSelection=true
 ```
 
 배지 렌더러는 GDI+(Windows 전용)라 Linux 에서 도는 단위 테스트로는 모습을 확인할 수 없습니다. 그래서 CI 가 Windows 러너에서
