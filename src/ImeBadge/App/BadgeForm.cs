@@ -1404,10 +1404,19 @@ sealed class BadgeForm : Form, IExperimentHost
         if (want is not bool target) return;
 
         string mode = target ? "Hangul" : "English", window = Native.ClassName(s.Foreground);
-        if (_modeKeeper.Attempts == 1 && !s.PreferTsf && ImeWriter.RequestImm(s.Focus, target))
+        if (_modeKeeper.Attempts == 1 && !s.PreferTsf)
         {
-            Log.Write($"keep mode: {mode} via IME request fg='{window}'");
-            return;   // 다음 갱신에 바뀌었는지 본다. 그대로면 한/영 키로 한 번 더(ImeModeKeeper.RetryMs 뒤)
+            switch (ImeWriter.RequestImm(s.Focus, target))
+            {
+                case ImmRequest.Sent:
+                    Log.Write($"keep mode: {mode} via IME request fg='{window}'");
+                    return;   // 다음 갱신에 바뀌었는지 본다. 그대로면 한/영 키로 한 번 더(ImeModeKeeper.RetryMs 뒤)
+                case ImmRequest.Untrusted:
+                    // 읽은 뒤 IME 가 믿을 수 없는 값(0xFFFF 등)을 줬다. 되쓰면 전자 같은 비트가 켜지고, 한/영을 모르니 한/영 키로 뒤집지도 않는다.
+                    Log.Write($"keep mode: {mode} skipped, conversion mode is not a Korean IME value fg='{window}'");
+                    _modeKeeper.SkipField();
+                    return;
+            }
         }
         if (!_modeKeeper.KeyAllowed)
         {

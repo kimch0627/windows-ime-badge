@@ -245,20 +245,22 @@ static class Native
 
     [DllImport("user32.dll")] static extern uint SendInput(uint count, INPUT[] inputs, int size);
     [DllImport("user32.dll")] static extern uint MapVirtualKey(uint code, uint mapType);
-    const uint INPUT_KEYBOARD = 1, KEYEVENTF_KEYUP = 0x0002, MAPVK_VK_TO_VSC = 0;
+    const uint INPUT_KEYBOARD = 1, KEYEVENTF_EXTENDEDKEY = 0x0001, KEYEVENTF_KEYUP = 0x0002, MAPVK_VK_TO_VSC_EX = 4;
 
     /// <summary>
     /// 키 하나를 눌렀다 뗀 것처럼 보낸다. 지금 활성 창(의 입력 큐)으로 간다. 관리자 권한으로 실행된 창에는 Windows(UIPI)가 막아 전달되지 않는다.
-    /// 둘 다 들어갔으면 true.
+    /// 스캔 코드는 확장 키 접두까지 받아 실제 키와 같게 보낸다(<see cref="KoreanIme.SplitScanCode"/>: 오른쪽 Alt 자리의 한/영 키가 왼쪽 Alt 로
+    /// 보이지 않게). 둘 다 들어갔으면 true.
     /// </summary>
     public static bool TapKey(int vk)
     {
-        ushort scan = (ushort)MapVirtualKey((uint)vk, MAPVK_VK_TO_VSC);
+        var (scan, extended) = KoreanIme.SplitScanCode(MapVirtualKey((uint)vk, MAPVK_VK_TO_VSC_EX));
+        uint flags = extended ? KEYEVENTF_EXTENDEDKEY : 0;
         var inputs = new INPUT[2];
         inputs[0].type = INPUT_KEYBOARD;
-        inputs[0].u.ki = new KEYBDINPUT { wVk = (ushort)vk, wScan = scan };
+        inputs[0].u.ki = new KEYBDINPUT { wVk = (ushort)vk, wScan = scan, dwFlags = flags };
         inputs[1].type = INPUT_KEYBOARD;
-        inputs[1].u.ki = new KEYBDINPUT { wVk = (ushort)vk, wScan = scan, dwFlags = KEYEVENTF_KEYUP };
+        inputs[1].u.ki = new KEYBDINPUT { wVk = (ushort)vk, wScan = scan, dwFlags = flags | KEYEVENTF_KEYUP };
         return SendInput(2, inputs, Marshal.SizeOf<INPUT>()) == 2;
     }
 
