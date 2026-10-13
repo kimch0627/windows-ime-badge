@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [1.16.2] - 2026-10-13
+
+실험 기능 **모든 프로그램에서 한/영 유지**가 문자 너비를 반자에서 전자로 바꾸거나, Windows Terminal 에서 배지와 실제 입력이 어긋나던 문제를
+고친 릴리스입니다. 설정 항목과 설정 파일은 그대로입니다.
+
 ### 고침
 - **한/영 유지: 배지는 영문인데 실제로는 한글이 입력되던 문제.** Windows Terminal 은 IME 에 바꿔 달라는 요청을 받으면 배지가 읽는 값만
   바뀌고 실제 입력은 그대로였습니다. TSF 로만 IME 를 쓰는 앱(Windows Terminal)을 알아보는 목록이 대소문자 때문에 한 번도 맞지 않던
@@ -651,7 +656,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.16.1...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.16.2...HEAD
+[1.16.2]: https://github.com/kimch0627/windows-ime-badge/compare/v1.16.1...v1.16.2
 [1.16.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.16.0...v1.16.1
 [1.16.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.15.1...v1.16.0
 [1.15.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.15.0...v1.15.1
