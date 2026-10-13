@@ -106,6 +106,23 @@ public sealed class ImeModeKeeperTests
         Assert.Equal(Han, k.Desired);
     }
 
+    // IME 에 요청하려는데 변환 모드가 믿을 수 없는 값(0xFFFF 등)이라 쓰지 않았다: 이 칸은 그대로 두고, 한/영 키도 보내지 않는다.
+    [Fact]
+    public void SkipField_LeavesThisFieldAlone_ButNotTheRestOfTheWindow()
+    {
+        var k = new ImeModeKeeper();
+        See(k, Chrome, Han, 0);
+        long t = 10_000;
+        Assert.Equal(Han, See(k, Xshell, Eng, t, focus: XshellEdit));                              // IME 요청을 하려 했다
+        k.SkipField();
+        Assert.Null(See(k, Xshell, Eng, t + ImeModeKeeper.RetryMs, focus: XshellEdit));           // 한/영 키로 넘어가지 않는다
+        Assert.Null(See(k, Xshell, Eng, t + 5000, focus: XshellEdit));
+        Assert.True(k.KeyAllowed);
+        Assert.Equal(Han, k.Desired);                                                              // 기억은 그대로
+        Assert.Equal(Han, See(k, Xshell, Eng, t + 6000, focus: XshellMain));                      // 다른 칸은 다시 본다
+        Assert.Equal(1, k.Attempts);
+    }
+
     [Fact]
     public void OtherLanguageOrExcludedApp_IsLeftAlone_AndResetForgets()
     {

@@ -121,6 +121,12 @@ public sealed class ImeModeKeeper
         _keyUsed = true;
     }
 
+    /// <summary>
+    /// 이 칸에서는 더 바꾸지 않는다. 한/영 키는 보내지 않았으므로 이 창의 다른 칸에서는 쓸 수 있다. IME 가 믿을 수 없는 변환 모드를 줘서
+    /// 바꾸지 않기로 했을 때 부른다(되쓰면 전자 같은 비트가 켜지고, 지금 한/영을 모르니 한/영 키로 뒤집을 수도 없다).
+    /// </summary>
+    public void SkipField() => _attempts = MaxAttempts;
+
     /// <summary>모두 잊는다(설정을 껐다 켬). 다음에 본 모드를 유지할 모드로 삼는다.</summary>
     public void Reset()
     {
