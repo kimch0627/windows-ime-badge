@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-11-03
+
+설정 창에 **배지가 안 뜬 앱** 페이지가 생기고, 실험 기능 **포커스 뺏김 경고**가 앞으로 나온 창을 가리지 않게 고친 릴리스입니다.
+설정 파일에 `TrackMissedApps`(기본 켜짐)가 생기고, 나머지 설정 항목은 그대로입니다.
+
 ### 추가
 - **배지가 안 뜬 앱 찾기.** 설정 창의 새 페이지 **배지가 안 뜬 앱** 에서, 입력하는 중인데 배지가 보이지 않았던 앱과 그 까닭을 볼 수 있습니다.
   까닭은 관리자 권한으로 실행된 앱 · 커서 위치를 알려 주지 않는 앱 · 응답이 늦은 앱 · 한/영 상태를 읽지 못한 앱 · 전체 화면이라 숨김 다섯 가지이고,
@@ -680,7 +685,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.16.2...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.17.0...HEAD
+[1.17.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.16.2...v1.17.0
 [1.16.2]: https://github.com/kimch0627/windows-ime-badge/compare/v1.16.1...v1.16.2
 [1.16.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.16.0...v1.16.1
 [1.16.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.15.1...v1.16.0
