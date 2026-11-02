@@ -191,13 +191,16 @@ static class OverlayRenderer
     static float Lead(float scale) =>
         SystemInformation.HighContrast ? PadX * scale : CalloutStyle.StripeWidth(scale) + PadAfterStripe * scale;
 
-    static (SizeF Title, SizeF Detail) TextSizes(Graphics g, CalloutContent c, CalloutFonts f, float scale)
+    /// <summary>제목·설명의 크기와, 줄바꿈을 넣은 설명 글(<see cref="CalloutText"/>: 띄어쓰기 자리에서만 끊는다). 재기와 그리기가 같은 글을 쓴다.</summary>
+    static (SizeF Title, SizeF Detail, string? DetailText) TextSizes(Graphics g, CalloutContent c, CalloutFonts f, float scale)
     {
         var max = new SizeF(MaxText * scale, 1000);
         var title = g.MeasureString(c.Title, f.Title, max, f.Format);
         var detailMax = new SizeF(Math.Max(MaxText * scale, title.Width), f.Detail.GetHeight(g) * DetailLines + 1);
-        var detail = c.Detail is { Length: > 0 } d ? g.MeasureString(d, f.Detail, detailMax, f.Wrap) : SizeF.Empty;
-        return (title, detail);
+        if (c.Detail is not { Length: > 0 } d) return (title, SizeF.Empty, null);
+        // 1px 여유: 한 줄로 잰 폭이 최대 폭과 같을 때 GDI+ 가 그 줄을 다시 끊지 않게.
+        string wrapped = CalloutText.WrapAtSpaces(d, detailMax.Width - 1, s => g.MeasureString(s, f.Detail, PointF.Empty, f.Format).Width);
+        return (title, g.MeasureString(wrapped, f.Detail, detailMax, f.Wrap), wrapped);
     }
 
     /// <summary>몸통(꼬리·그림자 제외) 크기. 위치(<see cref="CalloutLayout"/>)를 정한 뒤 <see cref="Callout"/> 으로 그린다.</summary>
@@ -207,7 +210,7 @@ static class OverlayRenderer
         using var probe = new Bitmap(1, 1);
         using var g = Graphics.FromImage(probe);
         g.TextRenderingHint = TextHint;   // 그릴 때와 같은 힌트로 재야 말줄임표가 엉뚱하게 붙지 않는다
-        var (title, detail) = TextSizes(g, c, fonts, scale);
+        var (title, detail, _) = TextSizes(g, c, fonts, scale);
         var icon = IconSize(scale, fonts);
         float textW = Math.Max(title.Width, detail.Width);
         float textH = title.Height + (detail.IsEmpty ? 0 : LineGap * scale + detail.Height);
@@ -264,7 +267,7 @@ static class OverlayRenderer
 
         // 글자·아이콘 자리. 원점을 정수 픽셀에 맞춘다(소수 자리면 힌팅한 획이 두 픽셀에 걸쳐 흐려진다).
         g.TextRenderingHint = TextHint;
-        var (title, detail) = TextSizes(g, c, fonts, scale);
+        var (title, detail, detailText) = TextSizes(g, c, fonts, scale);
         var icon = IconSize(scale, fonts);
         float cy = bodyOffset.Y + body.Height / 2f;
         float x = MathF.Round(bodyOffset.X + Lead(scale));
@@ -291,7 +294,7 @@ static class OverlayRenderer
             if (!detail.IsEmpty)
             {
                 using var brush = new SolidBrush(paint.Detail);
-                t.DrawString(c.Detail!, fonts.Detail, brush, new RectangleF(x, detailY, maxW + 1, detail.Height + 1), fonts.Wrap);
+                t.DrawString(detailText!, fonts.Detail, brush, new RectangleF(x, detailY, maxW + 1, detail.Height + 1), fonts.Wrap);
             }
         }
 
