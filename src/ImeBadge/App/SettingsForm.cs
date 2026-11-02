@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
@@ -9,7 +10,7 @@ using System.Windows.Forms;
 namespace ImeBadge;
 
 /// <summary>설정 창의 페이지. 순서가 왼쪽 탐색 목록의 순서다.</summary>
-enum SettingsPage { Appearance, Display, General, Excluded, Experimental, About }
+enum SettingsPage { Appearance, Display, General, Excluded, Missed, Experimental, About }
 
 /// <summary>설정 창의 실험 기능 페이지가 트레이 프로그램(<see cref="BadgeForm"/>)에 부탁하는 일.</summary>
 interface IExperimentHost
@@ -41,6 +42,7 @@ sealed class SettingsForm : Form
     readonly AppPaths _paths;
     readonly Action _checkUpdates;
     readonly IExperimentHost _experiments;
+    readonly MissedAppTracker _missed;   // "배지가 안 뜬 앱" 목록. 트레이 프로그램이 모으고 이 창은 보여 주기만 한다
     readonly bool _builtKorean = Strings.IsKorean;   // 이 창을 만들 때의 언어. 바뀌면 새 창으로 갈아 끼운다
     bool _autostart, _originalAutostart, _dirty, _loading, _detached;
     string? _originalAutostartCommand;   // 창을 열 때 Run 키에 적혀 있던 명령. [되돌리기]가 경로까지 그대로 되살린다
@@ -77,6 +79,16 @@ sealed class SettingsForm : Form
     SectionHeader _excludeHeader = null!;
     CardStack _excludePage = null!;
     readonly List<Control> _excludeRows = new();
+    // "배지가 안 뜬 앱" 페이지: 앱마다 카드 한 장. 목록이 바뀌었을 때(Version)만 다시 만든다.
+    ToggleSwitch _trackMissed = null!;
+    SettingsCard _missedCard = null!;
+    AccentButton _missedCopy = null!, _missedClear = null!;
+    SectionHeader _missedHeader = null!;
+    CardStack _missedPage = null!;
+    readonly List<Control> _missedRows = new();
+    int _missedVersion = -1;
+    /// <summary>"배지가 안 뜬 앱" 페이지를 보고 있는 동안 목록이 바뀌었는지 1초마다 본다(다른 앱에서 입력하는 사이 늘어난다).</summary>
+    readonly System.Windows.Forms.Timer _missedTimer = new() { Interval = 1000 };
 
     NavList _nav = null!;
     PageHeader _header = null!;
@@ -101,7 +113,7 @@ sealed class SettingsForm : Form
     static readonly (string glyph, string key)[] Pages =
     {
         (Glyphs.Appearance, "appearance"), (Glyphs.Display, "display"), (Glyphs.General, "general"), (Glyphs.Apps, "excluded"),
-        (Glyphs.Experimental, "experimental"), (Glyphs.Info, "about"),
+        (Glyphs.Search, "missed"), (Glyphs.Experimental, "experimental"), (Glyphs.Info, "about"),
     };
 
     // 창 크기(96 DPI 기준 논리 픽셀). 처음에는 DefaultClient 로 열되 작업 영역보다 크면 줄이고, MinClient 보다 작게는 줄일 수 없다.
@@ -120,12 +132,15 @@ sealed class SettingsForm : Form
 
     /// <param name="checkUpdates">"정보" 페이지의 [새 버전 확인]. 트레이 메뉴의 업데이트 확인과 같다.</param>
     /// <param name="experiments">실험 기능 페이지의 [보기] 등을 처리하는 쪽(트레이 프로그램).</param>
-    public SettingsForm(Settings live, AppPaths paths, Action checkUpdates, IExperimentHost experiments, SettingsPage page = SettingsPage.Appearance)
-        : this(live, live.Clone(), dirty: false, paths, checkUpdates, experiments, page) { }
+    /// <param name="missed">"배지가 안 뜬 앱" 목록(트레이 프로그램이 모은다).</param>
+    public SettingsForm(Settings live, AppPaths paths, Action checkUpdates, IExperimentHost experiments, MissedAppTracker missed,
+                        SettingsPage page = SettingsPage.Appearance)
+        : this(live, live.Clone(), dirty: false, paths, checkUpdates, experiments, missed, page) { }
 
     /// <param name="original">[되돌리기]가 돌아갈 값. 새 창이 이전 창의 기준을 이어받을 때 넘긴다.</param>
     /// <param name="dirty">이미 편집이 있었는가(이어받은 창은 true).</param>
-    SettingsForm(Settings live, Settings original, bool dirty, AppPaths paths, Action checkUpdates, IExperimentHost experiments, SettingsPage page)
+    SettingsForm(Settings live, Settings original, bool dirty, AppPaths paths, Action checkUpdates, IExperimentHost experiments, MissedAppTracker missed,
+                 SettingsPage page)
     {
         _live = live;
         _draft = live.Clone();
@@ -133,6 +148,7 @@ sealed class SettingsForm : Form
         _paths = paths;
         _checkUpdates = checkUpdates;
         _experiments = experiments;
+        _missed = missed;
         _autostart = Autostart.IsEnabled();
         _originalAutostart = _autostart;
         _originalAutostartCommand = Autostart.ReadCommand();
@@ -151,8 +167,14 @@ sealed class SettingsForm : Form
         ClientSize = DefaultClient;
 
         _flashTimer.Tick += (_, _) => { _flashTimer.Stop(); _flashing = false; _preview.Invalidate(); };
-        _copiedTimer.Tick += (_, _) => { _copiedTimer.Stop(); if (!_diagCard.IsDisposed) _diagCard.Description = Strings.Get("about.copyDiag.desc"); };
+        _copiedTimer.Tick += (_, _) =>
+        {
+            _copiedTimer.Stop();
+            if (!_diagCard.IsDisposed) _diagCard.Description = Strings.Get("about.copyDiag.desc");
+            if (!_missedCard.IsDisposed) _missedCard.Description = Strings.Get("missed.manage.desc");
+        };
         _saveTimer.Tick += (_, _) => { _saveTimer.Stop(); Applied?.Invoke(); };
+        _missedTimer.Tick += (_, _) => { if (CurrentPage == SettingsPage.Missed) ReloadMissed(); };
 
         Build(page);
         LoadDraftIntoControls();
@@ -161,6 +183,7 @@ sealed class SettingsForm : Form
         UpdateHint();
         _painted = Theme.Design = DesignThemes.Get(_draft.Theme);
         Theme.Apply(this);
+        _missedTimer.Start();
     }
 
     /// <summary>이 창을 마지막으로 칠한 테마. 편집 중 테마가 바뀌면 창 전체를 새 색으로 다시 칠한다(<see cref="Recolor"/>).</summary>
@@ -177,7 +200,7 @@ sealed class SettingsForm : Form
     /// <summary>같은 편집 상태(되돌리기 기준값·자동 시작)를 이어받는 새 창을 현재 언어로 만든다. 위치·크기·페이지·스크롤도 그대로.</summary>
     public SettingsForm Reopen()
     {
-        var next = new SettingsForm(_live, _original, _dirty, _paths, _checkUpdates, _experiments, CurrentPage)
+        var next = new SettingsForm(_live, _original, _dirty, _paths, _checkUpdates, _experiments, _missed, CurrentPage)
         {
             _autostart = _autostart, _originalAutostart = _originalAutostart, _originalAutostartCommand = _originalAutostartCommand,
         };
@@ -327,6 +350,7 @@ sealed class SettingsForm : Form
         _pages[(int)SettingsPage.Display] = BuildDisplayPage();
         _pages[(int)SettingsPage.General] = BuildGeneralPage();
         _pages[(int)SettingsPage.Excluded] = BuildExcludedPage();
+        _pages[(int)SettingsPage.Missed] = BuildMissedPage();
         _pages[(int)SettingsPage.Experimental] = BuildExperimentalPage();
         _pages[(int)SettingsPage.About] = BuildAboutPage();
 
@@ -363,6 +387,7 @@ sealed class SettingsForm : Form
         PlacePreview();
         page.PerformLayout();
         if (index == (int)SettingsPage.About) RefreshUpdateCard();
+        if (index == (int)SettingsPage.Missed) ReloadMissed();
     }
 
     CardStack BuildAppearancePage()
@@ -558,6 +583,33 @@ sealed class SettingsForm : Form
         return page;
     }
 
+    /// <summary>
+    /// "배지가 안 뜬 앱": 켜고 끄기, 목록 복사·지우기, 찾은 앱(앱마다 카드 한 장, 까닭과 해결 방법은 "자세히" 로 펼친다).
+    /// 목록은 트레이 프로그램이 모으고(<see cref="MissedAppTracker"/>) <see cref="ReloadMissed"/> 가 카드를 다시 만든다.
+    /// </summary>
+    CardStack BuildMissedPage()
+    {
+        var page = _missedPage = new CardStack();
+        _trackMissed = Toggle(v =>
+        {
+            _draft.TrackMissedApps = v;
+            Touch();                                   // 끄면 트레이 프로그램이 모은 목록을 지운다(BadgeForm.OnSettingsChanged)
+            if (!_loading) ReloadMissed(force: true);  // "꺼져 있습니다" ↔ "아직 찾은 앱이 없습니다"
+        });
+        page.Controls.Add(Card(Glyphs.Search, "missed.track", action: _trackMissed));
+
+        _missedCopy = Button("missed.copy", CopyMissed);
+        _missedCopy.Margin = new Padding(0, 0, 8, 0);
+        _missedClear = Button("missed.clear", ClearMissed);
+        _missedClear.Margin = Padding.Empty;
+        _missedCard = Card(Glyphs.Copy, "missed.manage", action: Row(_missedCopy, _missedClear));
+        page.Controls.Add(_missedCard);
+
+        _missedHeader = Section("missed.listHeader");
+        page.Controls.Add(_missedHeader);
+        return page;
+    }
+
     CardStack BuildAboutPage()
     {
         var page = new CardStack();
@@ -585,6 +637,7 @@ sealed class SettingsForm : Form
         // 진단 정보: 이슈에 붙여 넣으면 재현 환경을 바로 알 수 있다.
         _diagCard = Link(Glyphs.Copy, "about.copyDiag", CopyDiagnostics, trailing: "");
         page.Controls.Add(_diagCard);
+        page.Controls.Add(Link(Glyphs.Search, "about.missed", () => ShowPage(SettingsPage.Missed), trailing: ""));
         page.Controls.Add(Link(Glyphs.Start, "about.startAgain", ShowStartAgain, trailing: ""));
 
         page.Controls.Add(Note(Strings.Get("about.license")));
@@ -704,7 +757,7 @@ sealed class SettingsForm : Form
     {
         try
         {
-            Clipboard.SetText(AboutInfo.Diagnostics(_paths, _live, DeviceDpi));
+            Clipboard.SetText(AboutInfo.Diagnostics(_paths, _live, DeviceDpi, _missed.List()));
             _diagCard.Description = Strings.Get("about.copied");
             _copiedTimer.Stop();
             _copiedTimer.Start();
@@ -782,6 +835,82 @@ sealed class SettingsForm : Form
         // 키보드로 지우던 사람이 이어서 지울 수 있게 같은 자리의 다음 항목으로, 없으면 입력칸으로.
         var next = _excludeRows.OfType<SettingsCard>().ElementAtOrDefault(Math.Min(i, items.Count - 1))?.Action;
         (next ?? _excludeInput).Focus();
+    }
+
+    // ── 배지가 안 뜬 앱 ──
+    /// <summary>찾은 앱 카드들을 다시 만든다. 목록이 그대로면(<see cref="MissedAppTracker.Version"/>) 건드리지 않는다(포커스·스크롤 유지).</summary>
+    void ReloadMissed(bool force = false)
+    {
+        if (IsDisposed || (!force && _missed.Version == _missedVersion)) return;
+        _missedVersion = _missed.Version;
+        var apps = _missed.List();
+        var page = _missedPage;
+        page.SuspendLayout();
+        foreach (var c in _missedRows) { page.Controls.Remove(c); c.Dispose(); }
+        _missedRows.Clear();
+        _missedHeader.Text = Strings.Format("missed.listHeader", apps.Count);
+        _missedCopy.Enabled = _missedClear.Enabled = apps.Count > 0;
+        if (apps.Count == 0) _missedRows.Add(Note(Strings.Get(_draft.TrackMissedApps ? "missed.empty" : "missed.off")));
+        foreach (var app in apps)
+        {
+            string name = app.Process;
+            var ignore = new AccentButton { Text = Strings.Get("missed.ignore"), AutoSize = true, AccessibleName = Strings.Format("missed.ignore.name", name) };
+            // 눌린 버튼이 든 카드를 지우므로 클릭 처리가 끝난 뒤에 지운다.
+            ignore.Click += (_, _) => BeginInvoke(() => IgnoreMissed(name));
+            _tips.SetToolTip(ignore, Strings.Get("missed.ignore.tip"));
+            _missedRows.Add(new SettingsCard
+            {
+                Glyph = ReasonGlyph(app.Reason), Title = name.Replace("&", "&&"),
+                Description = Strings.Format("missed.item", Strings.Get("missed.reason." + app.Reason),
+                    Strings.Get(app.NeverShown ? "missed.never" : "missed.partial"), app.LastMissed.ToString("t", CultureInfo.CurrentCulture)),
+                Details = Strings.Get("missed.reason." + app.Reason + ".details"),
+                Action = ignore,
+            });
+        }
+        foreach (var c in _missedRows) page.Controls.Add(c);
+        page.ResumeLayout(true);
+        if (IsHandleCreated) Theme.Apply(this);   // 새로 만든 카드에 색을 입힌다(처음에는 생성자 끝에서 칠한다)
+    }
+
+    /// <summary>까닭마다 카드 아이콘.</summary>
+    static string ReasonGlyph(string reason) => reason switch
+    {
+        MissReason.Elevated => Glyphs.Admin,
+        MissReason.Slow => Glyphs.Clock,
+        MissReason.ImeUnknown => Glyphs.InputMode,
+        MissReason.Fullscreen => Glyphs.FullScreen,
+        _ => Glyphs.Insert,   // 커서 위치를 알 수 없음(글자 칸 + 커서 모양)
+    };
+
+    void IgnoreMissed(string name)
+    {
+        if (IsDisposed) return;
+        int i = _missed.List().Select(a => a.Process).ToList().IndexOf(name);
+        _missed.Ignore(name);
+        ReloadMissed();
+        // 키보드로 빼던 사람이 이어서 뺄 수 있게 같은 자리의 다음 항목으로, 없으면 켜고 끄기로.
+        var cards = _missedRows.OfType<SettingsCard>().ToList();
+        var next = cards.Count == 0 ? null : cards[Math.Clamp(i, 0, cards.Count - 1)].Action;
+        (next ?? _trackMissed).Focus();
+    }
+
+    void ClearMissed()
+    {
+        _missed.Clear();
+        ReloadMissed(force: true);
+        _trackMissed.Focus();
+    }
+
+    void CopyMissed()
+    {
+        try
+        {
+            Clipboard.SetText(AboutInfo.MissedReport(_missed.List()));
+            _missedCard.Description = Strings.Get("about.copied");
+            _copiedTimer.Stop();
+            _copiedTimer.Start();
+        }
+        catch (Exception ex) { Log.Error("clipboard failed", ex); }
     }
 
     /// <summary>
@@ -1236,6 +1365,8 @@ sealed class SettingsForm : Form
         _keepMode.Checked = _draft.KeepImeMode;
         SyncExperimentalEnabled();
         ReloadExcluded();
+        _trackMissed.Checked = _draft.TrackMissedApps;
+        ReloadMissed(force: true);
     }
 
     /// <summary>테마를 고르면 배지 색도 그 테마의 기본색으로, 견본도 그 테마의 것으로 바꾼다. 창은 <see cref="Touch"/> 에서 다시 칠한다.</summary>
@@ -1542,7 +1673,8 @@ sealed class SettingsForm : Form
     {
         if (disposing)
         {
-            _flashTimer.Dispose(); _copiedTimer.Dispose(); _saveTimer.Dispose(); _tips.Dispose(); _sectionFont.Dispose(); _hintFont.Dispose(); _appsMenu?.Dispose();
+            _flashTimer.Dispose(); _copiedTimer.Dispose(); _saveTimer.Dispose(); _missedTimer.Dispose(); _tips.Dispose(); _sectionFont.Dispose(); _hintFont.Dispose();
+            _appsMenu?.Dispose();
             _preview?.Dispose();   // 접혀 있으면 카드에서 빠져 있어 창과 함께 정리되지 않는다
         }
         base.Dispose(disposing);

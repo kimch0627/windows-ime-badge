@@ -16,7 +16,12 @@ readonly record struct FocusFacts(bool Password = false, bool Selection = false)
 /// <summary>UI Automation 경로(<see cref="A11yCaret"/>)의 결과: caret 과 입력칸 정보.</summary>
 /// <param name="Unverified">caret 을 앞뒤 글자와 대조하지 못했다(UI Automation 이 준 글자 사각형이 망가짐, <see cref="TextCaretPick.Unverified"/>).
 /// <see cref="A11yCaret"/> 이 MSAA 가상 caret 을 찾아 바꾼다.</param>
-readonly record struct A11yHit(Rectangle? Caret, FocusFacts Facts = default, bool Unverified = false);
+/// <param name="NotInput">caret 이 없는 까닭이 입력칸이 아니어서다(읽기 전용이거나 버튼·목록 같은 컨트롤, <see cref="InputSurface"/>).
+/// "배지가 안 뜬 앱 찾기" 가 세지 않는다.</param>
+/// <param name="Slow">대상 앱이 제때 답하지 않아 이번에는 caret 없음으로 넘어갔다(<see cref="A11yCaret"/>).</param>
+/// <param name="ControlType">caret 을 못 찾은 요소의 UI Automation 컨트롤 종류 ID(모르면 0). "배지가 안 뜬 앱" 보고서용.</param>
+readonly record struct A11yHit(Rectangle? Caret, FocusFacts Facts = default, bool Unverified = false, bool NotInput = false, bool Slow = false,
+                               int ControlType = 0);
 
 /// <summary>caret 을 찾은 경로마다 입력칸 정보를 만든다. 입력한 글자는 읽지 않는다.</summary>
 static class Focus

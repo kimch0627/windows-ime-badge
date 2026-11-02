@@ -52,7 +52,7 @@ static class A11yCaret
         }
         dump?.Append(outcome == DeadlineWorker<A11yHit>.Outcome.TimedOut ? " a11y:timeout" : " a11y:busy");
         if (focus == _lastFocus && now - _lastMs <= ReuseMs) { dump?.Append(" a11y:reuse"); return _last; }
-        return default;
+        return new A11yHit(null, Slow: true);
     }
 
     /// <summary>

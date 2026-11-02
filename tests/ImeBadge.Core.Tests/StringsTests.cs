@@ -72,6 +72,8 @@ public sealed class StringsTests
             "settings.import", "settings.export", "settings.reset");
         // 제외 앱
         AssertUniqueMnemonics(t, "exclude.add");
+        // 배지가 안 뜬 앱
+        AssertUniqueMnemonics(t, "missed.track", "missed.copy", "missed.clear");
         // 실험 기능
         AssertUniqueMnemonics(t, "exp.sonar", "exp.sonar.preview", "exp.sonarHotkey", "exp.sonarOnSwitch", "exp.keepMode",
             "exp.focusSteal", "exp.focusSteal.preview", "exp.selection", "exp.password", "exp.password.preview");

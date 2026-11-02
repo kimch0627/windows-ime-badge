@@ -26,15 +26,16 @@ static class UiaCaret
             if (valuePat is Uia.IUIAutomationValuePattern v && v.get_CurrentIsReadOnly())
             {
                 dump?.Append(" uia:readonly");
-                return default;
+                return new A11yHit(null, NotInput: true);   // 웹 페이지 본문처럼 읽기만 하는 곳: 배지가 없는 것이 맞다
             }
 
             Rectangle? caret = null;
-            bool selection = false, unverified = false;
+            bool selection = false, unverified = false, noSelection = false;
             textPat = el.GetCurrentPattern(Uia.UIA_TextPatternId);
             if (textPat is Uia.IUIAutomationTextPattern tp)
             {
                 sel = tp.GetSelection();
+                noSelection = sel is null || sel.get_Length() == 0;   // 글 영역이지만 커서가 없다(웹 페이지 본문처럼 읽기만 하는 곳)
                 if (sel is not null && sel.get_Length() > 0)
                 {
                     r = sel.GetElement(0);
@@ -112,7 +113,9 @@ static class UiaCaret
                         bool focus = el.GetCurrentPropertyValue(Uia.UIA_HasKeyboardFocusPropertyId) is bool f && f;
                         dump.Append($" uia:none(ct={ct} class='{cls}' fw={fw} text={(textPat is not null ? 1 : 0)} focus={(focus ? 1 : 0)})");
                     }
-                    return default;
+                    // 버튼·목록 항목처럼 글자를 받지 않는 컨트롤이면 배지가 없는 것이 맞다. Pane·Custom 등은 직접 글자를 그리는 입력칸일 수 있다.
+                    // 글 영역(TextPattern)인데 커서·선택이 아예 없으면 편집 중이 아니다(입력칸이면 커서가 늘 있다).
+                    return new A11yHit(null, NotInput: noSelection || !InputSurface.MayTakeText(ct), ControlType: ct);
                 }
             }
             return new A11yHit(caret, query == FocusQuery.None ? default : Facts(el, query, selection, dump), unverified);

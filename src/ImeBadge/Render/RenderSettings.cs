@@ -43,9 +43,10 @@ static class RenderSettings
             live.Language = Strings.Setting;   // 설정 창이 언어 칸을 채울 때 화면 언어와 맞게
             string mode = (Theme.IsDark ? "dark" : "light") + (Strings.IsKorean ? "" : "-en");
             Theme.Design = DesignThemes.Get(live.Theme);
+            var missed = live.TrackMissedApps ? SampleMissed() : new MissedAppTracker();   // 끄면 목록이 비는 것은 실제 앱과 같다
             foreach (SettingsPage page in Enum.GetValues(typeof(SettingsPage)))
             {
-                using var form = new SettingsForm(live, AppPaths.Default(), () => { }, new NoHost(), page)
+                using var form = new SettingsForm(live, AppPaths.Default(), () => { }, new NoHost(), missed, page)
                 {
                     StartPosition = FormStartPosition.Manual,
                     Location = new Point(-32000, -32000),
@@ -67,6 +68,22 @@ static class RenderSettings
             Environment.ExitCode = 1;
         }
         return true;
+    }
+
+    /// <summary>"배지가 안 뜬 앱" 페이지에 보일 예: 한 번도 안 뜬 앱 둘(커서 정보 없음·관리자 권한)과 가끔 안 뜬 앱 하나(응답이 늦음).</summary>
+    static MissedAppTracker SampleMissed()
+    {
+        var t = new MissedAppTracker();
+        var at = DateTime.Today.AddHours(14).AddMinutes(5);
+        for (int s = 0; s < 6; s++)
+        {
+            long ms = s * (long)MissedAppTracker.BucketMs;
+            t.Observe("javaw", MissReason.NoCaret, ms, at.AddMinutes(s), "fg='SunAwtFrame' focus='SunAwtCanvas' uia=50033");
+            t.Observe("windowsterminal", MissReason.Elevated, ms, at.AddMinutes(s - 7), "fg='CASCADIA_HOSTING_WINDOW_CLASS'");
+            t.Observe("slack", MissReason.Slow, ms, at.AddMinutes(s - 30), "fg='Chrome_WidgetWin_1' focus='Chrome_RenderWidgetHostHWND'");
+            t.Observe("slack", null, ms, at);
+        }
+        return t;
     }
 
     /// <summary>"이름=값" 으로 설정 하나를 바꾼다(bool·int·string·enum 속성). 모르는 이름이면 로그만 남긴다.</summary>
