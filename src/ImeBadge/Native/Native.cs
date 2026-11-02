@@ -135,6 +135,27 @@ static class Native
     public const int DWMWCP_ROUND = 2, DWMWCP_ROUNDSMALL = 3;
     public const int DWMWA_BORDER_COLOR = 34, DWMWA_CAPTION_COLOR = 35, DWMWA_TEXT_COLOR = 36;   // Windows 11 22000+, COLORREF(0x00BBGGRR)
 
+    [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out RECT value, int size);
+    const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+    [DllImport("user32.dll")] static extern bool IsIconic(IntPtr hWnd);
+
+    /// <summary>
+    /// 창이 화면에서 보이는 사각형(화면 좌표). Windows 10·11 창 둘레의 보이지 않는 크기 조절 테두리는 뺀다(DWM 의 extended frame bounds,
+    /// 못 읽으면 GetWindowRect). 숨었거나 최소화했거나 못 읽으면 빈 사각형.
+    /// </summary>
+    public static Rectangle VisibleBounds(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero || !IsWindowVisible(hwnd) || IsIconic(hwnd)) return Rectangle.Empty;
+        try
+        {
+            if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out var frame, Marshal.SizeOf<RECT>()) == 0
+                && frame.Right > frame.Left && frame.Bottom > frame.Top)
+                return frame.ToRectangle();
+        }
+        catch { }   // DWM 이 없는 환경(드묾): 아래로
+        return GetWindowRect(hwnd, out var r) && r.Right > r.Left && r.Bottom > r.Top ? r.ToRectangle() : Rectangle.Empty;
+    }
+
     /// <summary>System.Drawing.Color → Win32 COLORREF(0x00BBGGRR).</summary>
     public static int ColorRef(Color c) => c.R | (c.G << 8) | (c.B << 16);
 

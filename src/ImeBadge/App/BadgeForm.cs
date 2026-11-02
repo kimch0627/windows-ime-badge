@@ -92,6 +92,7 @@ sealed class BadgeForm : Form, IExperimentHost
     // 포커스 뺏김 경고: 창이 바뀐 순간을 기억해 두고, 바뀐 직후에도 입력이 이어지는지 폴링마다 본다(CheckFocusSteal).
     readonly FocusStealGuard _stealGuard = new();
     Rectangle? _stealCaret;      // 글자를 치던 자리(바뀌기 전 창의 caret). 경고를 여기에 띄운다
+    IntPtr _stealFrom;           // 글자를 치던 창(바뀌기 전 활성 창). 닫혔으면 알리지 않고, 앞으로 나온 창과 같은 앱인지 본다
     Point _stealPointer;         // 지켜보기 시작할 때의 마우스 위치. 움직였으면 사용자가 알아챘다고 본다
     long _lastSwitchKeyMs = long.MinValue;   // Alt·Win·Ctrl 을 마지막으로 누르고 있던 때
     const int StealWarningMs = 5000;
@@ -981,6 +982,7 @@ sealed class BadgeForm : Form, IExperimentHost
         {
             if (TracksUserInput) TrackUserInput();
             CheckFocusSteal();
+            DismissStealOnClick();
             // 일시 중지 중에도 재야 다시 켰을 때 "예전에 누르기 시작한 Shift" 로 잘못 세지 않는다.
             // "누르는 즉시 표시" 면 0.3초를 기다리지 않는다(누른 것이 보이는 첫 폴링, 기본 0.1초 안).
             bool shift = _shiftHold.Update(Native.IsShiftAloneDown(), Environment.TickCount64,
@@ -1035,8 +1037,8 @@ sealed class BadgeForm : Form, IExperimentHost
     void AdjustIdleInterval()
     {
         int want = _settings.PollIntervalMs;
-        // 포커스 뺏김을 지켜보는 동안(1초 미만)은 느리게 하지 않는다.
-        if (!Visible && Environment.TickCount64 - _hiddenSince > IdleAfterMs && !_stealGuard.Armed)
+        // 포커스 뺏김을 지켜보는 동안(1초 미만)과 그 경고가 보이는 동안(5초 이하, 마우스를 누르면 내린다)은 느리게 하지 않는다.
+        if (!Visible && Environment.TickCount64 - _hiddenSince > IdleAfterMs && !_stealGuard.Armed && _callout?.Tag != "steal")
             want = Math.Max(want * 3, 300);
         if (_timer.Interval != want) _timer.Interval = want;
     }
@@ -1296,11 +1298,11 @@ sealed class BadgeForm : Form, IExperimentHost
 
     /// <summary>
     /// 커서 옆 말풍선. 배지와 겹치지 않게 배지의 반대쪽에 띄운다(<see cref="CalloutBelow"/>). <paramref name="holdMs"/> 가 0 이하면
-    /// <see cref="CalloutPlayer.Hide"/> 할 때까지 보인다.
+    /// <see cref="CalloutPlayer.Hide"/> 할 때까지 보인다. <paramref name="avoid"/> 를 주면 자리가 있는 한 그 창을 가리지 않는다.
     /// </summary>
-    void ShowCallout(string tag, CalloutContent content, Rectangle anchor, int holdMs, bool? preferBelow = null)
+    void ShowCallout(string tag, CalloutContent content, Rectangle anchor, int holdMs, bool? preferBelow = null, Rectangle avoid = default)
     {
-        try { (_callout ??= new CalloutPlayer()).Show(tag, content, anchor, preferBelow ?? CalloutBelow, holdMs, AnimationsOn, _settings.SizePercent); }
+        try { (_callout ??= new CalloutPlayer()).Show(tag, content, anchor, preferBelow ?? CalloutBelow, holdMs, AnimationsOn, _settings.SizePercent, avoid); }
         catch (Exception ex) { Log.Error("callout failed", ex); }
     }
 
@@ -1322,12 +1324,23 @@ sealed class BadgeForm : Form, IExperimentHost
         long now = Environment.TickCount64;
         if (!_stealGuard.OnForegroundChanged(now, (long)fg, (long)_lastFg, _lastTypingMs, Math.Max(_lastPointerMs, _lastSwitchKeyMs))) return;
         _stealCaret = _lastCaret;
+        _stealFrom = _lastFg;
         _stealPointer = _lastPointer;
         if (_timer.Interval != _settings.PollIntervalMs) _timer.Interval = _settings.PollIntervalMs;   // 지켜보는 동안은 빠르게
         Log.Write($"focus steal: watching fg='{Native.ClassName(fg)}'");
     }
 
-    /// <summary>지켜보는 중이면, 창이 바뀐 직후에도 입력이 이어졌는지 본다. 이어졌으면 글자를 치던 자리에 경고를 띄운다.</summary>
+    /// <summary>
+    /// 지켜보는 중이면, 창이 바뀐 직후에도 입력이 이어졌는지 본다. 이어졌으면 글자를 치던 자리에 경고를 띄운다.
+    /// <list type="bullet">
+    /// <item>글자를 치던 창이 그사이 닫혔거나 숨었으면 알리지 않는다. Enter·Esc 로 대화상자를 닫아 Windows 가 다른 창을 앞으로 올린 것이고,
+    ///   Alt+Tab 으로 돌아갈 곳도 없다.</item>
+    /// <item>말풍선은 앞으로 나온 창을 가리지 않는다. 그 창이 쓰던 자리를 덮었으면 그 창 바깥 가장자리에 둔다(<see cref="CalloutLayout"/>).
+    ///   사용자가 스스로 연 창(Enter 로 연 쪽지 창 등)이었다면 그 창에서 바로 이어 쓸 수 있고, 정말 끼어든 창이면 무엇이 떴는지 읽을 수 있다.
+    ///   배지는 입력을 따라 새 창으로 갔으므로 배지 위치와 상관없이 커서 아래를 먼저 고른다(위는 방금 쓴 줄이다).</item>
+    /// <item>두 창이 같은 앱이면 "○○ 의 다른 창" 이라고 알린다. 쓰던 앱의 이름만 보면 무엇이 바뀌었는지 알 수 없다.</item>
+    /// </list>
+    /// </summary>
     void CheckFocusSteal()
     {
         if (!_stealGuard.Armed) return;
@@ -1335,12 +1348,32 @@ sealed class BadgeForm : Form, IExperimentHost
         bool pointerUsed = _lastPointer != _stealPointer || Native.IsMouseButtonDown();
         if (!_stealGuard.Check(Environment.TickCount64, (long)fg, Native.LastInputMs(), pointerUsed)) return;
         if (_stealCaret is not { } anchor) return;
-        string app = AppTitle(fg);
-        Log.Write($"focus steal: warned fg='{Native.ClassName(fg)}'");
-        ShowCallout("steal", new CalloutContent(CalloutKind.Warning, Strings.Get("steal.title"), Strings.Format("steal.detail", app), Glyphs.Shield),
-            anchor, holdMs: StealWarningMs);
+        if (!Native.IsWindow(_stealFrom) || !Native.IsWindowVisible(_stealFrom))
+        {
+            Log.Write($"focus steal: skipped, typing window closed fg='{Native.ClassName(fg)}'");
+            return;
+        }
+        string? app = AppName(fg);
+        bool sameApp = app is not null && app == AppName(_stealFrom);
+        string detail = Strings.Format(sameApp ? "steal.detail.sameApp" : "steal.detail", app ?? Strings.Get("diag.unknown"));
+        var avoid = Native.VisibleBounds(fg);
+        Log.Write($"focus steal: warned fg='{Native.ClassName(fg)}'{(sameApp ? " (same app)" : "")}");
+        ShowCallout("steal", new CalloutContent(CalloutKind.Warning, Strings.Get("steal.title"), detail, Glyphs.Shield),
+            anchor, holdMs: StealWarningMs, preferBelow: true, avoid: avoid);
         // 끼어든 창이 앞에 있는 동안만: 활성 창이 다시 바뀌면(Alt+Tab 으로 돌아감 등) 바로 내린다. 그 창의 입력칸·포커스와는 상관없다.
         _calloutFocus.Pin("steal", (long)fg, focus: 0, needsCaret: false);
+    }
+
+    /// <summary>
+    /// 포커스 뺏김 경고가 보이는 동안 마우스 단추를 누르면 바로 내린다. 사용자가 이미 알아채고 손을 옮겼다(끼어든 창을 닫거나 그 창에서 계속 쓰기로 함).
+    /// 다른 창을 눌렀으면 활성 창이 바뀌어 어차피 내려간다(<see cref="CalloutFocus"/>). 이 경고가 떠 있는 동안은 폴링을 느리게 하지 않는다.
+    /// </summary>
+    void DismissStealOnClick()
+    {
+        if (_callout?.Tag != "steal" || !Native.IsMouseButtonDown()) return;
+        Log.Write("callout: steal hidden, mouse pressed");
+        _callout.Hide("steal", immediate: true);
+        if (_calloutFocus.Tag == "steal") _calloutFocus.Clear();
     }
 
     static readonly string[] ShellClasses =
@@ -1363,8 +1396,8 @@ sealed class BadgeForm : Form, IExperimentHost
         return Array.IndexOf(ShellProcesses, ImeReader.ProcessName(pid)) >= 0;
     }
 
-    /// <summary>경고에 쓸 앱 이름: 실행 파일의 설명(예: "Google Chrome"), 없으면 실행 파일 이름. UWP 앱은 안쪽 앱 프로세스의 것.</summary>
-    static string AppTitle(IntPtr window)
+    /// <summary>경고에 쓸 앱 이름: 실행 파일의 설명(예: "Google Chrome"), 없으면 실행 파일 이름. UWP 앱은 안쪽 앱 프로세스의 것. 모르면 null.</summary>
+    static string? AppName(IntPtr window)
     {
         var core = Native.UwpCoreWindow(window);
         Native.GetWindowThreadProcessId(core != IntPtr.Zero ? core : window, out uint pid);
@@ -1376,7 +1409,7 @@ sealed class BadgeForm : Form, IExperimentHost
         }
         catch { }
         string name = ImeReader.ProcessName(pid);
-        return name.Length > 0 ? name : Strings.Get("diag.unknown");
+        return name.Length > 0 ? name : null;
     }
 
     // ── 실험 기능: 비밀번호 칸 경고 ──

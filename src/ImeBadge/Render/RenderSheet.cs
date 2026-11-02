@@ -275,6 +275,7 @@ static class RenderSheet
         {
             ("소나: 커서 못 찾음", new(CalloutKind.Info, Strings.Get("sonar.notFound"), Strings.Get("sonar.notFound.detail"), Glyphs.Sonar)),
             ("포커스 뺏김 경고", new(CalloutKind.Warning, Strings.Get("steal.title"), Strings.Format("steal.detail", "KakaoTalk"), Glyphs.Shield)),
+            ("포커스 뺏김 경고: 같은 앱", new(CalloutKind.Warning, Strings.Get("steal.title"), Strings.Format("steal.detail.sameApp", "KakaoTalk"), Glyphs.Shield)),
             ("비밀번호 칸: 한글", new(CalloutKind.Warning, Strings.Get("password.title"), Strings.Get("password.hangul"), Glyphs.Lock)),
             ("비밀번호 칸: 둘 다", new(CalloutKind.Warning, Strings.Get("password.title"), Strings.Get("password.both"), Glyphs.Lock)),
         };
@@ -293,6 +294,14 @@ static class RenderSheet
                 s.Row($"{name} · {label}", cells.Select((c, i) => new SheetPanel(cases[i].Item1 ? Dark : Light, w, new List<Bitmap> { c })).ToList());
             }
         }
+
+        // 포커스 뺏김 경고는 앞으로 나온 창을 가리지 않는다(앱과 같은 CalloutLayout 계산, 가릴 창 = 앞으로 나온 창).
+        var stealContent = new CalloutContent(CalloutKind.Warning, Strings.Get("steal.title"), Strings.Format("steal.detail.sameApp", "KakaoTalk"), Glyphs.Shield);
+        var stealScenes = new[] { ("새 창이 쓰던 자리를 덮음 → 창 바깥", true), ("새 창이 다른 곳에 뜸 → 커서 아래", false) };
+        var stealCells = stealScenes.Select(c => StealPlacementCell(stealContent, 1f, covers: c.Item2)).ToList();
+        float stealW = stealCells.Max(c => c.Width) + 4;
+        s.Headers(stealScenes.Select(c => (c.Item1, new[] { "" }, stealW)).ToArray());
+        s.Row("포커스 뺏김 경고 자리 · 100%", stealCells.Select(c => new SheetPanel(Light, stealW, new List<Bitmap> { c })).ToList());
 
         s.Section("12. 실험 기능 — 선택 영역 덮어쓰기 표시",
             "선택한 글이 있으면 배지 테두리가 흰 칸·짙은 칸이 번갈아 끊긴 점선(선택 영역 모양)이 된다. 밑줄은 막대가 점선이 된다. 배율 150%, 마지막 판은 100% ×3.");
@@ -425,6 +434,47 @@ static class RenderSheet
         using var bmp = OverlayRenderer.Callout(content, scale, body, place.Below, place.TailX, out var offset, dark);
         g.DrawImage(bmp, new Rectangle(place.Location.X - offset.X, place.Location.Y - offset.Y, bmp.Width, bmp.Height));
         return cell;
+    }
+
+    /// <summary>
+    /// 포커스 뺏김 경고의 자리 한 칸: 글을 쓰던 창(커서)과 앞으로 나온 창, 그리고 앱과 같은 계산(<see cref="CalloutLayout"/>, 가릴 창 = 앞으로 나온 창)으로
+    /// 놓은 말풍선. <paramref name="covers"/> 면 새 창이 커서를 덮고, 아니면 다른 곳에 뜬다.
+    /// </summary>
+    static Bitmap StealPlacementCell(CalloutContent content, float scale, bool covers)
+    {
+        int S(float v) => (int)Math.Round(v * scale);
+        var size = new Size(S(470), S(330));
+        var cell = new Bitmap(size.Width, size.Height, PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(cell);
+        g.Clear(Color.FromArgb(0xE6, 0xE6, 0xE6));
+        g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+        using var font = new Font(BadgeRenderer.FontFamily, 12 * scale, GraphicsUnit.Pixel);
+        var editor = new Rectangle(S(12), S(12), S(300), S(190));
+        MockWindow(g, editor, "메모장", font, scale);
+        const string line = "안녕하세요. 회의 자료 보내 드립니다";
+        float lineW = g.MeasureString(line, font).Width;
+        using (var ink = new SolidBrush(Color.FromArgb(0x30, 0x30, 0x30)))
+            g.DrawString(line, font, ink, editor.Left + S(10), editor.Top + S(60));
+        var caret = new Rectangle(editor.Left + S(10) + (int)lineW, editor.Top + S(60), Math.Max(1, S(1)), S(16));
+        g.FillRectangle(Brushes.Black, caret);
+        var popup = covers ? new Rectangle(S(40), S(44), S(250), S(150)) : new Rectangle(S(300), S(200), S(160), S(120));
+        MockWindow(g, popup, "쪽지쓰기", font, scale);
+        var body = OverlayRenderer.MeasureCallout(content, scale);
+        var place = CalloutLayout.Compute(caret, body, OverlayRenderer.TailHeight(scale), (int)Math.Round(3 * scale), new Rectangle(Point.Empty, size),
+            preferBelow: true, OverlayRenderer.TailInset(scale), popup);
+        using var bmp = OverlayRenderer.Callout(content, scale, body, place.Below, place.TailX, out var offset, dark: false);
+        g.DrawImage(bmp, new Rectangle(place.Location.X - offset.X, place.Location.Y - offset.Y, bmp.Width, bmp.Height));
+        return cell;
+    }
+
+    /// <summary>제목 줄이 있는 흰 창 모형.</summary>
+    static void MockWindow(Graphics g, Rectangle r, string title, Font font, float scale)
+    {
+        g.FillRectangle(Brushes.White, r);
+        using (var head = new SolidBrush(Color.FromArgb(0xF3, 0xF3, 0xF3))) g.FillRectangle(head, r.Left, r.Top, r.Width, (int)Math.Round(26 * scale));
+        using (var ink = new SolidBrush(Color.FromArgb(0x20, 0x20, 0x20))) g.DrawString(title, font, ink, r.Left + 8 * scale, r.Top + 6 * scale);
+        using var pen = new Pen(Color.FromArgb(0x8A, 0x8A, 0x8A));
+        g.DrawRectangle(pen, r.Left, r.Top, r.Width - 1, r.Height - 1);
     }
 
     /// <summary>
