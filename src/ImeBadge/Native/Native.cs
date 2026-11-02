@@ -210,6 +210,15 @@ static class Native
     public static bool IsSwitchKeyDown() =>
         IsKeyDown(VK_MENU) || IsKeyDown(VK_LWIN) || IsKeyDown(VK_RWIN) || IsKeyDown(VK_CONTROL);
 
+    public const int VK_BACK = 0x08, VK_SPACE = 0x20;
+
+    /// <summary>
+    /// 지금 스페이스나 백스페이스가 Ctrl·Alt·Win 없이 눌려 있는가(실제 키 상태). "배지가 안 뜬 앱 찾기" 가 글을 쓰는 중인지 가리는 데만 쓴다.
+    /// 띄어쓰기·지우기는 글을 쓸 때 늘 나오고 휠 스크롤로는 생기지 않는다. 어떤 글자를 쳤는지는 보지 않는다.
+    /// </summary>
+    public static bool IsTypingKeyDown() =>
+        (IsKeyDown(VK_SPACE) || IsKeyDown(VK_BACK)) && !IsSwitchKeyDown();
+
     [StructLayout(LayoutKind.Sequential)]
     struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
 
@@ -368,6 +377,33 @@ static class Native
             var sb = new StringBuilder(1024);
             int size = sb.Capacity;
             return QueryFullProcessImageName(h, 0, sb, ref size) ? sb.ToString(0, size) : null;
+        }
+        finally { CloseHandle(h); }
+    }
+
+    const uint TOKEN_QUERY = 0x0008;
+    const int TokenElevation = 20;
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    static extern bool GetTokenInformation(IntPtr token, int infoClass, out int info, int length, out int returned);
+
+    /// <summary>
+    /// 프로세스가 관리자 권한(권한 상승)으로 실행 중인가. 알 수 없으면(보호된 프로세스 등) null.
+    /// 보통 권한 프로그램은 관리자 권한 앱에 접근성(UI Automation)·IME 질문을 보낼 수 없다(UIPI).
+    /// </summary>
+    public static bool? IsElevated(uint pid)
+    {
+        if (pid == 0) return null;
+        IntPtr h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+        if (h == IntPtr.Zero) return null;
+        try
+        {
+            if (!OpenProcessToken(h, TOKEN_QUERY, out var token)) return null;
+            try { return GetTokenInformation(token, TokenElevation, out int elevated, sizeof(int), out _) ? elevated != 0 : null; }
+            finally { CloseHandle(token); }
         }
         finally { CloseHandle(h); }
     }

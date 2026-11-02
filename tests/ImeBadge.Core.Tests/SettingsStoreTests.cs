@@ -38,6 +38,7 @@ public sealed class SettingsStoreTests : IDisposable
             HangulColor = "#FF0000",
             ExcludedProcesses = new List<string> { "mstsc", "Unreal*" },
             HideOnFullscreen = false,
+            TrackMissedApps = false,
             TrayShowsState = false,
             Animate = false,
             ShowCapsLock = false,
@@ -66,6 +67,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal("#FF0000", back.HangulColor);
         Assert.Equal(new[] { "mstsc", "Unreal*" }, back.ExcludedProcesses);
         Assert.False(back.HideOnFullscreen);
+        Assert.False(back.TrackMissedApps);
         Assert.False(back.TrayShowsState);
         Assert.False(back.Animate);
         Assert.False(back.ShowCapsLock);
@@ -165,6 +167,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(BadgeStyle.Box, s.Style);
         Assert.Equal(160, s.SizePercent);
         Assert.True(s.HideOnFullscreen);                 // 새 항목은 기본값
+        Assert.True(s.TrackMissedApps);                  // 1.16.2 이하 설정 파일에는 없다 → 기본 켜짐
         Assert.True(s.ShowCapsLock);
         Assert.True(s.ShowShiftHold);
         Assert.False(s.ShowShiftImmediately);            // 1.13.0 이하 설정 파일에는 없다 → 기본 꺼짐(0.3초 기다림)
@@ -281,6 +284,7 @@ public sealed class SettingsStoreTests : IDisposable
         b.PasswordWarning = true;
         b.KeepImeMode = true;
         b.ShowOnboarding = true;
+        b.TrackMissedApps = false;
         a.CopyFrom(b);
         Assert.Equal(BadgeVisibility.OnChange, a.Visibility);
         Assert.False(a.ShowInsert);
@@ -293,6 +297,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.True(a.PasswordWarning);
         Assert.True(a.KeepImeMode);
         Assert.True(a.ShowOnboarding);
+        Assert.False(a.TrackMissedApps);
     }
 
     /// <summary>

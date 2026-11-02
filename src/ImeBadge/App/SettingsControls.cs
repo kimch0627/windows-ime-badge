@@ -66,6 +66,9 @@ static class Glyphs
     public const string Lock = "\uE72E";         // Lock
     public const string InputMode = "\uE8C1";    // Characters (A字, 입력 방식)
     public const string Start = "\uE82F";        // Lightbulb (시작하기 안내)
+    // 배지가 안 뜬 앱
+    public const string Search = "\uE721";       // Search (돋보기, 찾기)
+    public const string Admin = "\uE7EF";        // Admin (관리자 권한)
 }
 
 /// <summary>

@@ -117,6 +117,11 @@ public sealed class Settings
     public bool HideOnFullscreen { get; set; } = true;
     /// <summary>배지를 띄우지 않을 프로세스 이름 목록. 확장자 없이("mstsc"), 끝에 * 허용("Unreal*").</summary>
     public List<string> ExcludedProcesses { get; set; } = new();
+    /// <summary>
+    /// 배지가 안 뜬 앱 찾기: 입력하는 중(스페이스·백스페이스를 누르고 있거나 한/영이 바뀜)인데 배지가 안 보이면 그 앱과 까닭을 적어 둔다
+    /// (<see cref="MissedAppTracker"/>). 목록은 메모리에만 둔다.
+    /// </summary>
+    public bool TrackMissedApps { get; set; } = true;
     /// <summary>단축키로 일시 중지를 켜고 끈다.</summary>
     public bool HotkeyEnabled { get; set; } = true;
     /// <summary>일시 중지 단축키. "Ctrl+Alt+H" 형식(<see cref="HotkeySpec"/>). 읽을 수 없으면 기본값으로 돌아간다.</summary>
@@ -195,6 +200,7 @@ public sealed class Settings
         KeepImeMode = other.KeepImeMode;
         HideOnFullscreen = other.HideOnFullscreen;
         ExcludedProcesses = new List<string>(other.ExcludedProcesses);
+        TrackMissedApps = other.TrackMissedApps;
         HotkeyEnabled = other.HotkeyEnabled; Hotkey = other.Hotkey; PollIntervalMs = other.PollIntervalMs; TrayShowsState = other.TrayShowsState;
         Language = other.Language;
         CheckForUpdates = other.CheckForUpdates; LastUpdateCheckUtc = other.LastUpdateCheckUtc;

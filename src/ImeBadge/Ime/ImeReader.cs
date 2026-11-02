@@ -19,15 +19,23 @@ enum ImeState { Unknown, Hangul, English, OtherLang }
 /// <param name="PreferTsf">IMM 대신 TSF 로 읽는 앱(UWP, Windows Terminal). IMM 으로 바꾸라는 요청도 통하지 않는다.</param>
 /// <param name="ModeUncertain">IMM 의 변환 모드가 한국어 IME 의 값이 아니었다(<see cref="KoreanIme.IsPlausibleMode"/>). 배지는 그대로 그리지만
 /// 한/영 유지는 이 값으로 기억하거나 바꾸지 않는다.</param>
+/// <param name="Process">활성 창 프로세스의 실행 파일 이름(UWP 는 안쪽 앱). 모르면 "".</param>
+/// <param name="Miss">"배지가 안 뜬 앱 찾기" 가 켜져 있고 배지를 띄우지 못했을 때 그 까닭(<see cref="MissReason"/>). 입력칸이 아닌 곳
+/// (버튼·목록·읽기 전용)이거나 일부러 숨긴 곳(제외 앱·이 프로그램)이면 null.</param>
+/// <param name="MissControlType">caret 을 못 찾은 요소의 UI Automation 컨트롤 종류 ID(모르면 0). 보고서용.</param>
 readonly record struct Snapshot(ImeState State, Rectangle? Caret, IntPtr Foreground = default, string? Suppressed = null, bool CapsLock = false,
                                 bool Shift = false, IntPtr CaretWindow = default, bool Insert = false, FocusFacts Facts = default,
-                                IntPtr Focus = default, bool PreferTsf = false, bool ModeUncertain = false);
+                                IntPtr Focus = default, bool PreferTsf = false, bool ModeUncertain = false, string Process = "",
+                                string? Miss = null, int MissControlType = 0);
 
 /// <summary>활성 창의 caret 위치와 한/영 상태를 한 번 읽어 <see cref="Snapshot"/> 으로 돌려준다.</summary>
 static class ImeReader
 {
     // pid → 프로세스 이름. 활성 창이 바뀔 때마다 OpenProcess 를 다시 하지 않도록 캐시한다.
     static readonly Dictionary<uint, string> ProcessNames = new();
+    // pid → 관리자 권한으로 실행 중인가. "배지가 안 뜬 앱 찾기" 가 caret 을 못 찾았을 때만 묻는다.
+    static readonly Dictionary<uint, bool> Elevation = new();
+    static bool? _selfElevated;
 
     /// <param name="shiftHeld">Shift 를 계속 누르고 있는가. 누른 시간은 폴링마다 재야 하므로 부르는 쪽(<see cref="ShiftHold"/>)이 잰다.</param>
     /// <param name="overtype">활성 창이 겹쳐 쓰기 상태인가. 창마다 Insert 를 누른 것을 세야 하므로 부르는 쪽(<see cref="InsertToggle"/>)이 잰다.</param>
@@ -48,12 +56,17 @@ static class ImeReader
 
         string process = ProcessName(pid);
         if (settings.ExcludedProcesses.Count > 0 && ProcessFilter.IsExcluded(settings.ExcludedProcesses, process))
-            return new(ImeState.Unknown, null, fg, "excluded");
+            return new(ImeState.Unknown, null, fg, "excluded", Process: process);
+        bool track = settings.TrackMissedApps;
         if (settings.HideOnFullscreen && Native.IsFullscreen(fg))
-            return new(ImeState.Unknown, null, fg, "fullscreen");
+            // 게임·동영상에서 스페이스를 누른 것까지 세지 않도록, 전체 화면은 Win32 caret 이 있는(글을 쓰는) 창만 센다.
+            // UI Automation 은 묻지 않는다(전체 화면 게임에 접근성 질문을 보내지 않으려고).
+            return new(ImeState.Unknown, null, fg, "fullscreen", Process: process,
+                       Miss: track && HasWin32Caret(tid) ? MissReason.Fullscreen : null);
 
         var gti = new Native.GUITHREADINFO { cbSize = Marshal.SizeOf<Native.GUITHREADINFO>() };
-        if (!Native.GetGUIThreadInfo(tid, ref gti)) return new(ImeState.Unknown, null);
+        if (!Native.GetGUIThreadInfo(tid, ref gti))
+            return new(ImeState.Unknown, null, Process: process, Miss: track ? Blocked(pid, MissReason.NoCaret) : null);
 
         var dump = Log.Enabled ? new StringBuilder() : null;
         if (core != IntPtr.Zero) dump?.Append(" uwp");
@@ -62,6 +75,8 @@ static class ImeReader
         Rectangle? caret = null;
         IntPtr caretWindow = IntPtr.Zero;
         FocusFacts facts = default;
+        bool notInput = false, slow = false;
+        int controlType = 0;
         var query = Focus.QueryFor(settings);
         if (gti.hwndCaret != IntPtr.Zero && gti.rcCaret.Bottom > gti.rcCaret.Top)
         {
@@ -89,6 +104,9 @@ static class ImeReader
                 var hit = A11yCaret.Find(gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target, process, query, dump);
                 caret = hit.Caret;
                 facts = hit.Facts;
+                notInput = hit.NotInput;
+                slow = hit.Slow;
+                controlType = hit.ControlType;
             }
         }
         Focus.Describe(facts, dump);
@@ -109,6 +127,16 @@ static class ImeReader
         bool insert = overtype && settings.ShowInsert && state != ImeState.Unknown;
         if (insert) dump?.Append(" overtype");
 
+        // 배지를 띄우지 못하는 까닭("배지가 안 뜬 앱 찾기"). 입력칸이 아닌 곳(버튼·목록·읽기 전용)은 까닭이 없다(배지가 없는 것이 맞다).
+        string? miss = null;
+        if (track)
+        {
+            if (caret is null) miss = notInput ? null : slow ? MissReason.Slow : MissReason.NoCaret;
+            else if (state == ImeState.Unknown) miss = MissReason.ImeUnknown;
+            if (miss is not null) miss = Blocked(pid, miss);
+            if (miss is not null) dump?.Append($" miss:{miss}");
+        }
+
         if (dump is not null)
         {
             // 한 번 읽는 데 오래 걸리면(UIA 응답 지연 등) 별도로 남긴다. 배지가 멈춘 듯 보이는 원인 추적용.
@@ -118,7 +146,31 @@ static class ImeReader
         }
 
         return new(state, caret, fg, CapsLock: caps, Shift: shift, CaretWindow: caretWindow, Insert: insert, Facts: facts,
-                   Focus: gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target, PreferTsf: preferTsf, ModeUncertain: uncertain);
+                   Focus: gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target, PreferTsf: preferTsf, ModeUncertain: uncertain,
+                   Process: process, Miss: miss, MissControlType: controlType);
+    }
+
+    /// <summary>
+    /// 관리자 권한으로 실행된 앱이고 이 프로그램은 보통 권한이면 <see cref="MissReason.Elevated"/>(Windows 의 UIPI 가 접근성·IME 질문을 막는다),
+    /// 아니면 <paramref name="reason"/> 그대로.
+    /// </summary>
+    static string Blocked(uint pid, string reason)
+    {
+        _selfElevated ??= Native.IsElevated((uint)Environment.ProcessId) == true;
+        if (_selfElevated == true) return reason;
+        if (!Elevation.TryGetValue(pid, out bool elevated))
+        {
+            if (Elevation.Count > 256) Elevation.Clear();   // pid 재사용으로 무한히 커지지 않게
+            Elevation[pid] = elevated = Native.IsElevated(pid) == true;
+        }
+        return elevated ? MissReason.Elevated : reason;
+    }
+
+    /// <summary>스레드에 Win32 caret 이 있는가(글을 쓰는 창). 창 관리자에게만 묻는 싼 호출이다.</summary>
+    static bool HasWin32Caret(uint tid)
+    {
+        var gti = new Native.GUITHREADINFO { cbSize = Marshal.SizeOf<Native.GUITHREADINFO>() };
+        return Native.GetGUIThreadInfo(tid, ref gti) && gti.hwndCaret != IntPtr.Zero && gti.rcCaret.Bottom > gti.rcCaret.Top;
     }
 
     /// <summary>

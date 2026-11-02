@@ -101,6 +101,11 @@ sealed class BadgeForm : Form, IExperimentHost
     readonly ImeModeKeeper _modeKeeper = new();      // 모든 프로그램에서 한/영 유지: 마지막으로 고른 모드를 다른 프로그램에 맞춘다
     IntPtr _keepSkipLogged;                          // 한/영 유지가 믿을 수 없는 읽기를 건너뛴다고 로그에 남긴 창
 
+    // ── 배지가 안 뜬 앱 찾기 ──
+    readonly MissedAppTracker _missed = new();   // 입력하는데 배지가 안 뜬 앱과 그 까닭(메모리에만). 설정 창이 목록을 보여 준다
+    IntPtr _flipFg;                              // 직전 폴링의 활성 창과 한/영. 같은 창에서 한/영이 바뀌면 "입력하는 중" 으로 본다
+    ImeState _flipState;
+
     ToolStripMenuItem _pauseItem = null!, _autostartItem = null!;
     ToolStripLabel _statusItem = null!;   // 누를 수 없는 상태 줄. 비활성 메뉴 항목과 달리 아이콘이 회색으로 바래지 않는다
 
@@ -673,6 +678,7 @@ sealed class BadgeForm : Form, IExperimentHost
         if (!_settings.FocusStealWarning) { _stealGuard.Disarm(); _callout?.Hide("steal"); }
         if (!_settings.PasswordWarning) { _passwordGuard.Reset(); _callout?.Hide("password"); }
         if (!_settings.KeepImeMode) _modeKeeper.Reset();
+        if (!_settings.TrackMissedApps) _missed.Clear();   // 끄면 모은 목록도 지운다
 
         var tray = (_settings.HangulColor, _settings.EnglishColor, _settings.TrayShowsState, _settings.Theme);
         if (tray != _appliedTray) { _appliedTray = tray; RefreshTray(); }
@@ -729,7 +735,7 @@ sealed class BadgeForm : Form, IExperimentHost
             open.Activate();
             return;
         }
-        ShowSettings(new SettingsForm(_settings, _paths, () => CheckForUpdates(manual: true), this, page ?? SettingsPage.Appearance));
+        ShowSettings(new SettingsForm(_settings, _paths, () => CheckForUpdates(manual: true), this, _missed, page ?? SettingsPage.Appearance));
     }
 
     void ShowSettings(SettingsForm form)
@@ -982,6 +988,7 @@ sealed class BadgeForm : Form, IExperimentHost
             bool overtype = TrackInsert();
             if (_paused || _sessionLocked) { HideBadge(); return; }
             var snapshot = ImeReader.Read(Handle, _settings, shift, overtype);
+            if (_settings.TrackMissedApps) TrackMissed(snapshot);
             if (_settings.KeepImeMode) KeepImeMode(snapshot);
             Apply(snapshot);
         }
@@ -1151,6 +1158,39 @@ sealed class BadgeForm : Form, IExperimentHost
             if (now > _sonarPendingUntil) _sonarPendingFg = IntPtr.Zero;
             else if (s.Foreground == _sonarPendingFg && caret.Height > 0) { _sonarPendingFg = IntPtr.Zero; PlaySonar(caret, s.State); }
         }
+    }
+
+    // ── 배지가 안 뜬 앱 찾기 ──
+    /// <summary>
+    /// 입력하는 순간마다 배지가 보였는지, 안 보였으면 그 까닭(<see cref="Snapshot.Miss"/>)을 앱마다 센다(<see cref="MissedAppTracker"/>).
+    /// "입력하는 순간" 은 스페이스·백스페이스를 누르고 있거나(휠 스크롤로는 생기지 않는다) 같은 창에서 한/영이 바뀐 때다. 어떤 글자를 쳤는지는 보지 않는다.
+    /// 입력칸이 아닌 곳(버튼·목록·읽기 전용), 제외 앱, 이 프로그램의 창, 작업 표시줄·시작 메뉴 같은 셸 화면은 세지 않는다.
+    /// </summary>
+    void TrackMissed(in Snapshot s)
+    {
+        bool flipped = s.Foreground != IntPtr.Zero && s.Foreground == _flipFg && s.State != _flipState
+                       && s.State is (ImeState.Hangul or ImeState.English) && _flipState is (ImeState.Hangul or ImeState.English);
+        _flipFg = s.Foreground;
+        _flipState = s.State;
+
+        bool shown = s.Caret is not null && s.State != ImeState.Unknown;
+        if (!shown && s.Miss is null) return;
+        if (!flipped && !Native.IsTypingKeyDown()) return;
+        if (s.Foreground != IntPtr.Zero && IsShellOrSelf(s.Foreground)) return;
+
+        string detail = shown ? "" : MissDetail(s);
+        if (_missed.Observe(s.Process, shown ? null : s.Miss, Environment.TickCount64, DateTime.Now, detail))
+            Log.Write($"missed app: {s.Process} ({s.Miss}) {detail}");
+    }
+
+    /// <summary>보고서에 넣을 기술 정보: 활성 창·포커스 창의 클래스 이름과 UI Automation 컨트롤 종류. 창 제목과 글 내용은 넣지 않는다.</summary>
+    static string MissDetail(in Snapshot s)
+    {
+        var parts = new List<string>(3);
+        if (s.Foreground != IntPtr.Zero) parts.Add($"fg='{Native.ClassName(s.Foreground)}'");
+        if (s.Focus != IntPtr.Zero && s.Focus != s.Foreground) parts.Add($"focus='{Native.ClassName(s.Focus)}'");
+        if (s.MissControlType != 0) parts.Add($"uia={s.MissControlType}");
+        return string.Join(" ", parts);
     }
 
     // ── 실험 기능: 커서 소나·말풍선 ──
