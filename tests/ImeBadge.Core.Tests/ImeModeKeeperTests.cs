@@ -10,8 +10,9 @@ public sealed class ImeModeKeeperTests
     const long Later = ImeModeKeeper.ArrivalGraceMs + 500;               // 창에 들어오고 한참 뒤(사용자가 한/영 키를 누를 때)
 
     // 칸을 따로 주지 않으면 창마다 칸 하나(창 핸들과 같은 값)로 본다.
-    static bool? See(ImeModeKeeper k, long window, bool? hangul, long now, bool canSwitch = true, bool learn = true, long focus = -1) =>
-        k.Observe(window, focus < 0 ? window : focus, hangul, canSwitch, learn, now);
+    static bool? See(ImeModeKeeper k, long window, bool? hangul, long now, bool canSwitch = true, bool learn = true, long focus = -1,
+                     bool key = false) =>
+        k.Observe(window, focus < 0 ? window : focus, hangul, canSwitch, learn, now, key);
 
     [Fact]
     public void ModeChosenInOneApp_IsCarriedToTheNext()
@@ -165,12 +166,96 @@ public sealed class ImeModeKeeperTests
         See(k, Xshell, Eng, t + 145, canSwitch: false, focus: XshellMain);
         See(k, Xshell, Eng, t + 181, canSwitch: false, focus: XshellToolbar);
         Assert.Null(See(k, Xshell, Han, t + 186, focus: XshellEdit));
-        Assert.Equal(Han, See(k, Xshell, Eng, t + 233, focus: XshellEdit));   // 스스로 영문으로 → 되돌린다
+        Assert.Null(See(k, Xshell, Eng, t + 233, focus: XshellEdit));         // 스스로 영문으로: 한/영 키를 누른 것인지 잠깐 본다
+        Assert.Equal(Han, See(k, Xshell, Eng, t + 233 + ImeModeKeeper.KeyLagMs, focus: XshellEdit));   // 키가 없었다 → 되돌린다
         Assert.Equal(Han, k.Desired);
         Assert.Equal(1, k.Attempts);                                           // 처음부터 IME 요청으로
-        Assert.Null(See(k, Xshell, Han, t + 260, focus: XshellEdit));
+        Assert.Null(See(k, Xshell, Han, t + 360, focus: XshellEdit));
         Assert.Null(See(k, Xshell, Eng, t + 4000, focus: XshellEdit));         // 한참 뒤 한/영 키는 사용자 선택
         Assert.Equal(Eng, k.Desired);
+    }
+
+    // 신고: 한/영 키를 빠르게 누르면 바뀌지 않았다. 창에 들어온 뒤 1초 안의 변화는 모두 "프로그램이 스스로 바꿨다" 로 보고 되돌렸기 때문이다.
+    [Fact]
+    public void KeyPressedRightAfterArrival_IsTheUsersChoice()
+    {
+        var k = new ImeModeKeeper();
+        See(k, Chrome, Han, 0);
+        long t = 10_000;
+        Assert.Null(See(k, Notepad, Han, t));                       // 같은 모드라 할 일 없음
+        Assert.Null(See(k, Notepad, Eng, t + 150, key: true));      // 들어오자마자 한/영 키 → 영문
+        Assert.Equal(Eng, k.Desired);
+        Assert.Null(See(k, Notepad, Eng, t + 700));                 // 되돌리지 않는다
+        Assert.Null(See(k, Notepad, Han, t + 800, key: true));      // 1초가 지나기 전에 다시 눌러도
+        Assert.Null(See(k, Notepad, Han, t + 1500));
+        Assert.Equal(Han, k.Desired);
+    }
+
+    [Fact]
+    public void RapidPressesAfterArrival_RememberTheLastMode_WithoutSwitchingInBetween()
+    {
+        var k = new ImeModeKeeper();
+        See(k, Chrome, Han, 0);
+        long t = 10_000;
+        See(k, Notepad, Han, t);
+        Assert.Null(See(k, Notepad, Eng, t + 100, key: true));
+        Assert.Null(See(k, Notepad, Han, t + 150, key: true));
+        Assert.Null(See(k, Notepad, Han, t + 200));                 // 두 번째 누름의 읽기가 늦게 따라온 경우도 되돌리지 않는다
+        Assert.Null(See(k, Notepad, Eng, t + 250, key: true));
+        for (long now = t + 300; now < t + 3000; now += 50) Assert.Null(See(k, Notepad, Eng, now));
+        Assert.Equal(Eng, k.Desired);
+        Assert.Equal(Eng, See(k, Chrome, Han, t + 4000));           // 다른 프로그램으로 이어진다
+    }
+
+    // IME 가 바뀌자마자 갱신하면 한/영 키를 누른 것이 다음 갱신에야 보일 수 있다(토글 비트가 늦게 따라온다).
+    [Fact]
+    public void KeySeenOneUpdateLate_IsStillTheUsersChoice()
+    {
+        var k = new ImeModeKeeper();
+        See(k, Chrome, Han, 0);
+        long t = 10_000;
+        See(k, Notepad, Han, t);
+        Assert.Null(See(k, Notepad, Eng, t + 200));                 // 바뀐 것만 보인다: 아직 되돌리지 않는다
+        Assert.Null(See(k, Notepad, Eng, t + 250, key: true));      // 다음 갱신에 키가 보인다
+        Assert.Equal(Eng, k.Desired);
+        Assert.Null(See(k, Notepad, Eng, t + 900));
+    }
+
+    // 맞추려고 IME 에 요청한 사이 사용자가 한/영 키를 누르면, 그 뒤에 한/영 키를 보내 사용자가 고른 것을 뒤집지 않는다.
+    [Fact]
+    public void KeyPressedWhileSwitching_StopsSwitching()
+    {
+        var k = new ImeModeKeeper();
+        See(k, Chrome, Han, 0);
+        long t = 10_000;
+        Assert.Equal(Han, See(k, Notepad, Eng, t));                 // 영문이라 한글로 바꾸라고
+        Assert.Null(See(k, Notepad, Eng, t + 50, key: true));       // 요청이 먹기 전에 사용자가 눌렀다(앱에서는 한글 → 다시 영문)
+        Assert.Null(See(k, Notepad, Eng, t + ImeModeKeeper.RetryMs + 100));   // 한/영 키로 다시 시도하지 않는다
+        Assert.Null(See(k, Notepad, Eng, t + 2000));
+        Assert.Equal(Eng, k.Desired);
+    }
+
+    [Fact]
+    public void KeyPressedInThePreviousApp_DoesNotCarryOver()
+    {
+        var k = new ImeModeKeeper();
+        See(k, Notepad, Eng, 0);
+        long t = 10_000;
+        Assert.Null(See(k, Notepad, Han, t, key: true));            // 메모장에서 한글로
+        Assert.Equal(Han, See(k, Chrome, Eng, t + 200));            // 곧바로 크롬: 크롬의 영문을 사용자 선택으로 보지 않고 맞춘다
+        Assert.Equal(Han, k.Desired);
+    }
+
+    [Fact]
+    public void PasswordField_KeyPressDoesNotTeachTheMode()
+    {
+        var k = new ImeModeKeeper();
+        See(k, Chrome, Han, 0);
+        long t = 10_000;
+        See(k, Notepad, Han, t, learn: false);
+        Assert.Null(See(k, Notepad, Eng, t + 100, learn: false, key: true));
+        Assert.Null(See(k, Notepad, Eng, t + 900, learn: false));   // 되돌리지도 않고
+        Assert.Equal(Han, k.Desired);                                // 기억하지도 않는다
     }
 
     [Fact]
@@ -184,9 +269,10 @@ public sealed class ImeModeKeeperTests
         k.GiveUp();
         Assert.False(k.KeyAllowed);
         Assert.Null(See(k, Xshell, Han, t + 400, focus: XshellEdit));
-        Assert.Equal(Han, See(k, Xshell, Eng, t + 450, focus: XshellEdit));   // 또 스스로 영문으로: IME 요청은 다시
+        Assert.Null(See(k, Xshell, Eng, t + 450, focus: XshellEdit));         // 또 스스로 영문으로: 한/영 키인지 잠깐 보고
+        Assert.Equal(Han, See(k, Xshell, Eng, t + 450 + ImeModeKeeper.KeyLagMs, focus: XshellEdit));   // IME 요청은 다시
         Assert.Equal(1, k.Attempts);
-        Assert.Null(See(k, Xshell, Eng, t + 450 + ImeModeKeeper.RetryMs, focus: XshellEdit));   // 한/영 키는 이 창에서 이미 보냈다
+        Assert.Null(See(k, Xshell, Eng, t + 550 + ImeModeKeeper.RetryMs, focus: XshellEdit));   // 한/영 키는 이 창에서 이미 보냈다
         Assert.Equal(Han, See(k, Xshell, Eng, t + 900, focus: XshellMain));   // 다른 칸: IME 요청은 다시
         Assert.Equal(Han, k.Desired);
         Assert.Equal(Han, See(k, Chrome, Eng, t + 5000));                      // 다른 창에서는 한/영 키도 다시 쓸 수 있다

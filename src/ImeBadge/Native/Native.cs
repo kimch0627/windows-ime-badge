@@ -260,6 +260,15 @@ static class Native
     // ── 키 입력 보내기(실험 기능 "모든 프로그램에서 한/영 유지" 의 마지막 방법) ──
     public const int VK_HANGUL = 0x15;   // 한/영 키
 
+    /// <summary>
+    /// 한/영 키의 토글 비트. 누를 때마다 Windows 가 뒤집는 값이라 Insert 처럼 GetKeyState 로 다른 앱에서 누른 것도 보인다(한글인지 영문인지는
+    /// 앱마다 다르므로 그 뜻으로 쓰지 않고 바뀐 순간만 센다, <see cref="KeyPressWatch"/>).
+    /// </summary>
+    public static bool IsHangulToggled() => (GetKeyState(VK_HANGUL) & 0x0001) != 0;
+
+    /// <summary>지금 한/영 키가 실제로 눌려 있는가(GetAsyncKeyState).</summary>
+    public static bool IsHangulKeyDown() => IsKeyDown(VK_HANGUL);
+
     [StructLayout(LayoutKind.Sequential)]
     struct MOUSEINPUT { public int dx, dy; public uint mouseData, dwFlags, time; public IntPtr dwExtraInfo; }
 
