@@ -100,6 +100,7 @@ sealed class BadgeForm : Form, IExperimentHost
     readonly CalloutFocus _calloutFocus = new();       // 경고 말풍선이 붙은 포커스 자리: 벗어나면 바로 내린다
     const int PasswordWarningMs = 6000;
     readonly ImeModeKeeper _modeKeeper = new();      // 모든 프로그램에서 한/영 유지: 마지막으로 고른 모드를 다른 프로그램에 맞춘다
+    readonly KeyPressWatch _hangulKey = new();       // 한/영 유지: 사용자가 한/영 키를 눌렀는지(프로그램이 스스로 바꾼 것과 가른다)
     IntPtr _keepSkipLogged;                          // 한/영 유지가 믿을 수 없는 읽기를 건너뛴다고 로그에 남긴 창
 
     // ── 배지가 안 뜬 앱 찾기 ──
@@ -678,7 +679,7 @@ sealed class BadgeForm : Form, IExperimentHost
         if (!_settings.CaretSonar) _sonarPendingFg = IntPtr.Zero;
         if (!_settings.FocusStealWarning) { _stealGuard.Disarm(); _callout?.Hide("steal"); }
         if (!_settings.PasswordWarning) { _passwordGuard.Reset(); _callout?.Hide("password"); }
-        if (!_settings.KeepImeMode) _modeKeeper.Reset();
+        if (!_settings.KeepImeMode) { _modeKeeper.Reset(); _hangulKey.Reset(); }
         if (!_settings.TrackMissedApps) _missed.Clear();   // 끄면 모은 목록도 지운다
 
         var tray = (_settings.HangulColor, _settings.EnglishColor, _settings.TrayShowsState, _settings.Theme);
@@ -988,10 +989,13 @@ sealed class BadgeForm : Form, IExperimentHost
             bool shift = _shiftHold.Update(Native.IsShiftAloneDown(), Environment.TickCount64,
                                            _settings.ShowShiftImmediately ? 0 : ShiftHold.ThresholdMs);
             bool overtype = TrackInsert();
+            // 일시 중지 중에도 재야 다시 켰을 때 그동안 누른 한/영 키를 방금 누른 것으로 세지 않는다.
+            bool hangulKey = _settings.KeepImeMode
+                             && _hangulKey.Update(Native.IsHangulToggled(), Native.IsHangulKeyDown(), Environment.TickCount64);
             if (_paused || _sessionLocked) { HideBadge(); return; }
             var snapshot = ImeReader.Read(Handle, _settings, shift, overtype);
             if (_settings.TrackMissedApps) TrackMissed(snapshot);
-            if (_settings.KeepImeMode) KeepImeMode(snapshot);
+            if (_settings.KeepImeMode) KeepImeMode(snapshot, hangulKey);
             Apply(snapshot);
         }
         catch (Exception ex)
@@ -1457,8 +1461,10 @@ sealed class BadgeForm : Form, IExperimentHost
     /// 포커스를 가진 칸도 넘겨, 프로그램이 활성화되며 포커스를 이리저리 옮길 때(Xshell) 바뀐 모드를 한/영 키로 착각하지 않게 한다.
     /// IMM 이 한국어 IME 의 값이 아닌 변환 모드(0xFFFF 등)를 돌려준 순간은 모름으로 넘긴다: 그 값은 실제 입력과 다를 수 있고, 그 값을
     /// 바꿔도 실제 입력은 그대로라 배지만 바뀐 모드를 보여 주게 된다(Windows Terminal 에서 배지는 영문인데 한글이 입력되던 문제).
+    /// 사용자가 한/영 키를 누른 것(<paramref name="keyPressed"/>)도 넘겨, 창에 들어오자마자 누른 한/영 키를 프로그램이 스스로 바꾼 것으로 보고
+    /// 되돌리지 않게 한다. 이 프로그램이 보낸 한/영 키는 <see cref="KeyPressWatch.SentOwn"/> 으로 빼 둔다.
     /// </summary>
-    void KeepImeMode(in Snapshot s)
+    void KeepImeMode(in Snapshot s, bool keyPressed)
     {
         bool? hangul = s.Suppressed is not null || s.ModeUncertain ? null
                      : s.State switch { ImeState.Hangul => true, ImeState.English => false, _ => null };
@@ -1471,7 +1477,8 @@ sealed class BadgeForm : Form, IExperimentHost
         bool password = s.Facts.Password;
         bool canSwitch = s.Caret is not null && !(password && _modeKeeper.Desired == true);
         bool? before = _modeKeeper.Desired;
-        bool? want = _modeKeeper.Observe((long)s.Foreground, (long)s.Focus, hangul, canSwitch, learn: !password, Environment.TickCount64);
+        if (keyPressed) Log.Write($"keep mode: Korean/English key pressed fg='{Native.ClassName(s.Foreground)}' => {s.State}");
+        bool? want = _modeKeeper.Observe((long)s.Foreground, (long)s.Focus, hangul, canSwitch, learn: !password, Environment.TickCount64, keyPressed);
         if (before is not null && _modeKeeper.Desired is bool chosen && chosen != before)
             Log.Write($"keep mode: remember {(chosen ? "Hangul" : "English")} (Korean/English key in fg='{Native.ClassName(s.Foreground)}')");
         if (want is not bool target) return;
@@ -1497,7 +1504,11 @@ sealed class BadgeForm : Form, IExperimentHost
             _modeKeeper.GiveUp();   // 한/영 키는 뒤집기라 한 창에 두 번 보내면 반대가 될 수 있다
             return;
         }
-        if (ImeWriter.TapHangulKey()) Log.Write($"keep mode: {mode} via Korean/English key fg='{window}'");
+        if (ImeWriter.TapHangulKey())
+        {
+            _hangulKey.SentOwn(Environment.TickCount64);   // 보낸 키가 뒤집은 토글 비트를 사용자가 누른 것으로 세지 않게
+            Log.Write($"keep mode: {mode} via Korean/English key fg='{window}'");
+        }
         else if (Native.IsModifierDown()) { _modeKeeper.NotSent(); return; }   // Alt+Tab 의 Alt 등을 아직 누르고 있다: 다음 갱신에
         else Log.Write($"keep mode: could not send key fg='{window}'");
         _modeKeeper.GiveUp();   // 한/영 키는 누를 때마다 뒤집으므로 이 창에서는 다시 보내지 않는다
