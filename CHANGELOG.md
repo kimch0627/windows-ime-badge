@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [1.17.1] - 2026-11-06
+
+실험 기능 **모든 프로그램에서 한/영 유지**에서 한/영 키를 빠르게 누르면 한/영이 바뀌지 않던 문제를 고친 릴리스입니다. 설정 항목과 설정 파일은 그대로입니다.
+
 ### 수정
 - **한/영 유지: 한/영 키를 빠르게 누르면 한/영이 바뀌지 않던 문제.** 실험 기능 "모든 프로그램에서 한/영 유지" 를 켜 두면, 창에 들어온 뒤
   1초 안에 바뀐 한/영은 프로그램이 스스로 바꾼 것으로 보고 되돌렸습니다(Xshell 처럼 창이 앞으로 올 때 영문으로 바꾸는 프로그램 때문). 이 1초 안에
@@ -692,7 +696,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.17.0...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.17.1...HEAD
+[1.17.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.17.0...v1.17.1
 [1.17.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.16.2...v1.17.0
 [1.16.2]: https://github.com/kimch0627/windows-ime-badge/compare/v1.16.1...v1.16.2
 [1.16.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.16.0...v1.16.1
