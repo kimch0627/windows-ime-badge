@@ -22,7 +22,7 @@ static class A11yCaret
     /// <summary>이보다 오래 묶인 작업 스레드는 버리고 새로 만든다(다른 앱으로 옮겨도 다시 찾게).</summary>
     const int AbandonAfterMs = 3000;
     const int MaxAbandoned = 3;
-    /// <summary>시간을 넘겼을 때 이만큼 지나지 않은, 같은 입력칸의 caret 은 그대로 쓴다.</summary>
+    /// <summary>시간을 넘겼거나 UI Automation 이 답하지 못했을 때(<see cref="A11yHit.Failure"/>) 이만큼 지나지 않은, 같은 입력칸의 caret 은 그대로 쓴다.</summary>
     const int ReuseMs = 1000;
     /// <summary>한 번 찾는 데 이보다 오래 걸리면 오류 로그에 남긴다(디버그 모드가 아니어도). 멈춤 신고를 추적하려고.</summary>
     const int SlowLogMs = 2000;
@@ -47,6 +47,12 @@ static class A11yCaret
         if (outcome == DeadlineWorker<A11yHit>.Outcome.Done)
         {
             dump?.Append(local);
+            if (hit.Failure is not null)
+            {
+                // 다시 물어도 답하지 못했다(Chromium 이 화면을 다시 그리는 중 등). 방금 찾은 caret 이 있으면 잠깐 그대로 써서 배지가 깜빡이지 않게 한다.
+                if (focus == _lastFocus && now - _lastMs <= ReuseMs) { dump?.Append(" a11y:reuse"); return _last; }
+                return hit;
+            }
             _lastFocus = focus; _last = hit; _lastMs = now;
             return hit;
         }
@@ -63,6 +69,8 @@ static class A11yCaret
     {
         long t0 = Environment.TickCount64;
         var hit = UiaCaret.Find(query, dump);
+        // 포커스된 요소를 주지 못하면(Chromium: 0x80040201, 화면을 다시 그리는 동안 요소가 바뀜) 바로 한 번 더 묻는다. 대개 새 요소로 답한다.
+        if (hit.Failure is not null) hit = UiaCaret.Find(query, dump);
         // 입력칸이 아닐 때(null)는 묻지 않는다. 가상 caret 에는 다른 곳에 있던 옛 위치가 남아 있을 수 있다.
         if (hit.Caret is { } c && (c.Height == 0 || hit.Unverified) && AccCaret.Find(focus, dump) is { } acc)
             hit = hit with { Caret = acc, Unverified = false };

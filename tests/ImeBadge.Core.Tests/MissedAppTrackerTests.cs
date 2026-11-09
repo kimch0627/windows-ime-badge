@@ -219,6 +219,68 @@ public sealed class MissedAppTrackerTests
     [InlineData(50005)]   // Hyperlink
     public void MayTakeText_NotForControlsThatDontTakeText(int controlType) => Assert.False(InputSurface.MayTakeText(controlType));
 
+    [Fact]
+    public void MayTakeText_ChromiumGroupNeedsTextPattern()
+    {
+        const string chrome = InputSurface.ChromiumFramework;
+        // 키보드 포커스만 받는 웹 요소(Paseo 의 사이드바 손잡이·파일 목록 줄): 입력칸이 아니다
+        Assert.False(InputSurface.MayTakeText(InputSurface.Group, chrome, hasTextPattern: false));
+        // 역할이 없는 contentEditable 도 묶음이지만 TextPattern 이 있다
+        Assert.True(InputSurface.MayTakeText(InputSurface.Group, chrome, hasTextPattern: true));
+        // 웹 내용의 접근성이 켜지기 전의 창 껍데기(Pane)와 다른 프레임워크의 묶음은 그대로 센다
+        Assert.True(InputSurface.MayTakeText(InputSurface.Pane, chrome, hasTextPattern: false));
+        Assert.True(InputSurface.MayTakeText(InputSurface.Group, "Win32", hasTextPattern: false));
+        Assert.True(InputSurface.MayTakeText(InputSurface.Group, null, hasTextPattern: false));
+        // 버튼은 프레임워크와 상관없이 입력칸이 아니다
+        Assert.False(InputSurface.MayTakeText(50000, chrome, hasTextPattern: false));
+    }
+
+    const int Confirm = MissConfirm.ConfirmMs;
+
+    [Fact]
+    public void Confirm_IgnoresMomentaryGap()
+    {
+        // Xshell: 창에 들어오는 동안 주 창이 0.1초쯤 포커스를 갖다가 입력칸으로 넘긴다. 그 순간 한/영이 달라 보여도 놓친 것이 아니다.
+        var c = new MissConfirm();
+        Assert.False(c.Update(0, window: 1, typing: true, missing: true));
+        Assert.True(c.Pending);
+        Assert.False(c.Update(100, window: 1, typing: false, missing: false));   // 배지가 떴다
+        Assert.False(c.Pending);
+        Assert.False(c.Update(Confirm + 100, window: 1, typing: false, missing: true));   // 입력하지 않는 동안 다시 안 보인 것은 기다리지 않는다
+    }
+
+    [Fact]
+    public void Confirm_CountsWhenStillMissing_EvenAfterKeyIsReleased()
+    {
+        var c = new MissConfirm();
+        Assert.False(c.Update(0, window: 1, typing: true, missing: true));   // 한/영 키를 한 번 눌렀다
+        Assert.False(c.Update(Confirm - 1, window: 1, typing: false, missing: true));
+        Assert.True(c.Update(Confirm, window: 1, typing: false, missing: true));
+        Assert.False(c.Pending);   // 한 번 정하면 다음 입력부터 다시 기다린다
+        Assert.False(c.Update(Confirm + 100, window: 1, typing: false, missing: true));
+
+        // 백스페이스를 계속 누르고 있으면 기다림이 끝날 때마다 다시 센다(MissedAppTracker 가 1초에 한 번으로 줄인다)
+        Assert.False(c.Update(Confirm + 200, window: 1, typing: true, missing: true));
+        Assert.True(c.Update(2 * Confirm + 200, window: 1, typing: true, missing: true));
+    }
+
+    [Fact]
+    public void Confirm_StartsOverInAnotherWindow_AndDropsWhenNotInput()
+    {
+        var c = new MissConfirm();
+        c.Update(0, window: 1, typing: true, missing: true);
+        Assert.False(c.Update(Confirm, window: 2, typing: false, missing: true));   // 다른 창: 그 창에서 입력하기 전에는 세지 않는다
+        Assert.False(c.Pending);
+
+        c.Update(1000, window: 2, typing: true, missing: true);
+        Assert.False(c.Update(1000 + Confirm, window: 2, typing: false, missing: false));   // 버튼으로 옮겼다(입력칸이 아님)
+        Assert.False(c.Pending);
+
+        c.Update(3000, window: 2, typing: true, missing: true);
+        Assert.False(c.Update(3000 + Confirm, window: 3, typing: true, missing: true));   // 바뀐 창에서 입력: 그 창의 기다림을 새로 시작
+        Assert.True(c.Update(3000 + 2 * Confirm, window: 3, typing: false, missing: true));
+    }
+
     [Theory]
     [InlineData(UiLanguage.Korean)]
     [InlineData(UiLanguage.English)]

@@ -20,7 +20,7 @@ static class UiaCaret
         try
         {
             el = Uia.Client.GetFocusedElement();
-            if (el is null) return default;
+            if (el is null) { dump?.Append(" uia:nofocus"); return new A11yHit(null, Failure: "nofocus"); }
 
             valuePat = el.GetCurrentPattern(Uia.UIA_ValuePatternId);
             if (valuePat is Uia.IUIAutomationValuePattern v && v.get_CurrentIsReadOnly())
@@ -105,27 +105,35 @@ static class UiaCaret
                 }
                 else
                 {
+                    // 묶음(Group)은 어느 UI 프레임워크가 그렸는지 봐야 입력칸인지 가린다(InputSurface.MayTakeText). 그 밖에는 로그를 남길 때만 묻는다.
+                    bool hasText = textPat is not null;
+                    string fw = dump is not null || (ct == InputSurface.Group && !hasText)
+                        ? el.GetCurrentPropertyValue(Uia.UIA_FrameworkIdPropertyId) as string ?? ""
+                        : "";
                     if (dump is not null)
                     {
                         // 어떤 컨트롤이라서 못 찾았는지 남긴다. (컨트롤 종류 ID, 클래스, UI 프레임워크, TextPattern 유무)
                         string cls = el.GetCurrentPropertyValue(Uia.UIA_ClassNamePropertyId) as string ?? "";
-                        string fw = el.GetCurrentPropertyValue(Uia.UIA_FrameworkIdPropertyId) as string ?? "";
                         bool focus = el.GetCurrentPropertyValue(Uia.UIA_HasKeyboardFocusPropertyId) is bool f && f;
-                        dump.Append($" uia:none(ct={ct} class='{cls}' fw={fw} text={(textPat is not null ? 1 : 0)} focus={(focus ? 1 : 0)})");
+                        dump.Append($" uia:none(ct={ct} class='{cls}' fw={fw} text={(hasText ? 1 : 0)} focus={(focus ? 1 : 0)})");
                     }
                     // 버튼·목록 항목처럼 글자를 받지 않는 컨트롤이면 배지가 없는 것이 맞다. Pane·Custom 등은 직접 글자를 그리는 입력칸일 수 있다.
+                    // Chromium 웹 화면의 TextPattern 없는 묶음도 입력칸이 아니다(키보드 포커스만 받는 단추 같은 요소).
                     // 글 영역(TextPattern)인데 커서·선택이 아예 없으면 편집 중이 아니다(입력칸이면 커서가 늘 있다).
-                    return new A11yHit(null, NotInput: noSelection || !InputSurface.MayTakeText(ct), ControlType: ct);
+                    return new A11yHit(null, NotInput: noSelection || !InputSurface.MayTakeText(ct, fw, hasText), ControlType: ct);
                 }
             }
             return new A11yHit(caret, query == FocusQuery.None ? default : Facts(el, query, selection, dump), unverified);
         }
-        catch (Exception ex) { dump?.Append($" uia:EXC {ex.GetType().Name} 0x{ex.HResult:X8}"); }
+        catch (Exception ex)
+        {
+            dump?.Append($" uia:EXC {ex.GetType().Name} 0x{ex.HResult:X8}");
+            return new A11yHit(null, Failure: $"0x{ex.HResult:X8}");
+        }
         finally
         {
             Uia.Release(prev); Uia.Release(r); Uia.Release(sel); Uia.Release(textPat); Uia.Release(valuePat); Uia.Release(el);
         }
-        return default;
     }
 
     /// <summary>범위의 시작과 끝이 다른가(글이 선택돼 있다). 지원하지 않는 앱이면 false.</summary>
