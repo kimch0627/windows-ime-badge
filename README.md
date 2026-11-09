@@ -187,7 +187,7 @@ src/ImeBadge/           Windows 앱
   Native/Uia.cs         COM UI Automation 인터페이스 선언 (vtable 순서 고정)
   Native/Tsf.cs         TSF(msctf) 전역 compartment 로 한/영 상태 읽기 (IMM32 의 대체 경로)
   Ime/UiaCaret.cs       UIA 로 caret 찾기 (Chrome/Electron/UWP)
-  Ime/RichEditCaret.cs  RichEdit 입력칸(카카오톡)에서 글을 선택한 동안 선택 시작·끝 글자 위치를 물어 caret 바로잡기
+  Ime/EditSelectionCaret.cs  표준 입력칸(Edit·RichEdit)에서 글을 선택한 동안 선택 시작·끝 글자 위치를 물어 caret 바로잡기
   Ime/A11yCaret.cs      UIA·MSAA caret 찾기를 UI 스레드 밖(DeadlineWorker)에서 하고 최대 0.4초만 기다리기
   Ime/FocusFacts.cs     실험 기능이 쓰는 포커스된 입력칸 정보(비밀번호 칸·선택 영역)를 caret 을 찾은 경로마다 만들기
   Ime/ImeWriter.cs      실험 기능 한/영 유지: 다른 프로그램의 한/영 바꾸기(IME 에 WM_IME_CONTROL 요청, 안 되면 한/영 키 한 번)
@@ -251,9 +251,10 @@ installer/ImeBadge.iss  Inno Setup 스크립트
 3. **caret 위치** (세 경로. 모두 못 찾으면 배지를 띄우지 않습니다)
    - 1순위: `GetGUIThreadInfo(tid)`의 `hwndCaret`/`rcCaret` → `ClientToScreen()`. 메모장·Word 등
      Win32 caret을 만드는 앱.
-     RichEdit 입력칸(카카오톡 대화 입력칸·워드패드)은 글을 선택한 동안 caret 을 8px 넓이로 바꾸고, 어떤 카카오톡 화면에서는 한 줄 위에 있다고
-     알립니다. 그때는 `EM_GETSEL` 로 선택 시작·끝을, `EM_POSFROMCHAR` 로 그 글자의 위치를 물어 caret 에 가까운 쪽의 줄로 옮기고,
-     넓이는 1px, 높이는 선택하기 전에 본 caret 높이로 바꿉니다(`Ime/RichEditCaret.cs`, `Core/SelectionCaret.cs`). 로그에 `caret:sel(...)`.
+     표준 입력칸은 글을 선택한 동안 caret 을 엉뚱하게 알리기도 합니다(RichEdit·카카오톡은 8px 넓이, 티톡은 한 줄 위). Edit·RichEdit 과
+     이를 감싼 WinForms·Delphi(TEdit·TMemo·TRichEdit) 입력칸이면 `EM_GETSEL` 로 선택 시작·끝을, `EM_POSFROMCHAR` 로 그 글자의 위치를 물어
+     caret 에 가까운 쪽의 줄로 옮기고, 넓이는 1px, 높이는 선택하기 전에 본 caret 높이로 바꿉니다(`Ime/EditSelectionCaret.cs`,
+     `Core/SelectionCaret.cs`). 로그에 `caret:sel(...)`.
    - 2순위: 커서 창(`Ime/CursorWindow.cs`). 포커스 창에 이름이 `CURSOR` 인 자식 창이 있으면 그 사각형이 커서입니다.
      Xshell 8 은 터미널 뷰 안에 이 작은 창을 두고 커서를 따라 옮깁니다(한글 조합 중에는 두 칸 넓이). 창 관리자에게 이름으로
      묻기만 하므로 아주 싸고, 커서 한 칸 크기이고 포커스 창 안에 보일 때만 씁니다. 스크롤백을 올려 커서가 화면 밖으로 나가면

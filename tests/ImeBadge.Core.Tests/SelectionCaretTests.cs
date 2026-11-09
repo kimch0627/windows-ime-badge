@@ -27,7 +27,7 @@ public sealed class SelectionCaretTests
     [Fact]
     public void CaretReportedOneLineUp_MovesBackToSelectedLine()
     {
-        // 신고된 화면: 선택한 글은 y=757 줄에 있는데 caret 이 한 줄 위(위쪽 끝 742)라 밑줄 배지가 글 위에 겹쳤다.
+        // 신고된 티톡 화면(Shift+Home): 선택한 글은 y=757 줄에 있는데 caret 이 한 줄 위(위쪽 끝 742)라 밑줄 배지가 글 위에 겹쳤다.
         var caret = SelectionCaret.Fix(new Rectangle(23, 742, 8, 15), new Point(24, 757), new Point(110, 757), lineHeight: 15);
         Assert.Equal(new Rectangle(23, 757, 1, 15), caret);
     }
