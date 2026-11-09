@@ -42,12 +42,15 @@ static class EditSelectionCaret
     /// 선택 시작·끝과 글자 위치를 포인터 없이 물어도 되는 입력칸: Windows 표준 Edit·RichEdit 와 그것을 감싼 WinForms·Delphi 컨트롤.
     /// RichEdit 2.0 꼴로 EM_POSFROMCHAR 의 wParam 을 주소로 읽는 컨트롤에 글자 번호를 보내면 그 앱이 엉뚱한 곳에 쓰므로, 이름에 edit 가 든
     /// 아무 컨트롤에나 묻지 않는다.
+    /// Delphi(VCL) 의 TRichEdit·TMemo 를 이어받은 컨트롤은 부품 회사마다 이름이 달라(TcxRichEdit, TRzRichEdit, TsMemo 등) 이름 안의 낱말로 본다.
+    /// 모두 Windows 의 RichEdit(riched20, 3.0 이상)·Edit 을 감싼 것이다. 티톡 대화 창(TfrmSendMessage)이 Delphi 로 만든 앱이다.
     /// </summary>
     static bool Understands(string cls) =>
         cls.StartsWith("RichEdit", StringComparison.OrdinalIgnoreCase)
         || cls.Equals("Edit", StringComparison.OrdinalIgnoreCase)
         || cls.Contains(".EDIT.", StringComparison.OrdinalIgnoreCase)   // WinForms TextBox·RichTextBox
-        || cls is "TEdit" or "TMemo" or "TRichEdit";                      // Delphi(VCL)
+        || cls == "TEdit"                                                 // Delphi(VCL)
+        || cls.Length > 1 && cls[0] == 'T' && (cls.Contains("RichEdit", StringComparison.Ordinal) || cls.EndsWith("Memo", StringComparison.Ordinal));
 
     /// <summary>
     /// 글자 위치(화면 좌표). Edit 와 RichEdit 3.0 이상은 wParam = 글자 번호, 반환값 = 클라이언트 좌표 x·y 16비트씩인 꼴을 받아,

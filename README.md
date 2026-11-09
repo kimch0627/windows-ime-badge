@@ -252,9 +252,9 @@ installer/ImeBadge.iss  Inno Setup 스크립트
    - 1순위: `GetGUIThreadInfo(tid)`의 `hwndCaret`/`rcCaret` → `ClientToScreen()`. 메모장·Word 등
      Win32 caret을 만드는 앱.
      표준 입력칸은 글을 선택한 동안 caret 을 엉뚱하게 알리기도 합니다(RichEdit·카카오톡은 8px 넓이, 티톡은 한 줄 위). Edit·RichEdit 과
-     이를 감싼 WinForms·Delphi(TEdit·TMemo·TRichEdit) 입력칸이면 `EM_GETSEL` 로 선택 시작·끝을, `EM_POSFROMCHAR` 로 그 글자의 위치를 물어
+     이를 감싼 WinForms·Delphi(TEdit, T…RichEdit·T…Memo) 입력칸이면 `EM_GETSEL` 로 선택 시작·끝을, `EM_POSFROMCHAR` 로 그 글자의 위치를 물어
      caret 에 가까운 쪽의 줄로 옮기고, 넓이는 1px, 높이는 선택하기 전에 본 caret 높이로 바꿉니다(`Ime/EditSelectionCaret.cs`,
-     `Core/SelectionCaret.cs`). 로그에 `caret:sel(...)`.
+     `Core/SelectionCaret.cs`). 로그에 `caret:sel(...)`. 잰 값과 한계는 [docs/selection-caret-1.17.3.md](docs/selection-caret-1.17.3.md).
    - 2순위: 커서 창(`Ime/CursorWindow.cs`). 포커스 창에 이름이 `CURSOR` 인 자식 창이 있으면 그 사각형이 커서입니다.
      Xshell 8 은 터미널 뷰 안에 이 작은 창을 두고 커서를 따라 옮깁니다(한글 조합 중에는 두 칸 넓이). 창 관리자에게 이름으로
      묻기만 하므로 아주 싸고, 커서 한 칸 크기이고 포커스 창 안에 보일 때만 씁니다. 스크롤백을 올려 커서가 화면 밖으로 나가면
