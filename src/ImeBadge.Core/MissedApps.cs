@@ -40,6 +40,65 @@ public static class InputSurface
     /// <summary>글자를 받을 수 있는 종류이거나 모른다(0). 그 밖(버튼·체크 상자·목록·메뉴·탭·링크·스크롤 막대 등)은 false.</summary>
     public static bool MayTakeText(int controlType) =>
         controlType is Unknown or ComboBox or Edit or Custom or Group or Document or Window or Pane;
+
+    /// <summary>Chromium(Chrome·Edge·Electron·WebView2)이 그린 요소의 UI Automation FrameworkId.</summary>
+    public const string ChromiumFramework = "Chrome";
+
+    /// <summary>
+    /// <see cref="MayTakeText(int)"/> 에 Chromium 웹 화면의 규칙을 더한다. Chromium 은 글자를 받는 요소(input·textarea·contentEditable.
+    /// 역할이 없는 contentEditable 묶음까지)에 늘 TextPattern 을 붙인다. 그래서 TextPattern 이 없는 묶음(Group)은 키보드 포커스만 받는
+    /// 단추 같은 요소다(React Native Web 의 역할 없는 Pressable. 예: Paseo 의 사이드바 크기 조절 손잡이·파일 목록 줄). 그런 곳에서 누른
+    /// 한/영·스페이스를 "배지가 안 떴다" 로 세지 않는다. Pane 은 그대로 센다: 웹 내용의 접근성이 아직 켜지지 않은 창 껍데기일 수 있다.
+    /// </summary>
+    /// <param name="frameworkId">요소의 UI Automation FrameworkId(모르면 null).</param>
+    /// <param name="hasTextPattern">요소가 TextPattern 을 지원하는가.</param>
+    public static bool MayTakeText(int controlType, string? frameworkId, bool hasTextPattern) =>
+        MayTakeText(controlType)
+        && !(controlType == Group && !hasTextPattern && string.Equals(frameworkId, ChromiumFramework, StringComparison.Ordinal));
+}
+
+/// <summary>
+/// 입력하는 순간에 배지가 안 보였어도 바로 세지 않고, <see cref="ConfirmMs"/> 가 지나도록 같은 창에서 계속 안 보일 때만 "놓쳤다" 고 정한다.
+/// <para>
+/// 창을 바꾸거나 창 안에서 포커스가 옮겨 가는 동안 배지는 0.1초 남짓 사라졌다가 바로 다시 뜬다(Xshell 의 주 창 → 입력칸, Excel 의 시트 → 수식 입력줄,
+/// Chromium 접근성이 잠깐 답하지 못함). 사용자는 느끼지 못하는데, 그 순간 입력칸마다 다른 한/영이 보여 "입력하는 중" 으로 잡히면 목록에 올랐다.
+/// 입력하는 순간(<c>typing</c>)에 기다리기 시작하고, 그사이 배지가 뜨거나 입력칸이 아닌 곳으로 가거나 활성 창이 바뀌면 버린다.
+/// 기다리는 동안 키를 계속 누르고 있지 않아도 된다(한/영 키 한 번 누른 뒤에도 배지가 계속 안 보이면 놓친 것이다).
+/// </para>
+/// Win32 없이 단위 테스트가 가능하도록 시각은 부르는 쪽이 넘긴다.
+/// </summary>
+public sealed class MissConfirm
+{
+    /// <summary>이만큼 계속 안 보여야 놓친 것으로 정한다(ms).</summary>
+    public const int ConfirmMs = 500;
+
+    long _since = long.MinValue, _window;
+
+    /// <summary>기다리는 중인 "안 보인 순간" 이 있다.</summary>
+    public bool Pending => _since != long.MinValue;
+
+    /// <summary>폴링마다 부른다(입력하는 순간이 아니어도).</summary>
+    /// <param name="nowMs">단조 시계(Environment.TickCount64).</param>
+    /// <param name="window">활성 창(HWND). 바뀌면 기다리던 것을 버린다.</param>
+    /// <param name="typing">지금이 입력하는 순간인가(스페이스·백스페이스를 누르고 있거나 한/영이 바뀜).</param>
+    /// <param name="missing">입력칸인데 배지가 안 보인다(까닭이 있다). false 면(배지가 보이거나 입력칸이 아님) 기다리던 것을 버린다.</param>
+    /// <returns>놓친 것이 이번에 정해졌다. 부르는 쪽이 지금의 까닭으로 센다.</returns>
+    public bool Update(long nowMs, long window, bool typing, bool missing)
+    {
+        if (!missing) { Reset(); return false; }
+        if (Pending && window != _window) Reset();
+        if (!Pending)
+        {
+            if (typing) { _since = nowMs; _window = window; }
+            return false;
+        }
+        if (nowMs - _since < ConfirmMs) return false;
+        Reset();
+        return true;
+    }
+
+    /// <summary>기다리던 것을 버린다.</summary>
+    public void Reset() => _since = long.MinValue;
 }
 
 /// <summary>설정 창 목록에 보일 앱 하나.</summary>

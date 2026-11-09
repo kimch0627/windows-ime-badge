@@ -23,10 +23,12 @@ enum ImeState { Unknown, Hangul, English, OtherLang }
 /// <param name="Miss">"배지가 안 뜬 앱 찾기" 가 켜져 있고 배지를 띄우지 못했을 때 그 까닭(<see cref="MissReason"/>). 입력칸이 아닌 곳
 /// (버튼·목록·읽기 전용)이거나 일부러 숨긴 곳(제외 앱·이 프로그램)이면 null.</param>
 /// <param name="MissControlType">caret 을 못 찾은 요소의 UI Automation 컨트롤 종류 ID(모르면 0). 보고서용.</param>
+/// <param name="MissNote">caret 을 못 찾은 사정을 짧게(보고서용, 없으면 ""). "caret=empty"(Win32 caret 창은 있는데 높이 0),
+/// "uia-err=0x80040201"·"uia=nofocus"(UI Automation 이 포커스된 요소를 주지 못함).</param>
 readonly record struct Snapshot(ImeState State, Rectangle? Caret, IntPtr Foreground = default, string? Suppressed = null, bool CapsLock = false,
                                 bool Shift = false, IntPtr CaretWindow = default, bool Insert = false, FocusFacts Facts = default,
                                 IntPtr Focus = default, bool PreferTsf = false, bool ModeUncertain = false, string Process = "",
-                                string? Miss = null, int MissControlType = 0);
+                                string? Miss = null, int MissControlType = 0, string MissNote = "");
 
 /// <summary>활성 창의 caret 위치와 한/영 상태를 한 번 읽어 <see cref="Snapshot"/> 으로 돌려준다.</summary>
 static class ImeReader
@@ -77,6 +79,7 @@ static class ImeReader
         FocusFacts facts = default;
         bool notInput = false, slow = false;
         int controlType = 0;
+        string note = "";
         var query = Focus.QueryFor(settings);
         if (gti.hwndCaret != IntPtr.Zero && gti.rcCaret.Bottom > gti.rcCaret.Top)
         {
@@ -90,7 +93,11 @@ static class ImeReader
         }
         else
         {
-            if (gti.hwndCaret != IntPtr.Zero) dump?.Append(" caret:win32-empty");   // caret 창은 있지만 높이 0
+            if (gti.hwndCaret != IntPtr.Zero)
+            {
+                dump?.Append(" caret:win32-empty");   // caret 창은 있지만 높이 0
+                note = "caret=empty";
+            }
             // 커서를 자식 창으로 그리는 터미널(Xshell 8): 포커스 창의 "CURSOR" 자식 창이 곧 커서다.
             // 창 관리자에게만 묻는 싼 호출이라 대상 앱과 주고받는 UIA 보다 먼저 본다.
             if (CursorWindow.Find(gti.hwndFocus, dump) is { } cw)
@@ -107,6 +114,8 @@ static class ImeReader
                 notInput = hit.NotInput;
                 slow = hit.Slow;
                 controlType = hit.ControlType;
+                if (hit.Failure is { } failure)
+                    note = (note.Length > 0 ? note + " " : "") + (failure == "nofocus" ? "uia=nofocus" : "uia-err=" + failure);
             }
         }
         Focus.Describe(facts, dump);
@@ -134,6 +143,9 @@ static class ImeReader
             if (caret is null) miss = notInput ? null : slow ? MissReason.Slow : MissReason.NoCaret;
             else if (state == ImeState.Unknown) miss = MissReason.ImeUnknown;
             if (miss is not null) miss = Blocked(pid, miss);
+            // 커서도 없고 입력기도 한/영을 답하지 않는 곳(Snipaste 캡처 화면·게임처럼 입력기를 끈 창)은 글을 쓰는 곳으로 보지 않는다.
+            // 커서를 찾았더라도 한/영을 모르니 배지를 띄울 수 없는 곳이기도 하다. 관리자 권한 앱(둘 다 막힘)은 바로 위에서 가렸다.
+            if (miss == MissReason.NoCaret && state == ImeState.Unknown) { miss = null; dump?.Append(" miss:none(no caret, no IME)"); }
             if (miss is not null) dump?.Append($" miss:{miss}");
         }
 
@@ -147,7 +159,7 @@ static class ImeReader
 
         return new(state, caret, fg, CapsLock: caps, Shift: shift, CaretWindow: caretWindow, Insert: insert, Facts: facts,
                    Focus: gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : target, PreferTsf: preferTsf, ModeUncertain: uncertain,
-                   Process: process, Miss: miss, MissControlType: controlType);
+                   Process: process, Miss: miss, MissControlType: controlType, MissNote: miss is null ? "" : note);
     }
 
     /// <summary>

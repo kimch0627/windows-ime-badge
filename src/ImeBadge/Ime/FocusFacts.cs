@@ -20,8 +20,10 @@ readonly record struct FocusFacts(bool Password = false, bool Selection = false)
 /// "배지가 안 뜬 앱 찾기" 가 세지 않는다.</param>
 /// <param name="Slow">대상 앱이 제때 답하지 않아 이번에는 caret 없음으로 넘어갔다(<see cref="A11yCaret"/>).</param>
 /// <param name="ControlType">caret 을 못 찾은 요소의 UI Automation 컨트롤 종류 ID(모르면 0). "배지가 안 뜬 앱" 보고서용.</param>
+/// <param name="Failure">UI Automation 이 포커스된 요소를 주지 못했다: 오류 코드("0x80040201") 또는 "nofocus"(요소 없음). 성공했으면 null.
+/// Chromium 은 화면을 다시 그리는 중에 잠깐 이렇게 답한다. <see cref="A11yCaret"/> 이 한 번 더 묻고, 그래도 안 되면 방금 찾은 caret 을 잠깐 쓴다.</param>
 readonly record struct A11yHit(Rectangle? Caret, FocusFacts Facts = default, bool Unverified = false, bool NotInput = false, bool Slow = false,
-                               int ControlType = 0);
+                               int ControlType = 0, string? Failure = null);
 
 /// <summary>caret 을 찾은 경로마다 입력칸 정보를 만든다. 입력한 글자는 읽지 않는다.</summary>
 static class Focus
