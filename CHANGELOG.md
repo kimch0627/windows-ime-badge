@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+## [1.17.2] - 2026-11-09
+
+**배지가 안 뜬 앱** 목록이 창·입력칸을 옮기는 순간까지 세던 문제와, Chrome·Edge·Electron 앱에서 입력 중에 배지가 잠깐 사라지던 문제를 고친 릴리스입니다. 설정 항목과 설정 파일은 그대로입니다.
+
 ### 수정
 - **배지가 안 뜬 앱**: Chrome·Edge·Electron 앱에서 입력칸이 아닌데 키보드 포커스를 받는 요소(역할이 없는 단추 같은 요소)를 누른 뒤
   한/영·스페이스·백스페이스를 누르면 "커서 위치를 알려 주지 않는 앱" 으로 세던 문제를 고쳤습니다. 예를 들어 Paseo 에서 사이드바 크기 조절
@@ -711,7 +715,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.17.1...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.17.2...HEAD
+[1.17.2]: https://github.com/kimch0627/windows-ime-badge/compare/v1.17.1...v1.17.2
 [1.17.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.17.0...v1.17.1
 [1.17.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.16.2...v1.17.0
 [1.16.2]: https://github.com/kimch0627/windows-ime-badge/compare/v1.16.1...v1.16.2
