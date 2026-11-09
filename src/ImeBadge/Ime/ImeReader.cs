@@ -87,8 +87,9 @@ static class ImeReader
             var br = new Native.POINT(gti.rcCaret.Right, gti.rcCaret.Bottom);
             Native.ClientToScreen(gti.hwndCaret, ref tl);
             Native.ClientToScreen(gti.hwndCaret, ref br);
-            caret = Rectangle.FromLTRB(tl.X, tl.Y, Math.Max(br.X, tl.X + 1), br.Y);
             dump?.Append($" caret:win32('{Native.ClassName(gti.hwndCaret)}')");
+            // 입력칸은 글을 선택한 동안 caret 을 넓게 바꾸거나(RichEdit 8px) 한 줄 위에 있다고 알리기도 한다(티톡). 선택 끝 위치로 바로잡는다.
+            caret = EditSelectionCaret.Adjust(gti.hwndCaret, Rectangle.FromLTRB(tl.X, tl.Y, Math.Max(br.X, tl.X + 1), br.Y), dump);
             facts = Focus.FromWin32(gti.hwndFocus != IntPtr.Zero ? gti.hwndFocus : gti.hwndCaret, query);
         }
         else

@@ -177,6 +177,7 @@ src/ImeBadge.Core/      순수 로직. WinForms·Win32 의존 없음 → Linux �
   KeyPressWatch.cs      한/영 키를 사용자가 눌렀는지 폴링으로 알아채기(토글 비트·눌림, 이 프로그램이 보낸 키는 뺌. 한/영 유지)
   KoreanIme.cs          TSF 로만 IME 를 쓰는 앱 목록, IMM 변환 모드가 한국어 IME 의 값인지(0xFFFF 같은 값 거르기), 한글 비트만 바꾼 변환 모드, 한/영 키 스캔 코드
   DeadlineWorker.cs     오래 걸릴 수 있는 일을 전용 스레드에서 돌리고 정해진 시간까지만 기다리기 (caret 찾기가 UI 를 멈추지 않게)
+  SelectionCaret.cs     글을 선택한 동안 RichEdit 이 주는 넓은 caret 을 선택 끝 글자의 줄에 맞춘 1px 커서로 바로잡기
   VersionInfo.cs        "v1.2.3" 비교 (업데이트 확인)
   UpdatePackage.cs      릴리스 첨부 파일 중 내 설치 형태에 맞는 것 고르기 + SHA256SUMS.txt 해석 (자동 업그레이드)
   Strings.cs            UI 문구 테이블(한국어·영어)과 언어 선택. resx 대신 코드 사전이라 트리밍·단일 파일에 영향이 없고 키 일치를 테스트로 검사
@@ -186,6 +187,7 @@ src/ImeBadge/           Windows 앱
   Native/Uia.cs         COM UI Automation 인터페이스 선언 (vtable 순서 고정)
   Native/Tsf.cs         TSF(msctf) 전역 compartment 로 한/영 상태 읽기 (IMM32 의 대체 경로)
   Ime/UiaCaret.cs       UIA 로 caret 찾기 (Chrome/Electron/UWP)
+  Ime/EditSelectionCaret.cs  표준 입력칸(Edit·RichEdit)에서 글을 선택한 동안 선택 시작·끝 글자 위치를 물어 caret 바로잡기
   Ime/A11yCaret.cs      UIA·MSAA caret 찾기를 UI 스레드 밖(DeadlineWorker)에서 하고 최대 0.4초만 기다리기
   Ime/FocusFacts.cs     실험 기능이 쓰는 포커스된 입력칸 정보(비밀번호 칸·선택 영역)를 caret 을 찾은 경로마다 만들기
   Ime/ImeWriter.cs      실험 기능 한/영 유지: 다른 프로그램의 한/영 바꾸기(IME 에 WM_IME_CONTROL 요청, 안 되면 한/영 키 한 번)
@@ -249,6 +251,10 @@ installer/ImeBadge.iss  Inno Setup 스크립트
 3. **caret 위치** (세 경로. 모두 못 찾으면 배지를 띄우지 않습니다)
    - 1순위: `GetGUIThreadInfo(tid)`의 `hwndCaret`/`rcCaret` → `ClientToScreen()`. 메모장·Word 등
      Win32 caret을 만드는 앱.
+     표준 입력칸은 글을 선택한 동안 caret 을 엉뚱하게 알리기도 합니다(RichEdit·카카오톡은 8px 넓이, 티톡은 한 줄 위). Edit·RichEdit 과
+     이를 감싼 WinForms·Delphi(TEdit, T…RichEdit·T…Memo) 입력칸이면 `EM_GETSEL` 로 선택 시작·끝을, `EM_POSFROMCHAR` 로 그 글자의 위치를 물어
+     caret 에 가까운 쪽의 줄로 옮기고, 넓이는 1px, 높이는 선택하기 전에 본 caret 높이로 바꿉니다(`Ime/EditSelectionCaret.cs`,
+     `Core/SelectionCaret.cs`). 로그에 `caret:sel(...)`. 잰 값과 한계는 [docs/selection-caret-1.17.3.md](docs/selection-caret-1.17.3.md).
    - 2순위: 커서 창(`Ime/CursorWindow.cs`). 포커스 창에 이름이 `CURSOR` 인 자식 창이 있으면 그 사각형이 커서입니다.
      Xshell 8 은 터미널 뷰 안에 이 작은 창을 두고 커서를 따라 옮깁니다(한글 조합 중에는 두 칸 넓이). 창 관리자에게 이름으로
      묻기만 하므로 아주 싸고, 커서 한 칸 크기이고 포커스 창 안에 보일 때만 씁니다. 스크롤백을 올려 커서가 화면 밖으로 나가면
