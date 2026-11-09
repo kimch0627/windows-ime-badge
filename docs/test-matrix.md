@@ -16,7 +16,7 @@ caret 탐색·IME 판정·창 z-order 는 실제 앱에서만 확인할 수 있�
 | Chrome | 웹 페이지 textarea | UIA text | ⬜ | ⬜ | |
 | Edge | 주소창 / 본문 | UIA text | ⬜ | ⬜ | |
 | VS Code | 편집기 | UIA text | ⬜ | ⬜ | Electron |
-| 카카오톡 PC | 대화 입력창 | ⬜ | ⬜ | ⬜ | |
+| 카카오톡 PC | 대화 입력창 | Win32 (RICHEDIT50W) | ⬜ | ⬜ | 글을 입력하고 Ctrl+A 하면 밑줄 배지가 글 끝 커서 바로 아래, 끝에서 Shift+Home 하거나 오른쪽에서 왼쪽으로 끌어 고르면 글 앞 바로 아래(선택한 글 위에 겹치지 않음). 로그에 `caret:sel(...8x19 -> ...,h=19)` |
 | Windows Terminal | 셸 | UIA | ⬜ | ⬜ | TSF 전역 compartment 우선. `--debug` 로그에 `tsf(open=… conv=…)` 확인 |
 | 설정(UWP) | 검색창 | UIA | ⬜ | ⬜ | CoreWindow 스레드 조사 + TSF 우선. 로그에 `uwp` 표시 |
 | 메모장(Win11, IMM 창 없는 상태) | 본문 | Win32 | ⬜ | ⬜ | IMM 이 `imeWnd=0` 이면 TSF 로 넘어가는지(로그) |
