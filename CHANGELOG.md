@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [1.17.3] - 2026-11-09
+
+티톡·카카오톡 같은 메신저 입력칸에서 글을 선택하면 배지가 커서 옆이 아닌 곳에 뜨던 문제를 고친 릴리스입니다. 설정 항목과 설정 파일은 그대로입니다.
+조사 기록은 [docs/selection-caret-1.17.3.md](docs/selection-caret-1.17.3.md) 에 있습니다.
+
 ### 수정
 - **메신저 입력칸에서 글을 선택하면 배지 자리가 어긋나던 문제.** 티톡 대화 입력칸에서 Shift+Home 으로 글을 고르면 입력칸이 커서가 한 줄 위에
   있다고 알려 와 배지가 선택한 글 위에 겹쳤습니다. 카카오톡·워드패드처럼 RichEdit 을 쓰는 입력칸은 선택한 동안 커서를 8px 넓이로 바꿔 알려 줘서,
@@ -722,7 +727,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.17.2...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.17.3...HEAD
+[1.17.3]: https://github.com/kimch0627/windows-ime-badge/compare/v1.17.2...v1.17.3
 [1.17.2]: https://github.com/kimch0627/windows-ime-badge/compare/v1.17.1...v1.17.2
 [1.17.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.17.0...v1.17.1
 [1.17.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.16.2...v1.17.0
