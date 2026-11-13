@@ -10,6 +10,22 @@ namespace ImeBadge;
 /// </summary>
 public static class CalloutText
 {
+    /// <summary>말풍선에 넣는 앱 이름의 최대 길이. 넘치면 잘라 말줄임표를 붙인다.</summary>
+    public const int MaxAppName = 40;
+
+    /// <summary>
+    /// 실행 파일 설명(FileDescription)을 말풍선에 넣을 앱 이름으로 줄인다. "Xshell: Powerful TELNET/SSH terminal emulator" 처럼
+    /// "이름: 설명" 꼴이면 콜론 앞의 이름만 쓴다. 긴 설명이 경고 문장을 밀어내 정작 "Alt+Tab 을 누르세요" 가 잘리지 않게.
+    /// 그래도 길면 <see cref="MaxAppName"/> 자에서 자른다.
+    /// </summary>
+    public static string ShortAppName(string description)
+    {
+        string name = description.Trim();
+        int colon = name.IndexOf(": ", StringComparison.Ordinal);
+        if (colon >= 2) name = name[..colon].TrimEnd();
+        return name.Length > MaxAppName ? name[..MaxAppName].TrimEnd() + "…" : name;
+    }
+
     /// <param name="width">한 줄의 최대 폭.</param>
     /// <param name="measure">글을 한 줄로 그렸을 때의 폭.</param>
     public static string WrapAtSpaces(string text, float width, Func<string, float> measure)

@@ -111,6 +111,11 @@ public sealed class Settings
     /// 다른 프로그램의 한/영을 이 프로그램이 직접 바꾸는 유일한 기능이다.
     /// </summary>
     public bool KeepImeMode { get; set; }
+    /// <summary>
+    /// 경고·안내 말풍선 크기(%). 0 이면 자동(배지 크기와 Windows 텍스트 크기를 따른다, <see cref="CalloutStyle.Scale"/>).
+    /// 구버전은 모르는 항목으로 무시한다.
+    /// </summary>
+    public int CalloutSizePercent { get; set; } = CalloutStyle.AutoSize;
 
     // ── 동작 ──
     /// <summary>활성 창이 모니터 전체를 덮는(게임·전체 화면 동영상) 경우 배지를 숨긴다.</summary>
@@ -162,6 +167,9 @@ public sealed class Settings
         SizePercent = Math.Clamp(SizePercent, 50, 300);
         OpacityPercent = Math.Clamp(OpacityPercent, 30, 100);
         PollIntervalMs = Math.Clamp(PollIntervalMs, 50, 1000);
+        CalloutSizePercent = CalloutSizePercent <= CalloutStyle.AutoSize
+            ? CalloutStyle.AutoSize
+            : Math.Clamp(CalloutSizePercent, CalloutStyle.MinSizePercent, CalloutStyle.MaxSizePercent);
         if (!Enum.IsDefined(Style)) Style = BadgeStyle.Pill;
         var center = PlacementCenter?.Trim().ToLowerInvariant();
         PlacementCenter = center is CenterAbove or CenterBelow ? center : null;
@@ -195,6 +203,7 @@ public sealed class Settings
         Theme = other.Theme; Character = other.Character; Visibility = other.Visibility;
         CaretSonar = other.CaretSonar; CaretSonarHotkey = other.CaretSonarHotkey; CaretSonarOnSwitch = other.CaretSonarOnSwitch;
         FocusStealWarning = other.FocusStealWarning;
+        CalloutSizePercent = other.CalloutSizePercent;
         ShowSelection = other.ShowSelection;
         PasswordWarning = other.PasswordWarning;
         KeepImeMode = other.KeepImeMode;

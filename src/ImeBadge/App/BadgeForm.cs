@@ -1323,7 +1323,11 @@ sealed class BadgeForm : Form, IExperimentHost
     /// </summary>
     void ShowCallout(string tag, CalloutContent content, Rectangle anchor, int holdMs, bool? preferBelow = null, Rectangle avoid = default)
     {
-        try { (_callout ??= new CalloutPlayer()).Show(tag, content, anchor, preferBelow ?? CalloutBelow, holdMs, AnimationsOn, _settings.SizePercent, avoid); }
+        try
+        {
+            (_callout ??= new CalloutPlayer()).Show(tag, content, anchor, preferBelow ?? CalloutBelow, holdMs, AnimationsOn, _settings.SizePercent,
+                _settings.CalloutSizePercent, avoid);
+        }
         catch (Exception ex) { Log.Error("callout failed", ex); }
     }
 
@@ -1426,7 +1430,7 @@ sealed class BadgeForm : Form, IExperimentHost
         {
             if (Native.ProcessImagePath(pid) is { } path
                 && System.Diagnostics.FileVersionInfo.GetVersionInfo(path).FileDescription?.Trim() is { Length: > 0 } description)
-                return description.Length > 40 ? description[..40] + "…" : description;
+                return CalloutText.ShortAppName(description);
         }
         catch { }
         string name = ImeReader.ProcessName(pid);

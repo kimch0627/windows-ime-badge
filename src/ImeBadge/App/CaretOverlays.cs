@@ -171,11 +171,12 @@ sealed class CalloutPlayer : IDisposable
     /// <param name="preferBelow">자리가 있으면 커서 아래에(배지가 커서 위에 있을 때).</param>
     /// <param name="holdMs">보이는 시간. 0 이하면 <see cref="Hide"/> 할 때까지.</param>
     /// <param name="sizePercent">배지 크기 설정. Windows 텍스트 크기와 함께 말풍선 크기를 정한다(<see cref="CalloutStyle.Scale"/>).</param>
+    /// <param name="calloutPercent">말풍선 크기 설정. 0 이면 자동(<paramref name="sizePercent"/> 를 따른다).</param>
     /// <param name="avoid">가리지 않을 창(화면 좌표). 자리가 있으면 그 창 바깥에 둔다(<see cref="CalloutLayout"/>). 비어 있으면 커서 옆.</param>
     public void Show(string tag, CalloutContent content, Rectangle anchor, bool preferBelow, int holdMs, bool animate, int sizePercent = 100,
-        Rectangle avoid = default)
+        int calloutPercent = CalloutStyle.AutoSize, Rectangle avoid = default)
     {
-        float scale = CalloutStyle.Scale(Native.DpiScaleAt(anchor.Location), sizePercent, Theme.TextScalePercent);
+        float scale = CalloutStyle.Scale(Native.DpiScaleAt(anchor.Location), sizePercent, Theme.TextScalePercent, calloutPercent);
         var body = OverlayRenderer.MeasureCallout(content, scale);
         var area = Screen.FromPoint(anchor.Location).WorkingArea;
         var place = CalloutLayout.Compute(anchor, body, OverlayRenderer.TailHeight(scale), (int)Math.Round(3 * scale), area, preferBelow,

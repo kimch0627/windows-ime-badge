@@ -126,7 +126,8 @@ static class OverlayRenderer
         return f;
     }
 
-    const int DetailLines = 2;
+    /// <summary>설명 글의 최대 줄 수. 긴 앱 이름이 들어간 경고도 끝까지 읽히게 넉넉히 둔다.</summary>
+    const int DetailLines = 4;
 
     /// <summary>
     /// 글자를 ClearType 으로 그릴까. 말풍선 몸통은 불투명이라 그 안쪽 글자는 ClearType 을 쓸 수 있다(레이어드 창이라도 바탕이 비치지 않는다).
