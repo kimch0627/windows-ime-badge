@@ -63,7 +63,8 @@ public sealed class StringsTests
     {
         var t = Strings.Table(lang);
         // 모양
-        AssertUniqueMnemonics(t, "look.theme", "look.style", "look.placement", "look.size", "look.opacity", "look.hangulColor", "look.englishColor");
+        AssertUniqueMnemonics(t, "look.theme", "look.style", "look.placement", "look.size", "look.stretch.reset", "look.width", "look.height",
+            "look.opacity", "look.hangulColor", "look.englishColor");
         // 표시
         AssertUniqueMnemonics(t, "look.visibility", "look.animate", "look.capsLock", "look.shiftHold", "look.shiftNow", "look.insert",
             "behavior.fullscreen", "behavior.trayState");

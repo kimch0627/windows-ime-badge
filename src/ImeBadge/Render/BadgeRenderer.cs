@@ -17,23 +17,29 @@ readonly record struct BadgeContrast(Color HangulInk, Color OtherInk, Color Edge
 /// 배지 색·질감 조합. 설정의 "#RRGGBB" 문자열과 디자인 테마에서 만든다.
 /// <paramref name="Character"/> 가 비어 있지 않으면 둥근 배지 대신 그 캐릭터 모양(고양이 등)으로 그린다.
 /// <paramref name="Contrast"/> 가 있으면 고대비 모드: 시스템 색 그대로, 굵은 테두리, 광택·그림자·반투명 없음.
+/// <paramref name="WidthScale"/>·<paramref name="HeightScale"/> 은 배지 몸통의 가로·세로 배수(<see cref="BadgeStretch"/>, 1 = 권장 치수).
 /// </summary>
 readonly record struct BadgeTheme(Color Hangul, Color English, Color Other,
-    BadgeFinish Finish = BadgeFinish.Flat, float Gloss = 0f, string Character = "", bool ShowCapsLock = true, BadgeContrast? Contrast = null)
+    BadgeFinish Finish = BadgeFinish.Flat, float Gloss = 0f, string Character = "", bool ShowCapsLock = true, BadgeContrast? Contrast = null,
+    float WidthScale = 1f, float HeightScale = 1f)
 {
     /// <summary>설정에서 만든 조합. Windows 고대비 모드면 설정 색 대신 시스템 색(<see cref="HighContrast"/>).</summary>
     public static BadgeTheme From(Settings s)
     {
+        float width = BadgeStretch.Factor(s.BadgeWidthPercent), height = BadgeStretch.Factor(s.BadgeHeightPercent);
         if (System.Windows.Forms.SystemInformation.HighContrast)
             return HighContrast(SystemColors.Window, SystemColors.WindowText, SystemColors.Highlight, SystemColors.HighlightText)
-                with { Character = BadgeCharacters.Normalize(s.Character), ShowCapsLock = s.ShowCapsLock };
+                with { Character = BadgeCharacters.Normalize(s.Character), ShowCapsLock = s.ShowCapsLock, WidthScale = width, HeightScale = height };
         var design = DesignThemes.Get(s.Theme);
         return new(
             ParseOr(s.HangulColor, Settings.DefaultHangulColor),
             ParseOr(s.EnglishColor, Settings.DefaultEnglishColor),
             ParseOr(design.OtherColor, DesignThemes.ClassicOtherColor),
-            design.Finish, design.Gloss, BadgeCharacters.Normalize(s.Character), s.ShowCapsLock);
+            design.Finish, design.Gloss, BadgeCharacters.Normalize(s.Character), s.ShowCapsLock, WidthScale: width, HeightScale: height);
     }
+
+    /// <summary>가로·세로 길이를 권장 치수(100%)로 되돌린 조합. 모양을 고르는 타일·메뉴 그림은 모양 자체를 보여 주므로 이것으로 그린다.</summary>
+    public BadgeTheme Unstretched => this with { WidthScale = 1f, HeightScale = 1f };
 
     /// <summary>
     /// 고대비 조합: 한글 = 강조색(Highlight) 바탕에 강조 글자색, 영문·다른 언어 = 창 바탕색에 창 글자색, 테두리 = 창 글자색.
@@ -228,6 +234,35 @@ static class BadgeRenderer
     /// <summary>점선 굵기(px). 1px 이면 점선이 흐려져 잘 안 보인다.</summary>
     static float AntsWidth(float scale) => Math.Max(1.25f, 1.4f * scale);
 
+    /// <summary>선택 영역 표시 중인 밑줄 막대의 높이(배율 1 기준 px). 평소 3px 막대에서는 빗금이 세로 줄무늬처럼 보여 기울기가 읽히는 높이로 키운다.</summary>
+    const float SelectionBarH = 5f;
+
+    /// <summary>
+    /// 밑줄 막대의 선택 영역 표시: 막대를 45° 빗금(/)으로 채운다. 점선 테두리를 두를 둘레가 없는 막대에서 "표시해 둔 영역" 으로 읽히는 모양이다.
+    /// 빗금은 짙은 회색이라 흰 문서에서도 막대 윤곽이 끊기지 않고(흰 빗금은 바탕과 섞여 막대가 토막 난다), 배지색이 어두워
+    /// 짙은 회색이 묻히면(대비 <see cref="HatchMinContrast"/> 미만: 진회색·네이비) 흰색. 클래식 파랑(약 2.7)은 짙은 빗금이 읽힌다.
+    /// 고대비는 창 글자색. 정수 px 무늬를 타일로 깔아 작은 막대에서도 흐려지지 않는다.
+    /// </summary>
+    static void DrawSelectionHatch(Graphics g, GraphicsPath path, RectangleF rect, Color fill, float scale, in BadgeTheme theme)
+    {
+        var ink = theme.Contrast is { } hc ? hc.Edge
+            : ColorHex.ContrastRatio(fill.ToArgb() | unchecked((int)0xFF000000), AntsInk.ToArgb()) < HatchMinContrast ? Color.White : AntsInk;
+        int period = Math.Max(4, (int)MathF.Round(4 * scale)), stripe = period / 2;
+        using var tile = new Bitmap(period, period, PixelFormat.Format32bppPArgb);
+        for (int y = 0; y < period; y++)
+            for (int x = 0; x < period; x++)
+                tile.SetPixel(x, y, (x + y) % period < stripe ? ink : Color.Transparent);
+        using var hatch = new TextureBrush(tile);
+        hatch.TranslateTransform(rect.X, rect.Y);
+        var state = g.Save();
+        g.SetClip(path);   // 둥근 양 끝을 따라 자른다
+        g.SmoothingMode = SmoothingMode.None;
+        g.FillRectangle(hatch, rect);
+        g.Restore(state);
+    }
+
+    const double HatchMinContrast = 2.5;
+
     /// <summary>
     /// 안쪽 위 가장자리의 밝은 림(Fluent 의 윗면 하이라이트). 유리컵 윗면에 형광등이 한 줄 비친 것처럼, 배지 모양을 가운데 쪽으로
     /// <paramref name="inset"/> 만큼 줄인 윤곽을 위에서 아래로 사라지는 흰색으로 긋는다. 흐린 그라데이션보다 20px 배지에서 또렷하다.
@@ -361,12 +396,13 @@ static class BadgeRenderer
     /// </summary>
     static Bitmap RenderDot(Color color, BadgeMark mark, float scale, in BadgeTheme theme)
     {
-        int d = (int)Math.Round(9 * scale);
-        int pad = ShadowPad(scale), side = BadgeLayout.Side(BadgeStyle.Dot, scale);
-        var bmp = NewCanvas(side + d + 2 * pad + side, d + 2 * pad + pad + BadgeLayout.Tail(BadgeStyle.Dot, scale), out var g);
+        // 가로·세로 길이를 따로 바꾸면 타원이 된다(BadgeStretch).
+        int dw = Math.Max(1, (int)Math.Round(9 * scale * theme.WidthScale)), dh = Math.Max(1, (int)Math.Round(9 * scale * theme.HeightScale));
+        int pad = ShadowPad(scale), side = BadgeLayout.Side(BadgeStyle.Dot, scale, theme.WidthScale);
+        var bmp = NewCanvas(side + dw + 2 * pad + side, dh + 2 * pad + pad + BadgeLayout.Tail(BadgeStyle.Dot, scale), out var g);
         using (g)
         {
-            var rect = new RectangleF(side + pad, pad, d, d);
+            var rect = new RectangleF(side + pad, pad, dw, dh);
             using var path = new GraphicsPath();
             path.AddEllipse(rect);
             DrawShadow(g, path, scale, color, theme);
@@ -384,7 +420,7 @@ static class BadgeRenderer
     }
 
     /// <summary>
-    /// caret 아래의 짧은 막대(배율 1 에서 16×3px). 막대가 작아 림·그라데이션은 넣지 않고 선명도만 챙긴다(#48):
+    /// caret 아래의 짧은 막대(배율 1 에서 16×3px, 선택 영역 표시 중에는 16×5px 빗금 막대). 막대가 작아 림·그라데이션은 넣지 않고 선명도만 챙긴다(#48):
     /// 아래 가장자리 1줄을 같은 색조로 진하게(<see cref="ColorHex.EdgeOn"/>) 하고 그림자를 깐다. 둘레 전체에 테두리를 두르면
     /// 3px 중 2px 가 테두리가 되어 배지색이 사라진다. 고대비는 창 바탕색 막대가 창 위에서 묻히므로 둘레 전체에 창 글자색 선.
     /// 막대는 캔버스 맨 위에 두고 그림자 여백은 좌우(같은 폭)와 아래에만 둔다. 위치 계산(<see cref="BadgeLayout"/>: 가로 가운데,
@@ -394,8 +430,11 @@ static class BadgeRenderer
     /// </summary>
     static Bitmap RenderUnderline(Color color, BadgeMark mark, float scale, in BadgeTheme theme)
     {
-        int w = (int)Math.Round(16 * scale), h = (int)Math.Round(3 * scale);
-        int pad = ShadowPad(scale), side = BadgeLayout.Side(BadgeStyle.Underline, scale);
+        // 선택 영역 표시로 막대가 높아지면 아래로만 자란다. 위쪽(caret 아래 1px)은 그대로이고 특수 키 표시 줄은 막대를 따라 내려간다.
+        // 세로 길이(BadgeStretch)는 평소 막대와 선택 표시 막대에 똑같이 곱한다.
+        int w = Math.Max(1, (int)Math.Round(16 * scale * theme.WidthScale));
+        int h = Math.Max(1, (int)Math.Round((HasSelection(mark) ? SelectionBarH : 3) * scale * theme.HeightScale));
+        int pad = ShadowPad(scale), side = BadgeLayout.Side(BadgeStyle.Underline, scale, theme.WidthScale);
         var bmp = NewCanvas(side + w + 2 * pad + side, h + pad + BadgeLayout.Tail(BadgeStyle.Underline, scale), out var g);
         using (g)
         {
@@ -405,6 +444,7 @@ static class BadgeRenderer
             DrawOuterRim(g, path, OuterRimWidth(scale), 0f, color, theme);   // 막대 위쪽은 캔버스 끝이라 잘리고, 좌우·아래에 보인다
             using var brush = new SolidBrush(color);
             g.FillPath(brush, path);
+            if (HasSelection(mark)) DrawSelectionHatch(g, path, rect, color, scale, theme);
             float line = Math.Max(1f, MathF.Floor(scale));   // 정수 px 라 흐려지지 않고, 150%(막대 4px)에서도 1px 에 그친다
             if (theme.Contrast is not null)
             {
@@ -419,15 +459,6 @@ static class BadgeRenderer
                 var state = g.Save();
                 g.SetClip(path);   // 둥근 양 끝을 따라 자른다
                 g.FillRectangle(edge, rect.X, rect.Bottom - line, rect.Width, line);
-                g.Restore(state);
-            }
-            if (HasSelection(mark))
-            {
-                // 밑줄은 둘레에 점선을 두를 자리가 없어 막대 자체를 배지 색·흰색이 번갈아 끊긴 점선으로 만든다.
-                var state = g.Save();
-                g.SetClip(path);
-                using var gaps = new Pen(theme.Contrast is null ? Color.White : theme.English, h) { DashPattern = new[] { 1f, 1f } };
-                g.DrawLine(gaps, rect.X + h, rect.Y + h / 2f, rect.Right, rect.Y + h / 2f);
                 g.Restore(state);
             }
             DrawMarksBelow(g, mark, rect.X + rect.Width / 2, rect.Bottom + BadgeLayout.MarkGap * scale, scale, color, theme);
@@ -524,13 +555,18 @@ static class BadgeRenderer
 
     static Bitmap RenderText(string text, BadgeMark mark, Color color, Color ink, float scale, bool rounded, in BadgeTheme theme)
     {
-        using var font = new Font(BadgeFonts.For(text), 13 * scale, FontStyle.Bold, GraphicsUnit.Pixel);   // 없으면 GDI+ 가 기본 글꼴로 대체
+        // 가로·세로 길이(BadgeStretch): 몸통은 권장 치수에 따로 곱하고, 글자와 그 아래 밑줄은 둘 중 작은 비율(k)을 따라 줄여 배지 안에 둔다.
+        // 늘이기만 하면(k = 1) 글자 크기는 그대로다. 글자를 키우는 것은 크기 설정의 몫이다.
+        float sx = theme.WidthScale, sy = theme.HeightScale, k = Math.Min(sx, sy), ts = scale * k;
+        using var font = new Font(BadgeFonts.For(text), 13 * ts, FontStyle.Bold, GraphicsUnit.Pixel);   // 없으면 GDI+ 가 기본 글꼴로 대체
         using var glyph = TextPath(text, font);
         var ib = glyph.GetBounds();
 
-        int h = (int)Math.Round(20 * scale);
-        int w = (int)Math.Round(Math.Max(h, ib.Width + 2 * InkSidePad * scale));
-        if (w < h + CircleSnap * scale) w = h;
+        // 권장 치수(100%)의 몸통: 높이 20, 폭은 잉크 폭(100% 글자 기준) + 좌우 여백.
+        int h0 = (int)Math.Round(20 * scale);
+        int w0 = (int)Math.Round(Math.Max(h0, ib.Width / k + 2 * InkSidePad * scale));
+        if (w0 < h0 + CircleSnap * scale) w0 = h0;
+        int h = Math.Max(1, (int)Math.Round(h0 * sy)), w = Math.Max(1, (int)Math.Round(w0 * sx));
         int pad = ShadowPad(scale);   // 사방 여백 + 아래쪽에 그림자가 떨어질 자리
         var bmp = NewCanvas(w + 2 * pad, h + 2 * pad + pad, out var g);
         using (g)
@@ -550,11 +586,11 @@ static class BadgeRenderer
 
             // 글자와 그 아래 Caps Lock 밑줄을 한 덩어리로 보고 배지 가운데에 둔다. Shift ▲·겹쳐 쓰기 ■ 는 아래 모서리(DrawCornerMark).
             float cx = pad + w / 2f, cy = pad + h / 2f;
-            using var markPath = CapsBarPath(mark, cx, ref cy, ib, gap: 1.5f * scale,
-                barW: Math.Max(6 * scale, Math.Min(ib.Width, w - 8 * scale)), barH: Math.Max(1f, 1.5f * scale), snap: true);
+            using var markPath = CapsBarPath(mark, cx, ref cy, ib, gap: 1.5f * ts,
+                barW: Math.Max(6 * ts, Math.Min(ib.Width, w - 8 * ts)), barH: Math.Max(1f, 1.5f * ts), snap: true);
             using var textBrush = new SolidBrush(ink);
             using var halo = HaloBrush(color, ink, rect, theme);
-            DrawCentered(g, text, font, glyph, cx, cy, snap: true, textBrush, markPath, halo, HaloWidth * scale);
+            DrawCentered(g, text, font, glyph, cx, cy, snap: true, textBrush, markPath, halo, HaloWidth * ts);
             foreach (var (kind, right) in CornerMarks)
                 if ((mark & kind) != 0)
                     DrawCornerMark(g, kind, LowerCorner(rect, radius, right), CornerMarkSize * scale, Math.Max(1f, scale), scale, color, ink, theme, snap: true);
@@ -645,8 +681,11 @@ static class BadgeRenderer
     static Bitmap RenderCharacter(string character, string text, BadgeMark mark, Color color, Color ink, float scale, in BadgeTheme theme)
     {
         var fig = FigureOf(character);
+        // 가로·세로 길이(BadgeStretch): 몸통 윤곽 자체를 늘인다(그리기 변환을 늘이면 테두리 굵기도 방향마다 달라진다).
+        // 귀 장식은 채우기만 하므로 변환으로 늘이고, 글자는 둘 중 작은 비율(k)로 줄여 몸통의 글자 자리에 둔다.
+        float sx = theme.WidthScale, sy = theme.HeightScale, k = Math.Min(sx, sy);
         int pad = ShadowPad(scale);
-        int w = (int)Math.Ceiling(fig.Width * scale), h = (int)Math.Ceiling(fig.Height * scale);
+        int w = (int)Math.Ceiling(fig.Width * sx * scale), h = (int)Math.Ceiling(fig.Height * sy * scale);
         var bmp = NewCanvas(w + 2 * pad, h + 2 * pad + pad, out var g);
         using (g)
         {
@@ -655,7 +694,8 @@ static class BadgeRenderer
             g.ScaleTransform(scale, scale);
             bool star = character == BadgeCharacters.Star;
             using var body = BodyPath(character);
-            var bounds = new RectangleF(0, 0, fig.Width, fig.Height);
+            if (sx != 1f || sy != 1f) { using var stretch = new Matrix(); stretch.Scale(sx, sy); body.Transform(stretch); }
+            var bounds = new RectangleF(0, 0, fig.Width * sx, fig.Height * sy);
             using var brush = FillBrush(color, bounds, theme);
 
             DrawShadow(g, body, scale, color, theme, penScale: scale);
@@ -668,6 +708,8 @@ static class BadgeRenderer
             g.FillPath(brush, body);
 
             // 귀 장식: 고양이는 안쪽 귀(밝게), 강아지는 늘어진 귀(조금 진하게). 고대비는 섞은 색 대신 글자색(팔레트의 짝)으로.
+            var unstretched = g.Save();
+            g.ScaleTransform(sx, sy);
             if (character == BadgeCharacters.Cat)
             {
                 using var inner = new SolidBrush(hc ? ink : Color.FromArgb(color.A, Color.FromArgb(ColorHex.Mix(color.ToArgb(), unchecked((int)0xFFFFFFFF), 0.45))));
@@ -686,23 +728,27 @@ static class BadgeRenderer
                     g.Restore(state);
                 }
             }
+            g.Restore(unstretched);
             // 림: 테두리의 바깥 절반(0.8 단위) 안쪽에. 별은 둥근 선(2.4)이 몸통 밖으로 1.2 나와 있어 그만큼 바깥쪽에 긋는다.
             DrawRim(g, body, body.GetBounds(), star ? -0.6f : 0.6f, 1f, color, theme);
             if (HasSelection(mark)) DrawSelectionAnts(g, body, AntsWidth(scale) / scale, theme);
 
             // 글자와 그 아래 Caps Lock 밑줄의 한 덩어리 중심을 몸통의 글자 자리(TextX, TextY)에. Shift ▲·겹쳐 쓰기 ■ 는 아래 모서리.
-            using var font = new Font(BadgeFonts.For(text), fig.FontSize, FontStyle.Bold, GraphicsUnit.Pixel);
+            using var font = new Font(BadgeFonts.For(text), fig.FontSize * k, FontStyle.Bold, GraphicsUnit.Pixel);
             using var glyph = TextPath(text, font);
             var ib = glyph.GetBounds();
-            float cy = fig.TextY;
-            using var markPath = CapsBarPath(mark, fig.TextX, ref cy, ib, gap: 1.2f,
-                barW: Math.Max(fig.FontSize * 0.5f, ib.Width), barH: 1.4f, snap: false);
+            float tx = fig.TextX * sx, cy = fig.TextY * sy;
+            using var markPath = CapsBarPath(mark, tx, ref cy, ib, gap: 1.2f * k,
+                barW: Math.Max(fig.FontSize * 0.5f * k, ib.Width), barH: 1.4f * k, snap: false);
             using var textBrush = new SolidBrush(ink);
             using var halo = HaloBrush(color, ink, bounds, theme);
-            DrawCentered(g, text, font, glyph, fig.TextX, cy, snap: false, textBrush, markPath, halo, HaloWidth);
+            DrawCentered(g, text, font, glyph, tx, cy, snap: false, textBrush, markPath, halo, HaloWidth * k);
             foreach (var (kind, right) in CornerMarks)
                 if ((mark & kind) != 0)
-                    DrawCornerMark(g, kind, CornerOf(fig, right), CornerMarkSize, 1.2f, scale, color, ink, theme, snap: false, penScale: scale);
+                {
+                    var at = CornerOf(fig, right);
+                    DrawCornerMark(g, kind, new PointF(at.X * sx, at.Y * sy), CornerMarkSize, 1.2f, scale, color, ink, theme, snap: false, penScale: scale);
+                }
         }
         return bmp;
     }

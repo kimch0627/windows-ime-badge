@@ -21,6 +21,8 @@ public sealed class SettingsStoreTests : IDisposable
         var s = store.Load();
         Assert.Equal(BadgeStyle.Pill, s.Style);
         Assert.Equal(100, s.SizePercent);
+        Assert.Equal(BadgeStretch.Recommended, s.BadgeWidthPercent);
+        Assert.Equal(BadgeStretch.Recommended, s.BadgeHeightPercent);
         Assert.True(s.CheckForUpdates);
         Assert.Empty(s.ExcludedProcesses);
     }
@@ -231,6 +233,25 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(50, s.PollIntervalMs);
         Assert.Equal(Settings.DefaultHangulColor, s.HangulColor);
         Assert.Equal(new[] { "mstsc" }, s.ExcludedProcesses);
+    }
+
+    [Theory]
+    [InlineData("""{ "BadgeWidthPercent": 10, "BadgeHeightPercent": 999 }""", 50, 200)]
+    [InlineData("""{ "BadgeWidthPercent": 140, "BadgeHeightPercent": 75 }""", 140, 75)]
+    [InlineData("""{ "SizePercent": 120 }""", 100, 100)]   // 이 항목이 없던 예전 파일은 권장값
+    public void Load_BadgeWidthAndHeight_StayInRange(string json, int width, int height)
+    {
+        File.WriteAllText(P("settings.json"), json);
+        var store = new SettingsStore(P("settings.json"));
+        var s = store.Load();
+        Assert.Equal(width, s.BadgeWidthPercent);
+        Assert.Equal(height, s.BadgeHeightPercent);
+        Assert.True(store.Save(s));
+        var back = store.Load();
+        Assert.Equal((width, height), (back.BadgeWidthPercent, back.BadgeHeightPercent));
+        var copy = new Settings();
+        copy.CopyFrom(s);
+        Assert.Equal((width, height), (copy.BadgeWidthPercent, copy.BadgeHeightPercent));
     }
 
     [Fact]

@@ -52,7 +52,7 @@ sealed class SettingsForm : Form
     readonly System.Windows.Forms.Timer _saveTimer = new() { Interval = SaveDelayMs };
 
     TilePicker _theme = null!, _style = null!, _character = null!, _placement = null!;
-    AccentSlider _size = null!, _opacity = null!;
+    AccentSlider _size = null!, _opacity = null!, _badgeWidth = null!, _badgeHeight = null!;
     ThemedComboBox _language = null!, _poll = null!, _calloutSize = null!;
     SettingsCard _suggestCard = null!;
     readonly WrapRow _suggestRow = new();
@@ -456,6 +456,11 @@ sealed class SettingsForm : Form
         page.Controls.Add(Section("section.sizeColor"));
         // 크기·불투명도는 눈으로 맞추는 값이라 숫자 입력보다 슬라이더가 자연스럽다(Windows 설정 앱과 같은 방식).
         page.Controls.Add(Card(Glyphs.Size, "look.size", action: Slider(out _size, 50, 300, 5, 25, "%", v => { _draft.SizePercent = v; Touch(); })));
+        // 가로·세로 길이: 크기(전체 배율)와 따로 몸통의 비율만 바꾼다. 100% 가 권장 치수라 값 옆에 "권장" 을 붙이고, 한 번에 되돌리는 단추를 둔다.
+        var stretchReset = Button("look.stretch.reset", () => { _badgeWidth.Value = BadgeStretch.Recommended; _badgeHeight.Value = BadgeStretch.Recommended; });
+        page.Controls.Add(Card(Glyphs.Stretch, "look.stretch", action: stretchReset, body: new VStack(
+            (SubCard("look.width", StretchSlider(out _badgeWidth, v => { _draft.BadgeWidthPercent = v; Touch(); })), 0),
+            (SubCard("look.height", StretchSlider(out _badgeHeight, v => { _draft.BadgeHeightPercent = v; Touch(); })), 0))));
         page.Controls.Add(Card(Glyphs.Opacity, "look.opacity", action: Slider(out _opacity, 30, 100, 5, 10, "%", v => { _draft.OpacityPercent = v; Touch(); })));
         page.Controls.Add(Card(Glyphs.Color, "look.hangulColor", body: Swatches(out _hangulColor, out _hangulHex, v => _draft.HangulColor = v)));
         page.Controls.Add(Card(Glyphs.Color, "look.englishColor", body: Swatches(out _englishColor, out _englishHex, v => _draft.EnglishColor = v)));
@@ -1106,7 +1111,7 @@ sealed class SettingsForm : Form
     void DrawCharacterTile(Graphics g, RectangleF r, Theme.Palette p, string character)
     {
         float dpi = DeviceDpi / 96f;
-        using var bmp = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Pill, 0.78f * dpi, BadgeTheme.From(_draft) with { Character = character }, 100);
+        using var bmp = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Pill, 0.78f * dpi, BadgeTheme.From(_draft).Unstretched with { Character = character }, 100);
         var caret = new Rectangle((int)(r.Left + 6 * dpi), (int)(r.Top + r.Height / 2 - 8 * dpi), 1, (int)(16 * dpi));
         using (var pen = new Pen(p.Text, Math.Max(1f, dpi))) g.DrawLine(pen, caret.Left, caret.Top, caret.Left, caret.Bottom);
         var pos = new Point(caret.Right + (int)(3 * dpi), (int)(r.Top + r.Height / 2 - bmp.Height / 2f));
@@ -1117,7 +1122,7 @@ sealed class SettingsForm : Form
     void DrawStyleTile(Graphics g, RectangleF r, Theme.Palette p, BadgeStyle style)
     {
         float dpi = DeviceDpi / 96f;
-        var theme = BadgeTheme.From(_draft) with { Character = BadgeCharacters.None };
+        var theme = BadgeTheme.From(_draft).Unstretched with { Character = BadgeCharacters.None };
         var draw = style == BadgeStyle.DotFlash ? BadgeStyle.Pill : style;
         float scale = 0.85f * dpi;
         using var bmp = BadgeRenderer.Render(ImeState.Hangul, draw, scale, theme, 100);
@@ -1139,7 +1144,7 @@ sealed class SettingsForm : Form
     void DrawPlacementTile(Graphics g, RectangleF r, Theme.Palette p, BadgePlacement placement)
     {
         float dpi = DeviceDpi / 96f;
-        using var bmp = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Dot, dpi, BadgeTheme.From(_draft) with { Character = BadgeCharacters.None }, 100);
+        using var bmp = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Dot, dpi, BadgeTheme.From(_draft).Unstretched with { Character = BadgeCharacters.None }, 100);
         var caret = new Rectangle((int)(r.Left + r.Width / 2), 0, 1, (int)(12 * dpi));
         var room = Rectangle.Inflate(caret, 1000, 1000);
         var pos = BadgeLayout.Compute(new LayoutInput(caret, bmp.Size, BadgeStyle.Dot, placement, dpi, room));
@@ -1160,7 +1165,7 @@ sealed class SettingsForm : Form
         float dpi = DeviceDpi / 96f;
         float artH = 30 * dpi;
         int opacity = value == BadgeVisibility.DimWhileTyping ? 35 : 100;
-        using var bmp = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Pill, 0.8f * dpi, BadgeTheme.From(_draft) with { Character = BadgeCharacters.None }, opacity);
+        using var bmp = BadgeRenderer.Render(ImeState.Hangul, BadgeStyle.Pill, 0.8f * dpi, BadgeTheme.From(_draft).Unstretched with { Character = BadgeCharacters.None }, opacity);
         using var sample = new Font(BadgeRenderer.FontFamily, 9f);
         const TextFormatFlags flat = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.VerticalCenter;
         string typed = value == BadgeVisibility.DimWhileTyping ? "가나다라" : "가나";
@@ -1277,6 +1282,18 @@ sealed class SettingsForm : Form
         return Row(value, s);
     }
 
+    /// <summary>가로·세로 길이 슬라이더(<see cref="BadgeStretch"/>). 권장값(100%)이면 값 옆에 "권장" 을 붙인다.</summary>
+    static Control StretchSlider(out AccentSlider bar, Action<int> onChange)
+    {
+        var row = Slider(out bar, BadgeStretch.Min, BadgeStretch.Max, 5, 25, "%", onChange);
+        var s = bar;
+        var value = (Label)row.Controls[0];
+        void Label() => value.Text = s.Value == BadgeStretch.Recommended ? Strings.Format("look.stretch.recommended", s.Value) : $"{s.Value}%";
+        s.ValueChanged += (_, _) => Label();
+        Label();
+        return row;
+    }
+
     /// <summary>색 견본 팔레트 + 현재 색의 16진수 표시.</summary>
     Control Swatches(out ColorSwatches swatches, out Label hex, Action<string> onChange)
     {
@@ -1360,6 +1377,8 @@ sealed class SettingsForm : Form
         _placement.SelectedValue = _draft.Placement;
         SyncPlacementEnabled();
         _size.Value = _draft.SizePercent;
+        _badgeWidth.Value = _draft.BadgeWidthPercent;
+        _badgeHeight.Value = _draft.BadgeHeightPercent;
         _opacity.Value = _draft.OpacityPercent;
         FillPoll();
         _hangulColor.Hex = _draft.HangulColor; _hangulHex.Text = _hangulColor.Hex;
@@ -1558,7 +1577,7 @@ sealed class SettingsForm : Form
             {
                 bool selected = selectedRow >= 0 && state == PreviewRows[selectedRow].state;
                 var bmp = BadgeRenderer.Render(state, style, scale, theme, _draft.OpacityPercent, selection: selected);
-                var pos = BadgeLayout.Compute(new LayoutInput(caret, bmp.Size, style, _draft.Placement, scale, room));
+                var pos = BadgeLayout.Compute(new LayoutInput(caret, bmp.Size, style, _draft.Placement, scale, room, WidthScale: theme.WidthScale));
                 badges.Add((bmp, new Rectangle(pos, bmp.Size)));
             }
             int dy = PreviewOffset(carets.Select(c => c.caret).ToList(), badges.Select(b => b.bounds).ToList(), client.Height, (int)Math.Round(PreviewEdge * dpi));

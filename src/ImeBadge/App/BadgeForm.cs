@@ -58,9 +58,9 @@ sealed class BadgeForm : Form, IExperimentHost
     // 바뀜 = 한/영·Caps Lock·겹쳐 쓰기 변경, 배지가 새로 나타남, 활성 창이 바뀜.
     long _lastTypingMs = long.MinValue, _lastChangeMs = long.MinValue;
     Rectangle? _lastCaret;
-    (ImeState state, bool caps, bool shift, bool insert, bool selection, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character) _renderKey;
+    (ImeState state, bool caps, bool shift, bool insert, bool selection, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character, int width, int height) _renderKey;
     Size _bitmapSize;
-    (ImeState state, bool caps, bool shift, bool insert, bool selection, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character) _pulseBaseKey;
+    (ImeState state, bool caps, bool shift, bool insert, bool selection, BadgeStyle style, float scale, int opacity, string hangul, string english, string theme, string character, int width, int height) _pulseBaseKey;
     Point _lastPos = new(int.MinValue, int.MinValue);
     IntPtr _lastFg;
     bool _allowShow;
@@ -309,7 +309,7 @@ sealed class BadgeForm : Form, IExperimentHost
         {
             var item = AddRadio(shape, label, () => _settings.Character.Length == 0 && _settings.Style == value,
                 () => { _settings.Style = value; _settings.Character = BadgeCharacters.None; });
-            _previews[item] = size => MenuPreview(BadgeTheme.From(_settings) with { Character = BadgeCharacters.None }, value, size);
+            _previews[item] = size => MenuPreview(BadgeTheme.From(_settings).Unstretched with { Character = BadgeCharacters.None }, value, size);
         }
         shape.DropDownItems.Add(new ToolStripSeparator());
         shape.DropDownItems.Add(MenuHeader("menu.style.characters"));
@@ -318,7 +318,7 @@ sealed class BadgeForm : Form, IExperimentHost
             // 캐릭터를 고르면 Style 은 둥근 배지로 둔다. 구버전으로 되돌려도 둥근 배지로 보인다.
             var item = AddRadio(shape, label, () => _settings.Character == id,
                 () => { _settings.Character = id; _settings.Style = BadgeStyle.Pill; });
-            _previews[item] = size => MenuPreview(BadgeTheme.From(_settings) with { Character = id }, BadgeStyle.Pill, size);
+            _previews[item] = size => MenuPreview(BadgeTheme.From(_settings).Unstretched with { Character = id }, BadgeStyle.Pill, size);
         }
         _glyphs[shape] = MenuIcons.Shape;
         menu.Items.Add(shape);
@@ -542,7 +542,8 @@ sealed class BadgeForm : Form, IExperimentHost
     /// </summary>
     Bitmap PulseFrame(in Snapshot s, BadgeStyle style, float baseScale, float pulse)
     {
-        var baseKey = (s.State, s.CapsLock, s.Shift, s.Insert, s.Facts.Selection, style, baseScale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor, _settings.Theme, _settings.Character);
+        var baseKey = (s.State, s.CapsLock, s.Shift, s.Insert, s.Facts.Selection, style, baseScale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor, _settings.Theme, _settings.Character,
+                       _settings.BadgeWidthPercent, _settings.BadgeHeightPercent);
         if (_pulseBase is null || baseKey != _pulseBaseKey)
         {
             _pulseBase?.Dispose();
@@ -699,7 +700,7 @@ sealed class BadgeForm : Form, IExperimentHost
         UpdateTray(_trayState, _trayCaps, _trayInsert, force: true);
     }
 
-    void ResetRenderKey() => _renderKey = (ImeState.Unknown, false, false, false, false, (BadgeStyle)(-1), 0, -1, "", "", "", "");
+    void ResetRenderKey() => _renderKey = (ImeState.Unknown, false, false, false, false, (BadgeStyle)(-1), 0, -1, "", "", "", "", 0, 0);
 
     // ── 일시 중지 / 설정 / 정보 ──
     void TogglePause()
@@ -1102,7 +1103,8 @@ sealed class BadgeForm : Form, IExperimentHost
         float baseScale = Native.DpiScaleAt(caret.Location) * _settings.SizePercent / 100f;
         float scale = baseScale * pulse;
 
-        var key = (s.State, s.CapsLock, s.Shift, s.Insert, s.Facts.Selection, style, scale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor, _settings.Theme, _settings.Character);
+        var key = (s.State, s.CapsLock, s.Shift, s.Insert, s.Facts.Selection, style, scale, _settings.OpacityPercent, _settings.HangulColor, _settings.EnglishColor, _settings.Theme, _settings.Character,
+                   _settings.BadgeWidthPercent, _settings.BadgeHeightPercent);
         bool needRender = key != _renderKey || _lastBmp is null;
 
         Size bs = needRender ? Size.Empty : _bitmapSize;
@@ -1119,7 +1121,7 @@ sealed class BadgeForm : Form, IExperimentHost
         var area = Screen.FromPoint(caret.Location).WorkingArea;
         // 펄스로 잠깐 커진 동안에는 원래 크기로 반대쪽 대피를 정한다. 가장자리 근처에서 배지가 반대쪽으로 튀었다 돌아오지 않게.
         var resting = pulse != 1f && _pulseBase is not null ? _pulseBase.Size : Size.Empty;
-        var pos = BadgeLayout.Compute(new LayoutInput(caret, bs, style, _settings.Placement, scale, area, resting));
+        var pos = BadgeLayout.Compute(new LayoutInput(caret, bs, style, _settings.Placement, scale, area, resting, BadgeStretch.Factor(_settings.BadgeWidthPercent)));
 
         // FlowLauncher처럼 자기도 최상위(TopMost)인 창은 나중에 뜬 쪽이 위에 온다. 배지가 처음 보일 때,
         // 활성 창이 바뀌었을 때, 위치가 바뀌었을 때마다 최상위 창들 중에서도 맨 위로 다시 올린다.
