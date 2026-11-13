@@ -147,6 +147,26 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(new[] { "mstsc" }, s.ExcludedProcesses);
     }
 
+    /// <summary>말풍선 크기: 항목이 없으면 자동(0), 음수는 자동, 범위를 넘으면 50~200% 로. 고른 값은 저장·읽기에서 그대로.</summary>
+    [Theory]
+    [InlineData("{ }", 0)]
+    [InlineData("""{ "CalloutSizePercent": -5 }""", 0)]
+    [InlineData("""{ "CalloutSizePercent": 10 }""", 50)]
+    [InlineData("""{ "CalloutSizePercent": 999 }""", 200)]
+    [InlineData("""{ "CalloutSizePercent": 80 }""", 80)]
+    public void Load_NormalizesCalloutSize(string json, int expected)
+    {
+        File.WriteAllText(P("settings.json"), json);
+        var store = new SettingsStore(P("settings.json"));
+        var s = store.Load();
+        Assert.Equal(expected, s.CalloutSizePercent);
+        Assert.True(store.Save(s));
+        Assert.Equal(expected, store.Load().CalloutSizePercent);
+        var copy = new Settings();
+        copy.CopyFrom(s);
+        Assert.Equal(expected, copy.CalloutSizePercent);
+    }
+
     [Fact]
     public void Load_UnknownPlacementCenter_UsesStoredPlacement()
     {

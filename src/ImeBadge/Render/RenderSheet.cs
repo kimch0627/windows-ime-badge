@@ -276,6 +276,9 @@ static class RenderSheet
             ("소나: 커서 못 찾음", new(CalloutKind.Info, Strings.Get("sonar.notFound"), Strings.Get("sonar.notFound.detail"), Glyphs.Sonar)),
             ("포커스 뺏김 경고", new(CalloutKind.Warning, Strings.Get("steal.title"), Strings.Format("steal.detail", "KakaoTalk"), Glyphs.Shield)),
             ("포커스 뺏김 경고: 같은 앱", new(CalloutKind.Warning, Strings.Get("steal.title"), Strings.Format("steal.detail.sameApp", "KakaoTalk"), Glyphs.Shield)),
+            // 앱 이름이 최대 길이(40자)여도 "Alt+Tab 을 누르세요" 까지 잘리지 않아야 한다.
+            ("포커스 뺏김 경고: 긴 앱 이름", new(CalloutKind.Warning, Strings.Get("steal.title"),
+                Strings.Format("steal.detail.sameApp", CalloutText.ShortAppName("Microsoft Visual Studio Code Insiders Edition Preview")), Glyphs.Shield)),
             ("비밀번호 칸: 한글", new(CalloutKind.Warning, Strings.Get("password.title"), Strings.Get("password.hangul"), Glyphs.Lock)),
             ("비밀번호 칸: 둘 다", new(CalloutKind.Warning, Strings.Get("password.title"), Strings.Get("password.both"), Glyphs.Lock)),
         };

@@ -53,7 +53,7 @@ sealed class SettingsForm : Form
 
     TilePicker _theme = null!, _style = null!, _character = null!, _placement = null!;
     AccentSlider _size = null!, _opacity = null!;
-    ThemedComboBox _language = null!, _poll = null!;
+    ThemedComboBox _language = null!, _poll = null!, _calloutSize = null!;
     SettingsCard _suggestCard = null!;
     readonly WrapRow _suggestRow = new();
     readonly List<AccentButton> _suggestChips = new();
@@ -724,7 +724,30 @@ sealed class SettingsForm : Form
 
         _focusSteal = Toggle(v => { _draft.FocusStealWarning = v; Touch(); });
         page.Controls.Add(Card(Glyphs.Shield, "exp.focusSteal", action: Row(CalloutPreviewButton("exp.focusSteal.preview", CalloutPreview.FocusSteal), _focusSteal)));
+
+        // 경고 말풍선 크기: 자동(배지 크기를 따름) 또는 직접 고른 비율. 바꾼 뒤 위의 [보기] 로 바로 확인한다.
+        _calloutSize = Combo(200, Array.Empty<string>(), i =>
+        {
+            int pct = i < _calloutSizeValues.Count ? _calloutSizeValues[i] : CalloutStyle.AutoSize;
+            if (_draft.CalloutSizePercent != pct) { _draft.CalloutSizePercent = pct; Touch(); }
+        });
+        _calloutSize.AccessibleName = Mnemonic.Plain(Strings.Get("exp.calloutSize"));
+        page.Controls.Add(Card(Glyphs.Size, "exp.calloutSize", action: _calloutSize));
         return page;
+    }
+
+    /// <summary>말풍선 크기 고르기 상자의 항목 순서대로의 값(%). 0 은 자동.</summary>
+    readonly List<int> _calloutSizeValues = new();
+
+    /// <summary>말풍선 크기 고르기 상자를 채운다. 프리셋에 없는 값(설정 파일에서 고친 값)이면 맨 끝에 더해 고른다.</summary>
+    void FillCalloutSize()
+    {
+        _calloutSizeValues.Clear();
+        _calloutSizeValues.AddRange(CalloutStyle.SizePresets);
+        if (!_calloutSizeValues.Contains(_draft.CalloutSizePercent)) _calloutSizeValues.Add(_draft.CalloutSizePercent);
+        _calloutSize.SetItems(_calloutSizeValues.Select(v => v == CalloutStyle.AutoSize ? Strings.Get("exp.calloutSize.auto") : $"{v}%"));
+        _calloutSize.SelectedIndex = _calloutSizeValues.IndexOf(_draft.CalloutSizePercent);
+        _calloutSize.Invalidate();
     }
 
     /// <summary>경고 말풍선 [보기] 단추. 누르면 단추 아래에 그 말풍선을 한 번 띄운다.</summary>
@@ -1360,6 +1383,7 @@ sealed class SettingsForm : Form
         _sonarHotkeyBox.Text = _draft.CaretSonarHotkey;
         _sonarSwitch.Checked = _draft.CaretSonarOnSwitch;
         _focusSteal.Checked = _draft.FocusStealWarning;
+        FillCalloutSize();
         _selection.Checked = _draft.ShowSelection;
         _password.Checked = _draft.PasswordWarning;
         _keepMode.Checked = _draft.KeepImeMode;

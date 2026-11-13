@@ -54,13 +54,26 @@ public static class CalloutStyle
     /// <summary>Windows 접근성 "텍스트 크기"의 범위(%). 설정 앱의 슬라이더가 100~225 다.</summary>
     public const int MaxTextScale = 225;
 
+    /// <summary>말풍선 크기 설정(<see cref="Settings.CalloutSizePercent"/>)에서 "자동"을 뜻하는 값.</summary>
+    public const int AutoSize = 0;
+
+    /// <summary>사용자가 직접 고를 수 있는 말풍선 크기의 범위(%).</summary>
+    public const int MinSizePercent = 50, MaxSizePercent = 200;
+
+    /// <summary>설정 창의 말풍선 크기 고르기 상자 순서. 맨 앞이 자동.</summary>
+    public static readonly int[] SizePresets = { AutoSize, 70, 80, 90, 100, 115, 130, 150 };
+
     /// <summary>
     /// 말풍선 배율(VW-04): 모니터 배율 × (배지 크기와 Windows 텍스트 크기 중 큰 쪽). 배지를 키운 사용자·글자를 키운 사용자 모두에게 말풍선이
     /// 함께 커진다. 둘을 곱하지 않는 것은 150% × 150% 처럼 겹쳐 지나치게 커지지 않게, 100% 아래로 줄이지 않는 것은 배지를 작게 쓰는 사용자에게도
     /// 안내 글자는 읽혀야 해서다. 위로는 텍스트 크기의 최대(225%)까지.
+    /// 사용자가 말풍선 크기(<paramref name="calloutPercent"/>)를 직접 골랐으면 배지 크기·텍스트 크기와 상관없이 모니터 배율 × 그 비율이다.
+    /// 배지를 크게 쓰면서 경고는 작게 보고 싶은 사용자가 있다.
     /// </summary>
-    public static float Scale(float dpi, int sizePercent, int textScalePercent) =>
-        dpi * Math.Clamp(Math.Max(sizePercent, textScalePercent), 100, MaxTextScale) / 100f;
+    public static float Scale(float dpi, int sizePercent, int textScalePercent, int calloutPercent = AutoSize) =>
+        calloutPercent > AutoSize
+            ? dpi * Math.Clamp(calloutPercent, MinSizePercent, MaxSizePercent) / 100f
+            : dpi * Math.Clamp(Math.Max(sizePercent, textScalePercent), 100, MaxTextScale) / 100f;
 
     /// <summary>테마 팔레트(설정 창 색 한 벌)로 정한 말풍선 색. 고대비 모드는 앱 쪽에서 시스템 색을 그대로 쓴다.</summary>
     public static CalloutColors For(CalloutKind kind, ThemePalette p)

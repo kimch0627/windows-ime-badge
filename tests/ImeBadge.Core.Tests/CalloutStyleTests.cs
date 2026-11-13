@@ -101,4 +101,14 @@ public sealed class CalloutStyleTests
     [InlineData(1.5f, 130, 100, 1.95f)]  // 모니터 배율과는 곱한다
     public void Scale_FollowsBadgeSizeOrTextSize(float dpi, int size, int text, float expected) =>
         Assert.Equal(expected, CalloutStyle.Scale(dpi, size, text), 3);
+
+    /// <summary>말풍선 크기를 직접 고르면 배지 크기·텍스트 크기를 무시하고 모니터 배율에만 곱한다. 100% 아래로도 줄일 수 있다.</summary>
+    [Theory]
+    [InlineData(1.5f, 300, 100, 80, 1.2f)]    // 큰 배지여도 고른 크기
+    [InlineData(1f, 100, 150, 70, 0.7f)]      // 텍스트 크기도 무시
+    [InlineData(1f, 100, 100, 130, 1.3f)]
+    [InlineData(1f, 100, 100, 999, 2f)]       // 범위를 넘으면 200% 까지
+    [InlineData(1f, 150, 100, 0, 1.5f)]       // 0 = 자동(배지 크기)
+    public void Scale_UsesChosenCalloutSize(float dpi, int size, int text, int callout, float expected) =>
+        Assert.Equal(expected, CalloutStyle.Scale(dpi, size, text, callout), 3);
 }

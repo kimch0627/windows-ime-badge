@@ -337,7 +337,7 @@ public static class Strings
         ["missed.report.title"] = "배지가 안 뜬 앱 ({0})",
         ["missed.report.line"] = "- {0}: {1} [{2}] · {3} · 안 뜬 순간 {4} / 뜬 순간 {5} · 마지막 {6} · {7}",
 
-        // ── 실험 기능 페이지 (니모닉: S V K W H F L P) ──
+        // ── 실험 기능 페이지 (니모닉: S V K W H F L P I E Z) ──
         ["nav.experimental"] = "실험 기능",
         ["page.experimental.desc"] = "아직 다듬는 중인 커서 관련 기능입니다. 모두 처음에는 꺼져 있고, 앱에 따라 잘 맞지 않을 수 있습니다.",
         ["section.exp.caret"] = "커서 찾기",
@@ -365,6 +365,10 @@ public static class Strings
         ["steal.title"] = "입력이 다른 창으로 가고 있어요",
         ["steal.detail"] = "{0} 창이 앞으로 나왔어요. 쓰던 곳으로 돌아가려면 Alt+Tab 을 누르세요.",
         ["steal.detail.sameApp"] = "{0} 의 다른 창이 앞으로 나왔어요. 쓰던 곳으로 돌아가려면 Alt+Tab 을 누르세요.",
+        ["exp.calloutSize"] = "경고 말풍선 크기(&Z)",
+        ["exp.calloutSize.desc"] = "경고·안내 말풍선의 글자 크기를 정합니다.",
+        ["exp.calloutSize.details"] = "자동이면 배지 크기와 Windows 텍스트 크기 중 큰 쪽을 따릅니다(100%~225%). 비율을 고르면 배지 크기와 상관없이 모니터 배율에 그 비율만 곱합니다. 바꾼 뒤 위의 [보기] 단추로 바로 확인할 수 있습니다.",
+        ["exp.calloutSize.auto"] = "자동 (배지 크기 따라)",
         ["exp.selection"] = "선택 영역 덮어쓰기 표시(&L)",
         ["exp.selection.desc"] = "선택한 글이 있으면 배지 테두리가 점선이 됩니다.",
         ["exp.selection.details"] = "다음에 치는 글자가 선택한 글을 지운다는 뜻입니다(그림판의 선택 영역 모양). Ctrl+A 로 전체 선택한 것을 잊고 치기 시작해 글이 사라지는 일을 막습니다. 메모장 같은 기본 입력칸, Notepad++, 그리고 크롬·엣지·VS Code 처럼 UI Automation 으로 커서를 찾는 앱에서 동작합니다. 워드·한글처럼 자체 편집기를 쓰는 앱에서는 알 수 없고, 크롬 주소창처럼 선택 범위를 정확히 알려 주지 않는 입력칸에서는 보이지 않을 수 있습니다. 밑줄 모양은 막대가 점선이 됩니다.",
@@ -745,7 +749,7 @@ public static class Strings
         ["missed.report.title"] = "Apps where the badge didn't show ({0})",
         ["missed.report.line"] = "- {0}: {1} [{2}] · {3} · missed {4} / shown {5} · last {6} · {7}",
 
-        // ── Experimental page (mnemonics: S V K W H F L P) ──
+        // ── Experimental page (mnemonics: S V K W H F L P I E Z) ──
         ["nav.experimental"] = "Experimental",
         ["page.experimental.desc"] = "Caret features that are still being polished. They are all off at first and may not work well in every app.",
         ["section.exp.caret"] = "Finding the caret",
@@ -773,6 +777,10 @@ public static class Strings
         ["steal.title"] = "Your typing is going to another window",
         ["steal.detail"] = "{0} came to the front. Press Alt+Tab to go back.",
         ["steal.detail.sameApp"] = "Another {0} window came to the front. Press Alt+Tab to go back.",
+        ["exp.calloutSize"] = "Warning si&ze",
+        ["exp.calloutSize.desc"] = "Text size of the password, focus-steal and sonar notes.",
+        ["exp.calloutSize.details"] = "Auto follows the larger of the badge size and the Windows text size (100% to 225%). Pick a percentage to ignore the badge size and only multiply the monitor's DPI scaling by it. Use the Preview buttons above to check the result right away.",
+        ["exp.calloutSize.auto"] = "Auto (follows badge size)",
         ["exp.selection"] = "Show se&lection overwrite",
         ["exp.selection.desc"] = "The badge border turns dashed while text is selected.",
         ["exp.selection.details"] = "The next key you type will replace the selected text (the dashed line is the usual selection look). Helps you avoid typing over everything after a forgotten Ctrl+A. Works in standard text fields such as Notepad, in Notepad++, and in apps where the caret is found through UI Automation, such as Chrome, Edge and VS Code. Apps with their own editors, such as Word or Hangul, cannot report it, and fields that do not report the selection correctly, such as the Chrome address bar, may not show it. The underline shape turns dashed.",

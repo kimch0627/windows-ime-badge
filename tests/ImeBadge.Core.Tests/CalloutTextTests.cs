@@ -5,6 +5,15 @@ namespace ImeBadge.Tests;
 
 public sealed class CalloutTextTests
 {
+    [Theory]
+    [InlineData("Xshell: Powerful TELNET/SSH terminal emulator", "Xshell")]
+    [InlineData("Notepad++ : a free (GNU) source code editor", "Notepad++")]
+    [InlineData("  KakaoTalk  ", "KakaoTalk")]
+    [InlineData("C: drive tool", "C: drive tool")]   // 이름이 한 글자면 자르지 않는다
+    [InlineData("A very long application description without any colon in it", "A very long application description with…")]
+    public void ShortAppName_KeepsTheNameBeforeTheColon(string description, string expected) =>
+        Assert.Equal(expected, CalloutText.ShortAppName(description));
+
     /// <summary>글자 하나 = 폭 1(고정폭). 줄바꿈 자리만 본다.</summary>
     static float Chars(string s) => s.Length;
 
