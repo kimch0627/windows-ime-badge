@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-11-13
+
+배지의 가로·세로 길이를 따로 바꾸는 설정과 경고 말풍선 크기 설정을 더하고, 선택 영역 표시의 밑줄을 빗금 막대로 바꾼 릴리스입니다.
+새 설정 항목은 기본값이 지금과 같은 모양이라, 업데이트해도 배지와 말풍선은 그대로 보입니다. 구버전으로 되돌려도 다른 설정은 그대로입니다.
+
 ### 추가
 - **배지 가로·세로 길이** (설정 → 모양 → 크기와 색): 배지의 가로와 세로 길이를 따로 50%~200% 로 바꿀 수 있습니다.
   기본값 100% 는 모양마다 맞춰 둔 권장 치수(둥근·사각 배지 높이 20px, 점 지름 9px, 밑줄 16×3px, 배율 100% 기준)이고,
@@ -743,7 +748,8 @@ Caps Lock 표시, Windows Terminal·UWP 앱의 한/영 판정(TSF), 타이핑을
 
 `git log` 를 참고하세요. (배지 렌더러, 트레이 메뉴, 트리밍된 self-contained exe, GitHub Actions 빌드, WinForms 어셈블리 통째 보존)
 
-[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.17.3...HEAD
+[Unreleased]: https://github.com/kimch0627/windows-ime-badge/compare/v1.18.0...HEAD
+[1.18.0]: https://github.com/kimch0627/windows-ime-badge/compare/v1.17.3...v1.18.0
 [1.17.3]: https://github.com/kimch0627/windows-ime-badge/compare/v1.17.2...v1.17.3
 [1.17.2]: https://github.com/kimch0627/windows-ime-badge/compare/v1.17.1...v1.17.2
 [1.17.1]: https://github.com/kimch0627/windows-ime-badge/compare/v1.17.0...v1.17.1
