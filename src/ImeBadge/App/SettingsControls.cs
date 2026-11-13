@@ -34,6 +34,7 @@ static class Glyphs
     public const string Shape = "\uE76E";        // Emoji2
     public const string Position = "\uE707";     // MapPin
     public const string Size = "\uE8E9";         // FontSize
+    public const string Stretch = "\uE799";      // AspectRatio (가로·세로 비율)
     public const string Opacity = "\uE706";      // Brightness
     public const string Color = "\uE790";        // Color
     public const string Visibility = "\uE7B3";   // RedEye

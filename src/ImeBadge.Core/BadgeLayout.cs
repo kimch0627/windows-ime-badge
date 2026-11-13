@@ -11,8 +11,10 @@ namespace ImeBadge;
 /// 한/영 전환 효과(펄스)로 잠깐 커진 배지면 원래 크기. 자리가 모자라 반대쪽으로 옮길지는 이 크기로 정한다.
 /// 커진 크기로 정하면 가장자리 근처에서 0.26초 동안 반대쪽으로 튀었다 돌아온다. 비우면 <paramref name="Badge"/>.
 /// </param>
+/// <param name="WidthScale">배지 가로 길이 배수(<see cref="BadgeStretch"/>). 점·밑줄 그림 좌우의 표시 자리(<see cref="BadgeLayout.Side"/>)가 이것을 따른다.</param>
 public readonly record struct LayoutInput(
-    Rectangle Caret, Size Badge, BadgeStyle Style, BadgePlacement Placement, float Scale, Rectangle WorkArea, Size RestingBadge = default);
+    Rectangle Caret, Size Badge, BadgeStyle Style, BadgePlacement Placement, float Scale, Rectangle WorkArea, Size RestingBadge = default,
+    float WidthScale = 1f);
 
 /// <summary>caret 옆 어디에 배지를 둘지 정하는 순수 계산. Win32 에 의존하지 않아 단위 테스트가 가능하다.</summary>
 public static class BadgeLayout
@@ -50,12 +52,14 @@ public static class BadgeLayout
     /// 점·밑줄 그림의 몸통 좌우에 각각 늘 비워 두는 표시 자리(px). 아래 줄의 ▲ 는 왼쪽, ■ 는 오른쪽 자리에 그려
     /// 점(지름 9)·밑줄(폭 16)보다 넓어진다(<see cref="MarkRowHalf"/>). 아래 자리(<see cref="Tail"/>)와 함께 위치 계산에서는 빼고 몸통으로 자리를 정하므로,
     /// 점·밑줄은 예전(1.13.0) 자리 그대로이고 표시 자리만 caret 과의 틈이나 화면 밖으로 나갈 수 있다(투명이라 보이지 않는다).
+    /// 가로 길이(<paramref name="widthScale"/>, <see cref="BadgeStretch"/>)를 줄이면 몸통이 좁아진 만큼 넓히고, 늘이면 몸통이 줄을 덮는 만큼 줄인다.
     /// </summary>
-    public static int Side(BadgeStyle style, float scale) => style switch
+    public static int Side(BadgeStyle style, float scale, float widthScale = 1f) => style switch
     {
         // 아래 줄은 가운데에서 ▲ 왼쪽 끝까지 약 14.5px(둘레 포함). 점은 반지름 6.5, 밑줄은 10 짜리 그림(그림자 여백 포함)에 이만큼 더한다.
-        BadgeStyle.Dot => (int)Math.Ceiling(8 * scale + 0.5f),
-        BadgeStyle.Underline => (int)Math.Ceiling(4.5f * scale + 0.5f),
+        // 가로 길이가 바뀌면 몸통 반폭(점 4.5, 밑줄 8)이 바뀐 만큼 더하고 뺀다.
+        BadgeStyle.Dot => Math.Max(0, (int)Math.Ceiling((8 + 4.5f * (1 - widthScale)) * scale + 0.5f)),
+        BadgeStyle.Underline => Math.Max(0, (int)Math.Ceiling((4.5f + 8 * (1 - widthScale)) * scale + 0.5f)),
         _ => 0,
     };
 
@@ -65,7 +69,7 @@ public static class BadgeLayout
     /// </summary>
     public static Point Compute(in LayoutInput i)
     {
-        int side = Side(i.Style, i.Scale), tail = Tail(i.Style, i.Scale);
+        int side = Side(i.Style, i.Scale, i.WidthScale), tail = Tail(i.Style, i.Scale);
         if (side == 0 && tail == 0) return Place(i);
         Size Body(Size s) => s.IsEmpty ? s : new Size(Math.Max(1, s.Width - 2 * side), Math.Max(1, s.Height - tail));
         var p = Place(i with { Badge = Body(i.Badge), RestingBadge = Body(i.RestingBadge) });

@@ -118,6 +118,24 @@ static class RenderSheet
             s.Row(ThemeNames[design.Id], panels);
         }
 
+        // 3-2. 가로·세로 길이(BadgeStretch)
+        s.Section("3-2. 가로·세로 길이",
+            "설정 → 모양 → 가로·세로 길이. 100%×100% 가 권장값. 배율 150%, 클래식. 줄이면 글자도 작은 쪽 비율로 줄고, 특수 키 표시(▁ ▲ ■)는 그대로다.");
+        var stretchItems = new[]
+        {
+            Han, new Item("a Caps", ImeState.English, Caps: true), new Item("상자", ImeState.Hangul, BadgeStyle.Box), new Item("점 Ins", ImeState.Hangul, BadgeStyle.Dot, Insert: true),
+            new Item("밑줄 Caps", ImeState.Hangul, BadgeStyle.Underline, Caps: true), new Item("밑줄 선택", ImeState.Hangul, BadgeStyle.Underline, Selection: true),
+            new Item("고양이", ImeState.Hangul, Character: BadgeCharacters.Cat), new Item("별 Shift", ImeState.English, Shift: true, Character: BadgeCharacters.Star),
+        };
+        var stretchSlots = stretchItems.Select(i => i.Caption).ToArray();
+        s.Headers(new[] { ("흰 배경", stretchSlots, 84f), ("어두운 배경", stretchSlots, 84f) });
+        foreach (var (w, h) in new[] { (100, 100), (60, 100), (150, 100), (100, 70), (100, 150), (70, 70), (200, 200), (50, 50) })
+        {
+            var theme = BadgeTheme.Of(DesignThemes.Classic) with { WidthScale = w / 100f, HeightScale = h / 100f };
+            s.Row($"가로 {w}% × 세로 {h}%" + (w == BadgeStretch.Recommended && h == BadgeStretch.Recommended ? " (권장)" : ""),
+                new[] { Panel(Light, 84, stretchItems, theme, Main, 100), Panel(Dark, 84, stretchItems, theme, Main, 100) });
+        }
+
         // 4. 트레이 아이콘
         s.Section("4. 트레이 아이콘", "100% 배율은 16px, 150% 는 24px. 마지막 칸은 16px 을 4배로 확대한 것.");
         var trayStates = new[] { ImeState.Hangul, ImeState.English, ImeState.OtherLang };
@@ -307,7 +325,7 @@ static class RenderSheet
         s.Row("포커스 뺏김 경고 자리 · 100%", stealCells.Select(c => new SheetPanel(Light, stealW, new List<Bitmap> { c })).ToList());
 
         s.Section("12. 실험 기능 — 선택 영역 덮어쓰기 표시",
-            "선택한 글이 있으면 배지 테두리가 흰 칸·짙은 칸이 번갈아 끊긴 점선(선택 영역 모양)이 된다. 밑줄은 막대가 점선이 된다. 배율 150%, 마지막 판은 100% ×3.");
+            "선택한 글이 있으면 배지 테두리가 흰 칸·짙은 칸이 번갈아 끊긴 점선(선택 영역 모양)이 된다. 밑줄은 막대가 5px 로 굵어지고 짙은 빗금이 쳐진다. 배율 150%, 마지막 판은 100% ×3.");
         var selMarks = new (string Caption, bool Sel, bool Caps, bool Insert)[]
         {
             ("없음", false, false, false), ("선택", true, false, false), ("선택+Caps", true, true, false), ("선택+Ins", true, false, true), ("선택+둘 다", true, true, true),

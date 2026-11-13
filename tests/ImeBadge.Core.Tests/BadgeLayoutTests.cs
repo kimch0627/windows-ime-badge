@@ -156,6 +156,37 @@ public sealed class BadgeLayoutTests
         Assert.True(h + pad + BadgeLayout.Tail(BadgeStyle.Underline, s) >= barBottom - 0.5f, $"underline tail @{s}");
     }
 
+    /// <summary>가로 길이(BadgeStretch)를 바꿔도 기호 줄이 그림 좌우의 표시 자리에 들어간다. 몸통 폭은 렌더러와 같은 계산.</summary>
+    [Theory]
+    [InlineData(1f, 0.5f)]
+    [InlineData(1f, 0.75f)]
+    [InlineData(1f, 1.5f)]
+    [InlineData(1f, 2f)]
+    [InlineData(1.5f, 0.5f)]
+    [InlineData(1.75f, 0.65f)]
+    [InlineData(2f, 2f)]
+    public void MarkRow_FitsItsRoom_AtAnyWidth(float s, float wx)
+    {
+        int pad = (int)Math.Ceiling(2 * s);
+        float row = BadgeLayout.MarkRowHalf(s);
+        int d = Math.Max(1, (int)Math.Round(9 * s * wx));
+        Assert.True(BadgeLayout.Side(BadgeStyle.Dot, s, wx) + d / 2f + pad >= row - 0.5f, $"dot side @{s}×{wx}");
+        int w = Math.Max(1, (int)Math.Round(16 * s * wx));
+        Assert.True(BadgeLayout.Side(BadgeStyle.Underline, s, wx) + w / 2f + pad >= row - 0.5f, $"underline side @{s}×{wx}");
+        Assert.True(BadgeLayout.Side(BadgeStyle.Dot, s, wx) >= 0 && BadgeLayout.Side(BadgeStyle.Underline, s, wx) >= 0);
+    }
+
+    [Fact]
+    public void Underline_WiderBar_StaysCenteredUnderCaret()
+    {
+        // 밑줄을 1.5 배로 넓힌 그림(막대 24 + 그림자 여백 2·2, 좌우 표시 자리 Side)도 막대 가운데가 caret 가운데다.
+        int side = BadgeLayout.Side(BadgeStyle.Underline, 1f, 1.5f);
+        var picture = new Size(24 + 4 + 2 * side, 3 + 2 + BadgeLayout.Tail(BadgeStyle.Underline, 1f));
+        var p = BadgeLayout.Compute(In(Caret, style: BadgeStyle.Underline) with { Badge = picture, WidthScale = 1.5f });
+        Assert.Equal(Caret.Left + Caret.Width / 2, p.X + side + 2 + 12);
+        Assert.Equal(Caret.Bottom + 1, p.Y);
+    }
+
     /// <summary>VW-08: 100% 에서 세 기호가 구별될 만큼 크다(3px 기호는 서로 구별되지 않았다). 밑줄이 네모보다 뚜렷이 넓다.</summary>
     [Fact]
     public void Marks_AreBigEnoughToTellApart()

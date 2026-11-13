@@ -56,6 +56,13 @@ public sealed class Settings
     const string CenterAbove = "above", CenterBelow = "below";
 
     public int SizePercent { get; set; } = 100;
+    /// <summary>
+    /// 배지 몸통의 가로 길이(%, <see cref="BadgeStretch"/>). <see cref="SizePercent"/> 가 배지 전체를 키운다면 이것은 가로만 늘이거나 줄인다.
+    /// 기본값은 권장값(<see cref="BadgeStretch.Recommended"/>). 구버전은 모르는 항목으로 무시한다.
+    /// </summary>
+    public int BadgeWidthPercent { get; set; } = BadgeStretch.Recommended;
+    /// <summary>배지 몸통의 세로 길이(%, <see cref="BadgeStretch"/>). 기본값은 권장값. 구버전은 모르는 항목으로 무시한다.</summary>
+    public int BadgeHeightPercent { get; set; } = BadgeStretch.Recommended;
     public int OpacityPercent { get; set; } = 100;
     /// <summary>한글 상태 배지 색. "#RRGGBB".</summary>
     public string HangulColor { get; set; } = DefaultHangulColor;
@@ -165,6 +172,8 @@ public sealed class Settings
     public void Normalize()
     {
         SizePercent = Math.Clamp(SizePercent, 50, 300);
+        BadgeWidthPercent = BadgeStretch.Clamp(BadgeWidthPercent);
+        BadgeHeightPercent = BadgeStretch.Clamp(BadgeHeightPercent);
         OpacityPercent = Math.Clamp(OpacityPercent, 30, 100);
         PollIntervalMs = Math.Clamp(PollIntervalMs, 50, 1000);
         CalloutSizePercent = CalloutSizePercent <= CalloutStyle.AutoSize
@@ -198,6 +207,7 @@ public sealed class Settings
     {
         Style = other.Style; Placement = other.Placement;
         SizePercent = other.SizePercent; OpacityPercent = other.OpacityPercent;
+        BadgeWidthPercent = other.BadgeWidthPercent; BadgeHeightPercent = other.BadgeHeightPercent;
         HangulColor = other.HangulColor; EnglishColor = other.EnglishColor; Animate = other.Animate; ShowCapsLock = other.ShowCapsLock;
         ShowShiftHold = other.ShowShiftHold; ShowShiftImmediately = other.ShowShiftImmediately; ShowInsert = other.ShowInsert;
         Theme = other.Theme; Character = other.Character; Visibility = other.Visibility;
