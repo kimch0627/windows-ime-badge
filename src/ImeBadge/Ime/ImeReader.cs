@@ -115,6 +115,18 @@ static class ImeReader
                 notInput = hit.NotInput;
                 slow = hit.Slow;
                 controlType = hit.ControlType;
+                // herdr-app은 입력 중에도 창 전체만 보고한다. 실제 caret이 없을 때만 창 안쪽에 배지를 둔다.
+                if (caret is null && !notInput && !slow && controlType == InputSurface.Window &&
+                    process == "herdr-app" && Native.ClassName(fg) == "Zed::Window" &&
+                    Native.GetClientRect(fg, out var client) && client.Right >= 32 && client.Bottom >= 32)
+                {
+                    var anchor = new Native.POINT(16, client.Bottom - 32);
+                    if (Native.ClientToScreen(fg, ref anchor))
+                    {
+                        caret = new Rectangle(anchor.X, anchor.Y, 1, 16);
+                        dump?.Append(" anchor:herdr-client");
+                    }
+                }
                 if (hit.Failure is { } failure)
                     note = (note.Length > 0 ? note + " " : "") + (failure == "nofocus" ? "uia=nofocus" : "uia-err=" + failure);
             }
